@@ -72,6 +72,19 @@ service cloud.firestore {
         && (request.resource.data.base == null || request.resource.data.base == id);
       allow update: if isMember() && placeValid(request.resource.data) && request.resource.data.base == resource.data.base;
     }
+    // 手信推介: souvenir products and the shop that sells them; any companion can add, edit or delete.
+    function giftValid(d) {
+      return d.keys().hasOnly(['name', 'shop', 'placeId', 'price', 'priceText', 'note', 'by', 'byName', 'at', 'createdAt'])
+        && text(d.name, 80) && d.name.size() > 0 && text(d.shop, 120)
+        && (d.placeId == null || text(d.placeId, 40))
+        && (d.price == null || (d.price is number && d.price >= 0 && d.price <= 10000000))
+        && text(d.priceText, 120) && text(d.note, 300);
+    }
+    match /gifts/{id} {
+      allow read, delete: if isMember();
+      allow create: if isMember() && owned() && giftValid(request.resource.data);
+      allow update: if isMember() && giftValid(request.resource.data) && request.resource.data.by == resource.data.by;
+    }
     match /shopping/{id} {
       allow read, delete: if isMember();
       allow create: if isMember() && owned() && shopValid(request.resource.data);

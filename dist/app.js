@@ -128,7 +128,7 @@ function savePlaceForm(f){
 }
 document.addEventListener('submit',e=>{if(e.target.id==='placeForm'){e.preventDefault();savePlaceForm(e.target)}});
 const sectionViews={home:renderHome,plan:renderPlan,hotels:renderHotels,explore:renderExplore,nearby:renderNearby,flights:renderFlights,notebook:renderNotebook,shopping:()=>window.Together.renderShopping(),together:()=>window.Together?window.Together.render():header('TOGETHER','一起記，一起走。')+'<div class="empty"><h2>未能載入共用功能</h2><p>請重新整理網頁。</p></div>'};
-window.TripApp=Object.freeze({days,places,gifts:()=>(C.gifts||[]).map(g=>({...g,place:places.find(p=>p.id===g.placeId)})).filter(g=>g.place),applyPlaceEdits,applyPlanEdits,setSaved,savedIds:()=>[...saved]});
+window.TripApp=Object.freeze({days,places,applyPlaceEdits,applyPlanEdits,setSaved,savedIds:()=>[...saved]});
 function setActive(view){current=view;document.querySelectorAll('.bottomnav a').forEach(a=>{const active=a.dataset.view===view;a.classList.toggle('active',active);if(active)a.setAttribute('aria-current','page');else a.removeAttribute('aria-current')});$('#sourceBtn').classList.toggle('active',view==='notebook')}
 function sourceList(){if($('#detail').open)$('#detail').close();if(location.hash==='#notebook')navigate();else location.hash='notebook'}
 function refreshExplore(){exploreLimit=12;$('#app').innerHTML=renderExplore()+footer();bindExplore()}

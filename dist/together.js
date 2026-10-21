@@ -5,7 +5,7 @@ window.Together=(()=>{
  // Firebase web config is public by design; access is enforced by firestore.rules and the member list.
  const config={apiKey:'AIzaSyC_qsxlY9mX0OKK5bIXwUXvrrxCOFnc18M',authDomain:'kyushu-2e307.firebaseapp.com',projectId:'kyushu-2e307',storageBucket:'kyushu-2e307.firebasestorage.app',messagingSenderId:'672657048901',appId:'1:672657048901:web:d1e2f7dd92389f78f3ea2c'};
  const tabs={notes:'筆記',expenses:'開支'};
- const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],placesLoaded:false,shopFilter:'todo',shopEdit:null,trip:{}};
+ const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],members:[],shopping:[],gifts:[],places:[],planDays:[],placesLoaded:false,shopFilter:'todo',shopEdit:null,trip:{}};
  const T=()=>window.TripApp,S=window.Split,$=s=>document.querySelector(s);
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const toast=s=>{$('#toast').textContent=s;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2600)};
@@ -24,7 +24,7 @@ window.Together=(()=>{
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
   return loading;
  }
- function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],placesLoaded:false,trip:{}})}
+ function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],members:[],shopping:[],gifts:[],places:[],planDays:[],placesLoaded:false,trip:{}})}
  function listen(){
   const {fs,db}=fb;
   const watch=name=>fs.onSnapshot(fs.collection(db,name),{includeMetadataChanges:true},snap=>{
@@ -43,7 +43,7 @@ window.Together=(()=>{
    state.trip[id]=json;start();
   },fail);
   const watchJobs=fs.onSnapshot(fs.query(fs.collection(db,'receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();handleFillJobs();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
-  unsub=[watchJobs,...['notes','expenses','members','shopping','places','planDays'].map(watch)].concat(['data','geo','content'].map(watchTrip));
+  unsub=[watchJobs,...['notes','expenses','members','shopping','gifts','places','planDays'].map(watch)].concat(['data','geo','content'].map(watchTrip));
  }
  function start(){
   const t=state.trip;if(started||!t.data||!t.geo||!t.content||!state.placesLoaded)return;
@@ -301,16 +301,32 @@ window.Together=(()=>{
   const todo=state.shopping.filter(x=>!x.bought),shown=state.shopFilter==='todo'?todo:state.shopFilter==='done'?state.shopping.filter(x=>x.bought):state.shopping;
   const filters=[['todo','未買',todo.length],['done','已買',state.shopping.length-todo.length],['all','全部',state.shopping.length]].map(([k,t,n])=>`<button class="chip ${state.shopFilter===k?'active':''}" data-shop-filter="${k}" aria-pressed="${state.shopFilter===k}">${t} ${n}</button>`).join('');
   const list=shown.length?[...shown].sort((a,b)=>a.bought-b.bought||(b.at||0)-(a.at||0)).map(shopItem).join(''):`<div class="empty"><h2>${state.shopFilter==='done'?'還沒有已買的東西':'清單是空的'}</h2><p>${state.shopFilter==='done'?'買了之後按「✓ 已買」。':'把想買的東西加進來，旅伴都看得到。'}</p></div>`;
-  return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${edit?'':'<div class="panel shop-ai"><b>✨ AI 認物品，自動加入清單</b><div class="links"><button type="button" class="locate-button" data-tg="shopAiCam">📷 影相</button><button type="button" class="locate-button" data-tg="shopAi">🖼 上載相片（可多張）</button></div><input type="file" accept="image/*" capture="environment" id="shopAiCam" hidden><input type="file" accept="image/*" id="shopAiInput" multiple hidden><p class="note">AI 會認出物品、規格，以及價錢牌上的價錢，自動加入清單，之後可以修改。可以關閉網頁，AI 會在背景完成。</p></div>'}<div data-tg-live="jobs"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div><div data-tg-live="gifts"></div>`,live:{status:statusBar(),jobs:productJobsHtml(),filters,list,gifts:giftsHtml()}};
+  return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${edit?'':'<div class="panel shop-ai"><b>✨ AI 認物品，自動加入清單</b><div class="links"><button type="button" class="locate-button" data-tg="shopAiCam">📷 影相</button><button type="button" class="locate-button" data-tg="shopAi">🖼 上載相片（可多張）</button></div><input type="file" accept="image/*" capture="environment" id="shopAiCam" hidden><input type="file" accept="image/*" id="shopAiInput" multiple hidden><p class="note">AI 會認出物品、規格，以及價錢牌上的價錢，自動加入清單，之後可以修改。可以關閉網頁，AI 會在背景完成。</p></div>'}<div data-tg-live="jobs"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div><details class="panel shop-gifts" open><summary>🎁 手信推介（<span data-tg-live="giftCount"></span>）</summary><div class="links gift-tools"><button type="button" class="action primary" data-tg="giftNew">＋ 新增手信</button></div>${giftForm()}<div data-tg-live="gifts"></div></details>`,live:{status:statusBar(),jobs:productJobsHtml(),filters,list,giftCount:String(state.gifts.length),gifts:giftsList()}};
  }
- // 手信推介: souvenir products (trip/content gifts) and the shop that sells each; one tap adds it to the list.
+ // 手信推介 (Firestore gifts): souvenir products and the shop selling them; companions add, edit and delete.
  const norm=t=>String(t).replace(/\s+/g,'').toLowerCase();
- function giftsHtml(){
-  const gifts=T().gifts();if(!gifts.length)return '';
-  const listed=new Set(state.shopping.map(x=>norm(x.name)));
-  return `<details class="panel shop-gifts" open><summary>🎁 手信推介（${gifts.length}）</summary>${gifts.map((g,i)=>`<article class="tg-item"><div class="tg-expense"><h3>${esc(g.name)}</h3>${g.priceText?`<b class="shop-price">${esc(g.priceText)}</b>`:''}</div><p class="note">🏪 ${esc(g.place.v[1])} · ${esc(g.place.v[0])}${g.note?` · ${esc(g.note)}`:''}</p><div class="links">${listed.has(norm(g.name))?'<span class="badge">已在清單</span>':`<button class="action primary" data-gift-add="${i}">＋ 加入購物清單</button>`}<button class="action" data-place="${esc(g.place.id)}">店舖資料</button></div></article>`).join('')}</details>`;
+ let giftEdit=null;
+ const giftShopPlaces=()=>T().places.filter(p=>p.cats.includes('手信')||p.cats.includes('商店')||['手信','商店'].includes(p.v[6]));
+ const giftPlace=g=>T().places.find(p=>p.id===g.placeId)||T().places.find(p=>g.shop&&norm(p.v[1])===norm(g.shop));
+ function giftForm(){return `<form class="tg-form gift-form" id="giftForm" hidden><label>手信<input name="name" maxlength="80" required placeholder="例如：明太子沙律醬"></label><label>售賣店舖<input name="shop" maxlength="120" list="giftShops" placeholder="揀探索中的店舖，或輸入店名"><datalist id="giftShops">${giftShopPlaces().map(p=>`<option value="${esc(p.v[1])}">`).join('')}</datalist></label><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" step="1" placeholder="日圓"></label><label>價錢說明<input name="priceText" maxlength="120" placeholder="例如：小盒 ¥972"></label></div><label>備註<input name="note" maxlength="300" placeholder="例如：需冷藏"></label><div class="links"><button type="submit" class="locate-button" id="giftSubmit">加入手信推介</button><button type="button" class="action" data-tg="giftCancel">取消</button></div></form>`}
+ function giftsList(){
+  const listed=new Set(state.shopping.map(x=>norm(x.name))),gifts=[...state.gifts].sort((a,b)=>(a.at||0)-(b.at||0));
+  return gifts.length?gifts.map(g=>{const p=giftPlace(g);return `<article class="tg-item"><div class="tg-expense"><h3>${esc(g.name)}</h3>${g.priceText||g.price!=null?`<b class="shop-price">${esc(g.priceText||S.format(S.toMinor(g.price,'JPY'),'JPY'))}</b>`:''}</div><p class="note">${g.shop||p?`🏪 ${esc(g.shop||p.v[1])}${p?` · ${esc(p.v[0])}`:''}`:''}${g.note?` · ${esc(g.note)}`:''}</p><div class="links">${listed.has(norm(g.name))?'<span class="badge">已在清單</span>':`<button class="action primary" data-gift-add="${esc(g.id)}">＋ 加入購物清單</button>`}${p?`<button class="action" data-place="${esc(p.id)}">店舖資料</button>`:''}<button class="smallbtn" data-gift-edit="${esc(g.id)}">編輯</button>${del('gifts',g)}</div></article>`}).join(''):'<p class="note">還沒有手信推介，按「＋ 新增手信」加入。</p>';
  }
- function addGift(i){const g=T().gifts()[Number(i)];if(!g)return;const p=g.place;add('shopping',{name:g.name.slice(0,80),qty:'',detail:[g.priceText&&!g.price?g.priceText:'',g.note].filter(Boolean).join('；').slice(0,500),place:`${p.v[1]} ${p.v[3]}`.trim().slice(0,200),price:g.price??null,currency:'JPY',photo:null,bought:false,boughtBy:null,boughtAt:null})}
+ function openGiftForm(g){
+  const f=$('#giftForm');if(!f)return;giftEdit=g?.id||null;f.hidden=false;f.reset();
+  if(g){const el=f.elements;el.name.value=g.name;el.shop.value=g.shop||giftPlace(g)?.v[1]||'';el.price.value=g.price??'';el.priceText.value=g.priceText||'';el.note.value=g.note||''}
+  $('#giftSubmit').textContent=g?'儲存修改':'加入手信推介';f.elements.name.focus();
+ }
+ function saveGift(f){
+  const v=new FormData(f),str=k=>String(v.get(k)||'').trim(),price=v.get('price')===''?null:Number(v.get('price'));
+  if(!str('name'))return;if(price!=null&&!(price>=0&&price<=1e7))return toast('價錢不正確。');
+  const place=T().places.find(p=>norm(p.v[1])===norm(str('shop')));
+  const data={name:str('name').slice(0,80),shop:str('shop').slice(0,120),placeId:place?place.id:null,price:price==null?null:Math.round(price),priceText:str('priceText').slice(0,120),note:str('note').slice(0,300)};
+  if(giftEdit){update('gifts',giftEdit,data);toast('已儲存')}else add('gifts',data);
+  giftEdit=null;f.reset();f.hidden=true;
+ }
+ function addGift(id){const g=state.gifts.find(x=>x.id===id);if(!g)return;const p=giftPlace(g);add('shopping',{name:g.name.slice(0,80),qty:'',detail:[g.priceText&&g.price==null?g.priceText:'',g.note].filter(Boolean).join('；').slice(0,500),place:(p?`${p.v[1]} ${p.v[3]}`:g.shop||'').trim().slice(0,200),price:g.price??null,currency:'JPY',photo:null,bought:false,boughtBy:null,boughtAt:null})}
  // A Google Maps link pasted into 購買地點 becomes the shop name and address.
  const MAPS_LINK=/^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i;
  async function placeFromMaps(input){
@@ -359,6 +375,7 @@ window.Together=(()=>{
  }
 
  document.addEventListener('submit',e=>{
+  if(e.target.id==='giftForm'){e.preventDefault();if(state.status==='ready')saveGift(e.target);return}
   const f=e.target.closest('[data-tg-form]');if(!f)return;
   if(f.dataset.tgForm==='login'){e.preventDefault();const v=new FormData(f);loginWithAccount(String(v.get('id')).trim(),String(v.get('password')));return}
   if(state.status!=='ready')return;e.preventDefault();
@@ -399,6 +416,9 @@ window.Together=(()=>{
   if(d.tg==='shopPhoto')$('#shopPhotoInput')?.click();
   if(d.tg==='shopAi')$('#shopAiInput')?.click();
   if(d.giftAdd)addGift(d.giftAdd);
+  if(d.tg==='giftNew')openGiftForm(null);
+  if(d.giftEdit)openGiftForm(state.gifts.find(g=>g.id===d.giftEdit));
+  if(d.tg==='giftCancel'){giftEdit=null;const f=$('#giftForm');if(f){f.reset();f.hidden=true}}
   if(d.tg==='shopAiCam')$('#shopAiCam')?.click();
   if(d.tg==='shopPhotoClear'){shopPhoto=null;$('#shopPreview').innerHTML=''}
   if(d.tg==='shopCancel'){state.shopEdit=null;shopPhoto=null;refresh()}

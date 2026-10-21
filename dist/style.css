@@ -36,3 +36,5 @@ html{scroll-behavior:auto}.topbar{position:sticky;top:0;z-index:30;background:va
 .plan-tools{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.stop-edit{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}.stop-edit .smallbtn{min-height:40px}.stop-edit button:disabled{opacity:.35}
 .shop-ai .links{display:grid;grid-template-columns:1fr 1fr;gap:8px}.shop-ai .links .locate-button{width:100%}
 .shop-gifts summary{font-weight:700;cursor:pointer}.shop-gifts .tg-item{margin:10px 0 0}.shop-gifts .tg-expense .note{margin:0;white-space:nowrap}
+.gift-tools{margin:10px 0 0}.gift-form{margin:12px 0;padding:14px;border:1px dashed var(--line);border-radius:12px}
+.gift-form[hidden]{display:none}
