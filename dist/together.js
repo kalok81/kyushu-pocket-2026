@@ -77,12 +77,18 @@ window.Together=(()=>{
   const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',quality));
   return new Promise((ok,fail)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(',')[1]);fr.onerror=fail;fr.readAsDataURL(blob)});
  }
+ // The function reports no progress, so the bar moves by stage and eases towards 90% while the AI reads.
+ function scanProgress(pct,label){const bar=$('#tgScanProgress');if(bar){bar.hidden=false;bar.firstElementChild.style.width=pct+'%';bar.setAttribute('aria-valuenow',Math.round(pct))}if(label)$('#tgScanInfo').textContent=label}
  async function scan(file){
   const f=$('[data-tg-form="expense"]'),btn=f?.querySelector('[data-tg="scan"]'),info=$('#tgScanInfo');if(!f)return;
   if(!navigator.onLine)return toast('分析收據需要網絡，可以先手動輸入。');
-  btn.disabled=true;btn.textContent='分析中…';info.textContent='正在讀取收據，大約需要數秒至半分鐘。';
+  btn.disabled=true;btn.textContent='分析中…';scanProgress(5,'正在縮細相片…');let timer;
   try{
-   const r=(await (await callable('scanReceipt',70000))({image:await shrink(file)})).data;
+   const image=await shrink(file),call=await callable('scanReceipt',70000),t0=Date.now();
+   scanProgress(25,'正在上載及分析收據…');
+   timer=setInterval(()=>scanProgress(25+65*(1-Math.exp(-(Date.now()-t0)/8000))),200);
+   const r=(await call({image})).data;
+   clearInterval(timer);scanProgress(100);
    if(!r.total){info.textContent='讀不到金額，請手動輸入。';return}
    const el=f.elements;if(r.merchant)el.title.value=r.merchant;el.amount.value=r.total;if(r.currency!=='OTHER')el.currency.value=r.currency;
    const day=r.date&&T().days.find(d=>d.iso===r.date.replaceAll('-','/'));if(day)el.day.value=day.n;
@@ -91,7 +97,7 @@ window.Together=(()=>{
    info.textContent=dup?`⚠️ 可能重複：${dupText(dup)} 已經記錄過，請確認是否同一張收據。`:r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':'已填入，請檢查。';
    el.title.focus();
   }catch(e){info.textContent=e?.message&&e.code?.startsWith('functions/')?e.message.replace(/\s*\[\d+\]$/,''):'未能分析收據，請手動輸入。';console.error(e)}
-  finally{btn.disabled=false;btn.textContent='📷 影收據／上載收據'}
+  finally{clearInterval(timer);btn.disabled=false;btn.textContent='📷 影收據／上載收據';setTimeout(()=>{const bar=$('#tgScanProgress');if(bar)bar.hidden=true},600)}
  }
  // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.
  async function lookupPlace(url){if(!navigator.onLine)throw new Error('offline');return (await (await callable('lookupPlace',45000))({url})).data}
@@ -144,7 +150,7 @@ window.Together=(()=>{
  }
  function forms(){
   if(state.tab==='notes')return `<form class="panel tg-form" data-tg-form="note"><label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾"></textarea></label><label>關於<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><button type="submit" class="locate-button">加入筆記</button></form>`;
-  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據</button><input type="file" accept="image/*" id="tgReceipt" hidden><p class="note" id="tgScanInfo">AI 會讀出店名、金額、日期及物品並填入下面，請檢查後才儲存。相片不會保存。</p></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
+  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據</button><input type="file" accept="image/*" id="tgReceipt" hidden><div class="tg-progress" id="tgScanProgress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div></div></div><p class="note" id="tgScanInfo">AI 會讀出店名、金額、日期及物品並填入下面，請檢查後才儲存。相片不會保存。</p></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
   return `<div class="chips" role="group" aria-label="選擇日子">${T().days.map(d=>`<button class="chip ${d.n===state.day?'active':''}" data-tg-stopday="${d.n}" aria-pressed="${d.n===state.day}">D${d.n}</button>`).join('')}</div><form class="panel tg-form" data-tg-form="stop"><div class="tg-row"><label>時間<input name="time" maxlength="20" placeholder="14:00–15:30"></label><label>地點或活動<input name="title" maxlength="80" required placeholder="例如：中洲屋台"></label></div><label>細節<textarea name="detail" rows="2" maxlength="500" placeholder="交通、預約或提醒（可留空）"></textarea></label><button type="submit" class="locate-button">加入 ${esc(dayLabel(state.day))}</button></form>`;
  }
  function page(){

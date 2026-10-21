@@ -26,3 +26,4 @@ html{scroll-behavior:auto}.topbar{position:sticky;top:0;z-index:30;background:va
 @media(min-width:900px){.bottomnav{width:520px}}
 .tg-lines-edit{display:grid!important;gap:6px}.tg-line-row{display:grid;grid-template-columns:1fr 110px 44px;gap:6px}.tg-line-row button{padding:0}.tg-lines-edit>.smallbtn{justify-self:start}
 .tg-lines{list-style:none;padding:0;margin:8px 0;font-size:13px;border-top:1px dashed var(--line)}.tg-lines li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--line)}.tg-lines li span:last-child{white-space:nowrap}
+.tg-progress{height:8px;border-radius:8px;background:var(--line);overflow:hidden}.tg-progress>div{height:100%;width:0;background:var(--ink);border-radius:8px;transition:width .2s linear}
