@@ -47,7 +47,8 @@ service cloud.firestore {
     match /expenses/{id} {
       allow read, delete: if isMember();
       allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'by', 'byName', 'at', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'items', 'by', 'byName', 'at', 'createdAt'])
+        && (!('items' in request.resource.data) || (request.resource.data.items is list && request.resource.data.items.size() <= 30))
         && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
         && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 10000000
         && request.resource.data.currency in ['JPY', 'HKD']

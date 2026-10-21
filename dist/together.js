@@ -86,7 +86,9 @@ window.Together=(()=>{
    if(!r.total){info.textContent='讀不到金額，請手動輸入。';return}
    const el=f.elements;if(r.merchant)el.title.value=r.merchant;el.amount.value=r.total;if(r.currency!=='OTHER')el.currency.value=r.currency;
    const day=r.date&&T().days.find(d=>d.iso===r.date.replaceAll('-','/'));if(day)el.day.value=day.n;
-   info.textContent=(r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':'已填入，請檢查。')+(r.items.length?' 項目：'+r.items.map(i=>`${i.name} ${i.amount}`).join('、'):'');
+   if(r.items.length)$('#tgItemRows').innerHTML=r.items.map(itemRow).join('');
+   const dup=r.currency!=='OTHER'&&duplicateOf({title:el.title.value,amount:r.total,currency:r.currency,day:Number(el.day.value)});
+   info.textContent=dup?`⚠️ 可能重複：${dupText(dup)} 已經記錄過，請確認是否同一張收據。`:r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':'已填入，請檢查。';
    el.title.focus();
   }catch(e){info.textContent=e?.message&&e.code?.startsWith('functions/')?e.message.replace(/\s*\[\d+\]$/,''):'未能分析收據，請手動輸入。';console.error(e)}
   finally{btn.disabled=false;btn.textContent='📷 影收據／上載收據'}
@@ -121,7 +123,12 @@ window.Together=(()=>{
 
  function noteItem(n){const place=n.placeName?`<span class="badge">${esc(n.placeName)}</span>`:'',day=n.day?`<span class="badge">${esc(dayLabel(n.day))}</span>`:'';return `<article class="tg-item">${meta(n,day+place)}<p class="tg-text">${esc(n.text)}</p>${del('notes',n)}</article>`}
  function stopItem(s){return `<article class="tg-item tg-stop"><div class="time">${esc(s.time||'—')}</div><div>${meta(s)}<h3>${esc(s.title)}</h3>${s.detail?`<p class="tg-text">${esc(s.detail)}</p>`:''}<div class="links"><a class="action" href="https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(s.title)}" target="_blank" rel="noopener noreferrer">導航 ↗</a>${del('stops',s)}</div></div></article>`}
- function expenseItem(e){return `<article class="tg-item">${meta(e,`<span class="badge">${esc(dayLabel(e.day))}</span>`)}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount,e.currency),e.currency))}</b></div><p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split||[]).map(nameOf).join('、'))}</p>${del('expenses',e)}</article>`}
+ const itemRow=(it={})=>`<div class="tg-line-row"><input name="itemName" maxlength="40" placeholder="物品" aria-label="物品" value="${esc(it.name??'')}"><input name="itemAmount" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" placeholder="金額" aria-label="金額" value="${it.amount??''}"><button type="button" class="smallbtn" data-tg="itemDel" aria-label="移除物品">×</button></div>`;
+ // Same receipt twice: same amount and currency, plus the same day or the same shop name.
+ const sameName=(a,b)=>String(a).replace(/\s+/g,'').toLowerCase()===String(b).replace(/\s+/g,'').toLowerCase();
+ const duplicateOf=({title,amount,currency,day})=>state.expenses.find(e=>e.currency===currency&&Math.abs(e.amount-amount)<.005&&(e.day===day||sameName(e.title,title)));
+ const dupText=e=>`${dayLabel(e.day)}「${e.title}」${S.format(S.toMinor(e.amount,e.currency),e.currency)}（${e.byName||'旅伴'} 記錄）`;
+ function expenseItem(e){return `<article class="tg-item">${meta(e,`<span class="badge">${esc(dayLabel(e.day))}</span>`)}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount,e.currency),e.currency))}</b></div>${e.items?.length?`<ul class="tg-lines">${e.items.map(i=>`<li><span>${esc(i.name)}</span>${i.amount!=null?`<span>${esc(S.format(S.toMinor(i.amount,e.currency),e.currency))}</span>`:''}</li>`).join('')}</ul>`:''}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split||[]).map(nameOf).join('、'))}</p>${del('expenses',e)}</article>`}
  function summary(){
   const bal=S.balances(state.expenses),cs=Object.keys(bal);
   if(!cs.length)return '';
@@ -137,7 +144,7 @@ window.Together=(()=>{
  }
  function forms(){
   if(state.tab==='notes')return `<form class="panel tg-form" data-tg-form="note"><label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾"></textarea></label><label>關於<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><button type="submit" class="locate-button">加入筆記</button></form>`;
-  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據</button><input type="file" accept="image/*" id="tgReceipt" hidden><p class="note" id="tgScanInfo">AI 會讀出店名、金額及日期並填入下面，請檢查後才儲存。相片不會保存。</p></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" required></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
+  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據</button><input type="file" accept="image/*" id="tgReceipt" hidden><p class="note" id="tgScanInfo">AI 會讀出店名、金額、日期及物品並填入下面，請檢查後才儲存。相片不會保存。</p></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
   return `<div class="chips" role="group" aria-label="選擇日子">${T().days.map(d=>`<button class="chip ${d.n===state.day?'active':''}" data-tg-stopday="${d.n}" aria-pressed="${d.n===state.day}">D${d.n}</button>`).join('')}</div><form class="panel tg-form" data-tg-form="stop"><div class="tg-row"><label>時間<input name="time" maxlength="20" placeholder="14:00–15:30"></label><label>地點或活動<input name="title" maxlength="80" required placeholder="例如：中洲屋台"></label></div><label>細節<textarea name="detail" rows="2" maxlength="500" placeholder="交通、預約或提醒（可留空）"></textarea></label><button type="submit" class="locate-button">加入 ${esc(dayLabel(state.day))}</button></form>`;
  }
  function page(){
@@ -203,7 +210,15 @@ window.Together=(()=>{
   if(state.status!=='ready')return;e.preventDefault();
   const v=new FormData(f),str=k=>String(v.get(k)||'').trim(),day=Number(v.get('day'))||null;
   if(f.dataset.tgForm==='note'){const placeId=f.dataset.placeId||null,place=placeId&&T().places.find(p=>p.id===placeId);if(!str('text'))return;add('notes',{text:str('text').slice(0,1000),day:placeId?null:day,placeId,placeName:place?place.v[1]:null})}
-  if(f.dataset.tgForm==='expense'){const amount=Number(v.get('amount')),split=v.getAll('split').map(String);if(!str('title')||!(amount>0)||amount>1e7)return toast('請輸入項目和金額。');if(!split.length)return toast('請最少選一位分帳旅伴。');add('expenses',{title:str('title').slice(0,80),amount:Math.round(amount*100)/100,currency:v.get('currency')==='HKD'?'HKD':'JPY',paidBy:str('paidBy'),split,day:day||today()})}
+  if(f.dataset.tgForm==='expense'){
+   const prices=v.getAll('itemAmount'),items=v.getAll('itemName').map((n,i)=>({name:String(n).trim().slice(0,40),amount:prices[i]===''?null:Math.round(Number(prices[i])*100)/100})).filter(i=>i.name&&(i.amount==null||(i.amount>=0&&i.amount<=1e7))).slice(0,30);
+   const sum=items.reduce((t,i)=>t+(i.amount||0),0),amount=v.get('amount')===''?sum:Number(v.get('amount')),split=v.getAll('split').map(String);
+   if(!str('title')||!(amount>0)||amount>1e7)return toast('請輸入項目和金額（或物品金額）。');if(!split.length)return toast('請最少選一位分帳旅伴。');
+   const exp={title:str('title').slice(0,80),amount:Math.round(amount*100)/100,currency:v.get('currency')==='HKD'?'HKD':'JPY',paidBy:str('paidBy'),split,day:day||today(),items},dup=duplicateOf(exp);
+   if(dup&&!confirm(`似乎已經記錄過：\n${dupText(dup)}\n\n仍然要加入嗎？`))return;
+   add('expenses',exp);
+   f.reset();$('#tgItemRows').innerHTML=itemRow();$('#tgScanInfo').textContent='AI 會讀出店名、金額、日期及物品並填入下面，請檢查後才儲存。相片不會保存。';return;
+  }
   if(f.dataset.tgForm==='stop'){if(!str('title'))return;add('stops',{day:state.day,time:str('time').slice(0,20),title:str('title').slice(0,80),detail:str('detail').slice(0,500)})}
   if(f.dataset.tgForm==='shop'){
    const price=v.get('price')===''?null:Number(v.get('price'));if(!str('name'))return;if(price!=null&&!(price>=0&&price<=1e7))return toast('價錢不正確。');
@@ -218,6 +233,8 @@ window.Together=(()=>{
   if(d.tg==='login')login();
   if(d.tg==='logout'&&fb)logout();
   if(d.tg==='scan')$('#tgReceipt')?.click();
+  if(d.tg==='itemAdd'){$('#tgItemRows').insertAdjacentHTML('beforeend',itemRow());$('#tgItemRows').lastElementChild.querySelector('input').focus()}
+  if(d.tg==='itemDel'){const rows=$('#tgItemRows');el.closest('.tg-line-row').remove();if(!rows.children.length)rows.innerHTML=itemRow()}
   if(d.tg==='retry'){if(fb&&state.user){state.status='checking';refresh();listen()}else load().catch(()=>{})}
   if(d.tgTab){state.tab=d.tgTab;refresh()}
   if(d.tgStopday){state.day=Number(d.tgStopday);refresh()}
