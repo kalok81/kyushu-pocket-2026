@@ -326,6 +326,14 @@ window.Together=(()=>{
   if(giftEdit){update('gifts',giftEdit,data);toast('已儲存')}else add('gifts',data);
   giftEdit=null;f.reset();f.hidden=true;
  }
+ // For 附近 › 購物: place id → things to buy there (手信推介 by shop, unbought list items whose 購買地點 names the shop).
+ function buyables(){
+  const out={},put=(id,name)=>{(out[id]??=[]).includes(name)||out[id].push(name)};
+  for(const g of state.gifts){const p=giftPlace(g);if(p)put(p.id,g.name)}
+  const named=T().places.filter(p=>norm(p.v[1]).length>=2);
+  for(const x of state.shopping.filter(x=>!x.bought&&x.place)){const t=norm(x.place),p=named.find(p=>t.includes(norm(p.v[1])));if(p)put(p.id,x.name)}
+  return out;
+ }
  function addGift(id){const g=state.gifts.find(x=>x.id===id);if(!g)return;const p=giftPlace(g);add('shopping',{name:g.name.slice(0,80),qty:'',detail:[g.priceText&&g.price==null?g.priceText:'',g.note].filter(Boolean).join('；').slice(0,500),place:(p?`${p.v[1]} ${p.v[3]}`:g.shop||'').trim().slice(0,200),price:g.price??null,currency:'JPY',photo:null,bought:false,boughtBy:null,boughtAt:null})}
  // A Google Maps link pasted into 購買地點 becomes the shop name and address.
  const MAPS_LINK=/^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i;
@@ -438,5 +446,5 @@ window.Together=(()=>{
  addEventListener('online',()=>{refresh();renderDrafts()});addEventListener('offline',()=>{refresh();renderDrafts()});
  setInterval(()=>{if(jobs.some(j=>!['done','failed'].includes(j.status)))renderDrafts()},30000);
  load().catch(()=>{});
- return Object.freeze({render,renderShopping,refresh,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
+ return Object.freeze({render,renderShopping,refresh,buyables,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
 })();

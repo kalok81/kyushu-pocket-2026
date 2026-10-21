@@ -38,3 +38,4 @@ html{scroll-behavior:auto}.topbar{position:sticky;top:0;z-index:30;background:va
 .shop-gifts summary{font-weight:700;cursor:pointer}.shop-gifts .tg-item{margin:10px 0 0}.shop-gifts .tg-expense .note{margin:0;white-space:nowrap}
 .gift-tools{margin:10px 0 0}.gift-form{margin:12px 0;padding:14px;border:1px dashed var(--line);border-radius:12px}
 .gift-form[hidden]{display:none}
+.buy-here{font-size:13px;margin:6px 0;color:var(--ink);background:var(--sage);border-radius:8px;padding:6px 10px}
