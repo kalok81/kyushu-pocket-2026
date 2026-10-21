@@ -1,11 +1,11 @@
 'use strict';
-// Sign-in gate, trip data and shared notes/expenses/stops for travel companions (Firebase).
+// Sign-in gate, trip data and shared notes/expenses/stops/shopping list for travel companions (Firebase).
 // Trip data lives in Firestore (trip/data, trip/geo, trip/content); the public site holds no trip details.
 window.Together=(()=>{
  // Firebase web config is public by design; access is enforced by firestore.rules and the member list.
  const config={apiKey:'AIzaSyC_qsxlY9mX0OKK5bIXwUXvrrxCOFnc18M',authDomain:'kyushu-2e307.firebaseapp.com',projectId:'kyushu-2e307',storageBucket:'kyushu-2e307.firebasestorage.app',messagingSenderId:'672657048901',appId:'1:672657048901:web:d1e2f7dd92389f78f3ea2c'};
  const tabs={notes:'筆記',expenses:'開支',stops:'共用行程'};
- const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],stops:[],members:[],trip:{}};
+ const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],stops:[],members:[],shopping:[],shopFilter:'todo',shopEdit:null,trip:{}};
  const T=()=>window.TripApp,S=window.Split,$=s=>document.querySelector(s);
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const toast=s=>{$('#toast').textContent=s;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2600)};
@@ -24,7 +24,7 @@ window.Together=(()=>{
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
   return loading;
  }
- function stop(){unsub.forEach(u=>u());unsub=[];Object.assign(state,{notes:[],expenses:[],stops:[],members:[],trip:{}})}
+ function stop(){unsub.forEach(u=>u());unsub=[];Object.assign(state,{notes:[],expenses:[],stops:[],members:[],shopping:[],trip:{}})}
  function listen(){
   const {fs,db}=fb;
   const watch=name=>fs.onSnapshot(fs.collection(db,name),{includeMetadataChanges:true},snap=>{
@@ -39,7 +39,7 @@ window.Together=(()=>{
    const json=snap.get('json');if(started&&json!==state.trip[id]&&!staleNotice){staleNotice=true;toast('旅程資料已更新，重新整理網頁即可看到。')}
    state.trip[id]=json;start();
   },fail);
-  unsub=['notes','expenses','stops','members'].map(watch).concat(['data','geo','content'].map(watchTrip));
+  unsub=['notes','expenses','stops','members','shopping'].map(watch).concat(['data','geo','content'].map(watchTrip));
  }
  function start(){
   const t=state.trip;if(started||!t.data||!t.geo||!t.content)return;
@@ -69,10 +69,10 @@ window.Together=(()=>{
  }
  // Receipt photos are shrunk on the phone, read by the scanReceipt Cloud Function, then only fill the form.
  let callScan;
- async function shrink(file){
-  const img=await createImageBitmap(file,{imageOrientation:'from-image'}),k=Math.min(1,1600/Math.max(img.width,img.height)),c=document.createElement('canvas');
+ async function shrink(file,max=1600,quality=.85){
+  const img=await createImageBitmap(file,{imageOrientation:'from-image'}),k=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement('canvas');
   c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);img.close?.();
-  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.85));
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',quality));
   return new Promise((ok,fail)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(',')[1]);fr.onerror=fail;fr.readAsDataURL(blob)});
  }
  async function scan(file){
@@ -90,6 +90,7 @@ window.Together=(()=>{
   }catch(e){info.textContent=e?.message&&e.code?.startsWith('functions/')?e.message:'未能分析收據，請手動輸入。';console.error(e)}
   finally{btn.disabled=false;btn.textContent='📷 影收據／上載收據'}
  }
+ function update(name,id,data){fb.fs.updateDoc(fb.fs.doc(fb.db,name,id),data).catch(()=>toast('未能儲存，請再試。'))}
  function remove(name,id){if(confirm('確定刪除？所有旅伴都會看不到這項。'))fb.fs.deleteDoc(fb.fs.doc(fb.db,name,id)).catch(()=>toast('未能刪除，請再試。'))}
 
  const me=()=>{const u=state.user;return {id:u.uid,name:state.members.find(m=>m.id===u.uid)?.name||u.displayName||u.email.split('@')[0]}};
@@ -112,7 +113,7 @@ window.Together=(()=>{
   return `<section class="panel tg-summary"><h3>分帳結算</h3>${cs.map(c=>{const total=state.expenses.filter(e=>e.currency===c).reduce((t,e)=>t+S.toMinor(e.amount,c),0),moves=S.settle(bal[c]);return `<div class="tg-currency"><div class="eyebrow">${c} · 合共 ${esc(S.format(total,c))}</div>${moves.length?moves.map(m=>`<p><b>${esc(nameOf(m.from))}</b> 要畀 <b>${esc(nameOf(m.to))}</b> ${esc(S.format(m.amount,c))}</p>`).join(''):'<p>已經清數。</p>'}</div>`}).join('')}<p class="note">日圓和港幣分開計算，不作匯率換算。</p></section>`;
  }
 
- function statusBar(){const online=navigator.onLine,pending=['notes','expenses','stops'].reduce((t,k)=>t+state[k].filter(x=>x.pending).length,0);return `<span>已登入：<b>${esc(me().name)}</b></span><span class="tg-pending-${online?'on':'off'}">${online?pending?`${pending} 項同步中…`:'已同步':'離線中 · 修改會在有網絡時同步'}</span><button class="smallbtn" data-tg="logout">登出</button>`}
+ function statusBar(){const online=navigator.onLine,pending=['notes','expenses','stops','shopping'].reduce((t,k)=>t+state[k].filter(x=>x.pending).length,0);return `<span>已登入：<b>${esc(me().name)}</b></span><span class="tg-pending-${online?'on':'off'}">${online?pending?`${pending} 項同步中…`:'已同步':'離線中 · 修改會在有網絡時同步'}</span><button class="smallbtn" data-tg="logout">登出</button>`}
  function lists(){
   if(state.tab==='notes')return state.notes.length?state.notes.map(noteItem).join(''):'<div class="empty"><h2>還沒有筆記</h2><p>寫下提醒、想吃的東西或任何旅程點滴。</p></div>';
   if(state.tab==='expenses')return summary()+(state.expenses.length?state.expenses.map(expenseItem).join(''):'<div class="empty"><h2>還沒有開支</h2><p>每筆開支記下誰付款、分給誰，網站會計算誰要畀誰。</p></div>');
@@ -143,10 +144,36 @@ window.Together=(()=>{
   if(state.status!=='ready')return {sig:'out',shell:''};
   return {sig:'ready'+id,shell:`<section class="detail-section"><h3>旅伴筆記</h3><div data-tg-live="list"></div><form class="tg-form" data-tg-form="note" data-place-id="${esc(id)}"><textarea name="text" rows="2" maxlength="1000" required placeholder="寫下對這個地點的筆記"></textarea><button type="submit" class="action primary">加入筆記</button></form></section>`,live:{list:state.notes.filter(x=>x.placeId===id).map(noteItem).join('')||'<p class="note">還沒有筆記。</p>'}};
  }
+ // Shopping list: item photos are stored inline (small JPEG) so they stay readable offline.
+ let shopPhoto=null;
+ const photoSrc=b64=>`data:image/jpeg;base64,${b64}`;
+ const shopPreview=()=>shopPhoto?`<img src="${photoSrc(shopPhoto)}" alt="物品相片"><button type="button" class="smallbtn" data-tg="shopPhotoClear">移除相片</button>`:'';
+ function shopForm(x){
+  const v=k=>esc(x?.[k]??'');
+  return `<form class="panel tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div><button type="button" class="action primary" data-tg="shopPhoto">📷 影相／上載圖片</button><input type="file" accept="image/*" id="shopPhotoInput" hidden></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v('name')}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v('qty')}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v('detail')}"></label></div><label>購買地點／地址<input name="place" maxlength="200" placeholder="例如：博多阪急 B1 或地址" value="${v('place')}"></label><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price??''}"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD"${x?.currency==='HKD'?' selected':''}>港幣 HK$</option></select></label></div><div class="links"><button type="submit" class="locate-button">${x?'儲存修改':'加入購物清單'}</button>${x?'<button type="button" class="action" data-tg="shopCancel">取消</button>':''}</div></form>`;
+ }
+ function shopItem(x){
+  const price=x.price!=null?`<b class="shop-price">${esc(S.format(S.toMinor(x.price,x.currency),x.currency))}</b>`:'';
+  return `<article class="tg-item shop-item${x.bought?' bought':''}">${x.photo?`<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>`:''}<div>${meta(x)}<div class="tg-expense"><h3>${esc(x.name)}${x.qty?` <small>· ${esc(x.qty)}</small>`:''}</h3>${price}</div>${x.detail?`<p class="tg-text">${esc(x.detail)}</p>`:''}${x.place?`<p class="shop-place">📍 ${esc(x.place)} <a class="action" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}" target="_blank" rel="noopener noreferrer">地圖 ↗</a></p>`:''}${x.bought?`<p class="note">✓ ${esc(x.boughtBy||'旅伴')} 已買 · ${esc(when(x.boughtAt))}</p>`:''}<div class="links"><button class="action${x.bought?'':' primary'}" data-shop-toggle="${esc(x.id)}">${x.bought?'↺ 改回未買':'✓ 已買'}</button><button class="smallbtn" data-shop-edit="${esc(x.id)}">編輯</button>${del('shopping',x)}</div></div></article>`;
+ }
+ function shopPage(){
+  if(state.status!=='ready')return {sig:'wait',shell:'<div class="empty"><h2>正在連接…</h2></div>'};
+  const edit=state.shopping.find(x=>x.id===state.shopEdit);if(state.shopEdit&&!edit){state.shopEdit=null;shopPhoto=null}
+  const todo=state.shopping.filter(x=>!x.bought),shown=state.shopFilter==='todo'?todo:state.shopFilter==='done'?state.shopping.filter(x=>x.bought):state.shopping;
+  const filters=[['todo','未買',todo.length],['done','已買',state.shopping.length-todo.length],['all','全部',state.shopping.length]].map(([k,t,n])=>`<button class="chip ${state.shopFilter===k?'active':''}" data-shop-filter="${k}" aria-pressed="${state.shopFilter===k}">${t} ${n}</button>`).join('');
+  const list=shown.length?[...shown].sort((a,b)=>a.bought-b.bought||(b.at||0)-(a.at||0)).map(shopItem).join(''):`<div class="empty"><h2>${state.shopFilter==='done'?'還沒有已買的東西':'清單是空的'}</h2><p>${state.shopFilter==='done'?'買了之後按「✓ 已買」。':'把想買的東西加進來，旅伴都看得到。'}</p></div>`;
+  return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div>`,live:{status:statusBar(),filters,list}};
+ }
+ function renderShopping(){return `${header('SHOPPING LIST','要買的，都記下來。','相片、地點和價錢 · 旅伴共用，買了就打勾')}<div id="shopPage"></div>`}
+ async function pickShopPhoto(file){
+  try{let b=await shrink(file,900,.7);if(b.length>380000)b=await shrink(file,600,.6);shopPhoto=b;const p=$('#shopPreview');if(p)p.innerHTML=shopPreview()}
+  catch(e){toast('未能讀取這張相片。');console.error(e)}
+ }
  function paint(el,{sig,shell,live={}}){if(el.dataset.sig!==sig){el.innerHTML=shell;el.dataset.sig=sig}for(const [k,v] of Object.entries(live)){const l=el.querySelector(`[data-tg-live="${k}"]`);if(l)l.innerHTML=v}}
  function refresh(){
   if(!started&&!$('#tgPage'))$('#app').innerHTML=header('KYUSHU 2026','九州口袋旅伴')+'<div id="tgPage"></div>';
   const p=$('#tgPage');if(p)paint(p,page());
+  const sp=$('#shopPage');if(sp)paint(sp,shopPage());
   document.querySelectorAll('[data-tg-day]').forEach(el=>paint(el,daySlot(Number(el.dataset.tgDay))));
   document.querySelectorAll('[data-tg-place]').forEach(el=>paint(el,placeSlot(el.dataset.tgPlace)));
  }
@@ -163,6 +190,12 @@ window.Together=(()=>{
   if(f.dataset.tgForm==='note'){const placeId=f.dataset.placeId||null,place=placeId&&T().places.find(p=>p.id===placeId);if(!str('text'))return;add('notes',{text:str('text').slice(0,1000),day:placeId?null:day,placeId,placeName:place?place.v[1]:null})}
   if(f.dataset.tgForm==='expense'){const amount=Number(v.get('amount')),split=v.getAll('split').map(String);if(!str('title')||!(amount>0)||amount>1e7)return toast('請輸入項目和金額。');if(!split.length)return toast('請最少選一位分帳旅伴。');add('expenses',{title:str('title').slice(0,80),amount:Math.round(amount*100)/100,currency:v.get('currency')==='HKD'?'HKD':'JPY',paidBy:str('paidBy'),split,day:day||today()})}
   if(f.dataset.tgForm==='stop'){if(!str('title'))return;add('stops',{day:state.day,time:str('time').slice(0,20),title:str('title').slice(0,80),detail:str('detail').slice(0,500)})}
+  if(f.dataset.tgForm==='shop'){
+   const price=v.get('price')===''?null:Number(v.get('price'));if(!str('name'))return;if(price!=null&&!(price>=0&&price<=1e7))return toast('價錢不正確。');
+   const item={name:str('name').slice(0,80),qty:str('qty').slice(0,30),detail:str('detail').slice(0,500),place:str('place').slice(0,200),price:price==null?null:Math.round(price*100)/100,currency:v.get('currency')==='HKD'?'HKD':'JPY',photo:shopPhoto};
+   if(state.shopEdit){update('shopping',state.shopEdit,item);toast('已儲存')}else add('shopping',{...item,bought:false,boughtBy:null,boughtAt:null});
+   state.shopEdit=null;shopPhoto=null;$('#shopPage').dataset.sig='';refresh();return;
+  }
   f.reset();
  });
  document.addEventListener('click',e=>{
@@ -174,9 +207,16 @@ window.Together=(()=>{
   if(d.tgTab){state.tab=d.tgTab;refresh()}
   if(d.tgStopday){state.day=Number(d.tgStopday);refresh()}
   if(d.tgDel){const [name,id]=d.tgDel.split(':');remove(name,id)}
+  if(d.tg==='shopPhoto')$('#shopPhotoInput')?.click();
+  if(d.tg==='shopPhotoClear'){shopPhoto=null;$('#shopPreview').innerHTML=''}
+  if(d.tg==='shopCancel'){state.shopEdit=null;shopPhoto=null;refresh()}
+  if(d.shopFilter){state.shopFilter=d.shopFilter;refresh()}
+  if(d.shopEdit){const x=state.shopping.find(i=>i.id===d.shopEdit);if(x){state.shopEdit=x.id;shopPhoto=x.photo||null;refresh();$('#shopPage')?.scrollIntoView({behavior:'smooth'})}}
+  if(d.shopToggle){const x=state.shopping.find(i=>i.id===d.shopToggle);if(x)update('shopping',x.id,x.bought?{bought:false,boughtBy:null,boughtAt:null}:{bought:true,boughtBy:me().name,boughtAt:Date.now()})}
  });
- document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files[0]){scan(e.target.files[0]);e.target.value=''}});
+ document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files[0]){scan(e.target.files[0]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}});
+ document.addEventListener('click',e=>{const img=e.target.closest('[data-shop-zoom]');if(img)img.classList.toggle('zoom')});
  addEventListener('online',refresh);addEventListener('offline',refresh);
  load().catch(()=>{});
- return Object.freeze({render,refresh});
+ return Object.freeze({render,renderShopping,refresh});
 })();

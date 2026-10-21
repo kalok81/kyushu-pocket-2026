@@ -21,3 +21,6 @@ html{scroll-behavior:auto}.topbar{position:sticky;top:0;z-index:30;background:va
 .locked .bottomnav,.locked .topactions,.locked .skip-link{display:none}
 .tg-login .tg-form{text-align:left;margin:16px 0 8px}.tg-or{color:var(--muted);font-size:13px;margin:4px 0 10px}.tg-google{width:100%}
 .tg-scan{display:grid;gap:4px}.tg-scan .note{margin:0}
+.shop-photo{display:grid;gap:8px}#shopPreview{display:flex;gap:10px;align-items:flex-end}#shopPreview img{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+.shop-item{display:grid;grid-template-columns:84px 1fr;gap:14px}.shop-item:not(:has(.shop-thumb)){grid-template-columns:1fr}.shop-thumb{width:84px;height:84px;object-fit:cover;border-radius:10px;cursor:zoom-in}.shop-thumb.zoom{grid-column:1/-1;width:100%;height:auto;max-height:70vh;object-fit:contain;cursor:zoom-out;background:var(--sage)}.shop-item h3 small{font-weight:400;color:var(--muted)}.shop-price{font-size:16px;white-space:nowrap}.shop-place{font-size:13px;margin:6px 0;display:flex;flex-wrap:wrap;gap:6px;align-items:center}.shop-place .action{min-height:32px;padding:4px 10px}.shop-item.bought h3{text-decoration:line-through;color:var(--muted)}.shop-item.bought .shop-thumb{opacity:.6}
+@media(min-width:900px){.bottomnav{width:520px}}

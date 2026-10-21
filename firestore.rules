@@ -15,6 +15,14 @@ service cloud.firestore {
     }
     function day(v) { return v is int && v >= 1 && v <= 7; }
     function text(v, max) { return v is string && v.size() <= max; }
+    function shopValid(d) {
+      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'by', 'byName', 'at', 'createdAt'])
+        && text(d.name, 80) && d.name.size() > 0 && text(d.qty, 30) && text(d.detail, 500) && text(d.place, 200)
+        && (d.price == null || (d.price is number && d.price >= 0 && d.price <= 10000000))
+        && d.currency in ['JPY', 'HKD']
+        && (d.photo == null || text(d.photo, 400000))
+        && d.bought is bool && (d.boughtBy == null || text(d.boughtBy, 40)) && (d.boughtAt == null || d.boughtAt is int);
+    }
 
     match /config/{id} { allow read, write: if false; }
 
@@ -46,6 +54,13 @@ service cloud.firestore {
         && request.resource.data.paidBy is string
         && request.resource.data.split is list && request.resource.data.split.size() > 0 && request.resource.data.split.size() <= 20
         && day(request.resource.data.day);
+    }
+    match /shopping/{id} {
+      allow read, delete: if isMember();
+      allow create: if isMember() && owned() && shopValid(request.resource.data);
+      allow update: if isMember() && shopValid(request.resource.data)
+        && request.resource.data.by == resource.data.by && request.resource.data.at == resource.data.at
+        && request.resource.data.createdAt == resource.data.createdAt;
     }
     match /stops/{id} {
       allow read, delete: if isMember();
