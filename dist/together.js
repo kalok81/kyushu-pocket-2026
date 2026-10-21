@@ -88,7 +88,7 @@ window.Together=(()=>{
    const day=r.date&&T().days.find(d=>d.iso===r.date.replaceAll('-','/'));if(day)el.day.value=day.n;
    info.textContent=(r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':'已填入，請檢查。')+(r.items.length?' 項目：'+r.items.map(i=>`${i.name} ${i.amount}`).join('、'):'');
    el.title.focus();
-  }catch(e){info.textContent=e?.message&&e.code?.startsWith('functions/')?e.message:'未能分析收據，請手動輸入。';console.error(e)}
+  }catch(e){info.textContent=e?.message&&e.code?.startsWith('functions/')?e.message.replace(/\s*\[\d+\]$/,''):'未能分析收據，請手動輸入。';console.error(e)}
   finally{btn.disabled=false;btn.textContent='📷 影收據／上載收據'}
  }
  // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.

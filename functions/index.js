@@ -96,20 +96,23 @@ function parseMapsUrl(url) {
  return { query: name || (coords ? null : q) || null, at };
 }
 
-const FIELDS = ['displayName', 'formattedAddress', 'location', 'regularOpeningHours.weekdayDescriptions', 'types', 'primaryTypeDisplayName', 'websiteUri', 'googleMapsUri', 'priceRange'].map(f => 'places.' + f).join(',');
-async function places(path, body) {
- const res = await fetch(`https://places.googleapis.com/v1/places:${path}`, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': PLACES_API_KEY.value().trim(), 'X-Goog-FieldMask': FIELDS },
-  body: JSON.stringify({ languageCode: 'zh-TW', maxResultCount: 1, ...body }),
+// Name and address in Japanese (as on signs and in the Sheet); hours and type label in Chinese.
+const SEARCH_FIELDS = ['id', 'displayName', 'formattedAddress', 'location', 'types', 'websiteUri', 'googleMapsUri', 'priceRange'].map(f => 'places.' + f).join(',');
+const DETAIL_FIELDS = 'regularOpeningHours.weekdayDescriptions,primaryTypeDisplayName';
+async function placesApi(path, fields, body) {
+ const res = await fetch(`https://places.googleapis.com/v1/${path}`, {
+  method: body ? 'POST' : 'GET',
+  headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': PLACES_API_KEY.value().trim(), 'X-Goog-FieldMask': fields },
+  body: body && JSON.stringify(body),
   signal: AbortSignal.timeout(15_000),
  });
  if (!res.ok) {
   console.error('Places request failed', res.status, (await res.text()).slice(0, 500));
   throw new HttpsError('unavailable', '暫時未能查詢地點，請稍後再試。');
  }
- return (await res.json()).places?.[0];
+ return res.json();
 }
+const search = async (kind, body) => (await placesApi(`places:${kind}`, SEARCH_FIELDS, { languageCode: 'ja', maxResultCount: 1, ...body })).places?.[0];
 
 function category(types = []) {
  const t = types.join(' ');
@@ -120,7 +123,9 @@ function category(types = []) {
 }
 function price(range) {
  const amount = p => p && `${p.currencyCode === 'JPY' ? '¥' : p.currencyCode + ' '}${Number(p.units || 0).toLocaleString('en-US')}`;
- return range ? [amount(range.startPrice), amount(range.endPrice)].filter(Boolean).join('–') : '';
+ if (!range) return '';
+ if (range.endPrice && Number(range.startPrice?.units || 0) <= 1) return `${amount(range.endPrice)} 以下`;
+ return [amount(range.startPrice), amount(range.endPrice)].filter(Boolean).join('–');
 }
 
 export const lookupPlace = onCall({ region: 'asia-northeast1', secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
@@ -132,18 +137,19 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', secrets: [PLACES_
  const { query, at } = parseMapsUrl(url);
  const bias = at && { circle: { center: { latitude: at.lat, longitude: at.lng }, radius: 300 } };
  const place = query
-  ? await places('searchText', { textQuery: query, ...(bias && { locationBias: bias }) })
-  : at ? await places('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }) : null;
+  ? await search('searchText', { textQuery: query, ...(bias && { locationBias: bias }) })
+  : at ? await search('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }) : null;
  if (!place) throw new HttpsError('not-found', '找不到這個地點，請手動輸入。');
+ const detail = await placesApi(`places/${place.id}?languageCode=zh-TW`, DETAIL_FIELDS).catch(() => ({}));
  return {
   name: place.displayName?.text || query || '',
   address: place.formattedAddress || '',
   lat: place.location?.latitude ?? at?.lat ?? null,
   lng: place.location?.longitude ?? at?.lng ?? null,
-  hours: (place.regularOpeningHours?.weekdayDescriptions || []).join('\n'),
+  hours: (detail.regularOpeningHours?.weekdayDescriptions || []).join('\n'),
   price: price(place.priceRange),
   category: category(place.types),
-  type: place.primaryTypeDisplayName?.text || '',
+  type: detail.primaryTypeDisplayName?.text || '',
   website: place.websiteUri || '',
   mapsUrl: place.googleMapsUri || url.href,
  };
