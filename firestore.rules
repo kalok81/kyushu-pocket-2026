@@ -77,6 +77,17 @@ service cloud.firestore {
         && request.resource.data.by == resource.data.by && request.resource.data.at == resource.data.at
         && request.resource.data.createdAt == resource.data.createdAt;
     }
+    // Receipts read in the background by the processReceipt function; each companion sees only their own.
+    match /receiptJobs/{id} {
+      allow read, delete: if isMember() && resource.data.by == request.auth.uid;
+      allow create: if isMember() && owned()
+        && request.resource.data.keys().hasOnly(['image', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+        && request.resource.data.status == 'pending'
+        && text(request.resource.data.image, 900000) && text(request.resource.data.file, 120);
+      allow update: if isMember() && resource.data.by == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries'])
+        && (request.resource.data.status == resource.data.status || request.resource.data.status == 'pending');
+    }
     match /stops/{id} {
       allow read, delete: if isMember();
       allow create: if isMember() && owned()

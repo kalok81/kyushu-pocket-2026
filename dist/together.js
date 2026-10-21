@@ -24,7 +24,7 @@ window.Together=(()=>{
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
   return loading;
  }
- function stop(){unsub.forEach(u=>u());unsub=[];Object.assign(state,{notes:[],expenses:[],stops:[],members:[],shopping:[],places:[],placesLoaded:false,trip:{}})}
+ function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],stops:[],members:[],shopping:[],places:[],placesLoaded:false,trip:{}})}
  function listen(){
   const {fs,db}=fb;
   const watch=name=>fs.onSnapshot(fs.collection(db,name),{includeMetadataChanges:true},snap=>{
@@ -40,7 +40,8 @@ window.Together=(()=>{
    const json=snap.get('json');if(started&&json!==state.trip[id]&&!staleNotice){staleNotice=true;toast('旅程資料已更新，重新整理網頁即可看到。')}
    state.trip[id]=json;start();
   },fail);
-  unsub=['notes','expenses','stops','members','shopping','places'].map(watch).concat(['data','geo','content'].map(watchTrip));
+  const watchJobs=fs.onSnapshot(fs.query(fs.collection(db,'receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts()},e=>console.error('receipt jobs',e));
+  unsub=[watchJobs,...['notes','expenses','stops','members','shopping','places'].map(watch)].concat(['data','geo','content'].map(watchTrip));
  }
  function start(){
   const t=state.trip;if(started||!t.data||!t.geo||!t.content||!state.placesLoaded)return;
@@ -89,27 +90,55 @@ window.Together=(()=>{
   const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',quality));if(!blob)throw new Error('encode');
   return new Promise((ok,fail)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(',')[1]);fr.onerror=fail;fr.readAsDataURL(blob)});
  }
- // The function reports no progress, so the bar moves by stage and eases towards 90% while the AI reads.
- function scanProgress(pct,label){const bar=$('#tgScanProgress');if(bar){bar.hidden=false;bar.firstElementChild.style.width=pct+'%';bar.setAttribute('aria-valuenow',Math.round(pct))}if(label)$('#tgScanInfo').textContent=label}
- async function scan(file){
-  const f=$('[data-tg-form="expense"]'),btn=f?.querySelector('[data-tg="scan"]'),info=$('#tgScanInfo');if(!f)return;
-  if(!navigator.onLine)return toast('分析收據需要網絡，可以先手動輸入。');
-  btn.disabled=true;btn.textContent='分析中…';scanProgress(5,'正在縮細相片…');let timer;
-  try{
-   const image=await shrink(file),call=await callable('scanReceipt',70000),t0=Date.now();
-   scanProgress(25,'正在上載及分析收據…');
-   timer=setInterval(()=>scanProgress(25+65*(1-Math.exp(-(Date.now()-t0)/8000))),200);
-   const r=(await call({image})).data;
-   clearInterval(timer);scanProgress(100);
-   if(!r.total){info.textContent='讀不到金額，請手動輸入。';return}
-   const el=f.elements;if(r.merchant)el.title.value=r.merchant;el.amount.value=r.total;if(r.currency!=='OTHER')el.currency.value=r.currency;
-   const day=r.date&&T().days.find(d=>d.iso===r.date.replaceAll('-','/'));if(day)el.day.value=day.n;
-   if(r.items.length)$('#tgItemRows').innerHTML=r.items.map(itemRow).join('');
-   const dup=r.currency!=='OTHER'&&duplicateOf({title:el.title.value,amount:r.total,currency:r.currency,day:Number(el.day.value)});
-   info.textContent=dup?`⚠️ 可能重複：${dupText(dup)} 已經記錄過，請確認是否同一張收據。`:r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':'已填入，請檢查。';
-   el.title.focus();
-  }catch(e){info.textContent=e?.message&&String(e?.code||'').startsWith('functions/')?e.message.replace(/\s*\[\d+\]$/,''):/unsupported|heic|img|encode/.test(e?.message)?'未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。':'未能分析收據，請手動輸入。';console.error(e)}
-  finally{clearInterval(timer);btn.disabled=false;btn.textContent='📷 影收據／上載收據';setTimeout(()=>{const bar=$('#tgScanProgress');if(bar)bar.hidden=true},600)}
+ const scanError=e=>/unsupported|heic|img|encode/.test(e?.message)?'未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。':'未能處理這張相片。';
+ // Receipts are read in the background: each photo becomes a receiptJobs document. Firestore keeps unsent
+ // writes on the phone and retries after a reload, and the processReceipt function reads the receipt
+ // server-side even if the page is closed. Payer and split come from the expense form when adding.
+ let jobs=[];const localEdits={};
+ const STUCK=3*60*1000;
+ const jobState=j=>j.status==='done'?'done':j.status==='failed'?'fail':j.uploading?'upload':j.status==='processing'?'busy':'queued';
+ const canRetry=j=>(j.status==='failed'&&j.image!=null)||(['pending','processing'].includes(j.status)&&!j.uploading&&Date.now()-(j.startedAt||j.at||0)>STUCK);
+ function draftOf(j){
+  const r=j.result||{},e={...j.edit,...localEdits[j.id]},day=r.date&&T().days.find(x=>x.iso===r.date.replaceAll('-','/'));
+  return {key:j.id,file:j.file,status:jobState(j),error:j.error,retry:canRetry(j),title:e.title??(r.merchant||'收據'),amount:e.amount??r.total??'',currency:e.currency??(r.currency==='HKD'?'HKD':'JPY'),day:Number(e.day??(day?day.n:today())),items:r.items||[],
+   warn:r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':''};
+ }
+ const drafts=()=>jobs.map(draftOf);
+ const draftDup=(d,all=drafts())=>{const exp={title:d.title,amount:Number(d.amount),currency:d.currency,day:Number(d.day)},earlier=all.slice(0,all.findIndex(x=>x.key===d.key)).find(x=>x.status==='done'&&x.currency===exp.currency&&Math.abs(Number(x.amount)-exp.amount)<.005&&(Number(x.day)===exp.day||sameName(x.title,exp.title)));const dup=duplicateOf(exp);return dup?`⚠️ 可能重複：${dupText(dup)} 已經記錄過。`:earlier?`⚠️ 與「${earlier.title}」可能是同一張收據。`:''};
+ const STATUS={upload:'上載中',queued:'等候分析',busy:'分析中…',done:'已讀取',fail:'未能讀取'};
+ function draftHtml(d,all){
+  const head=`<div class="tg-meta"><span class="badge">${STATUS[d.status]}</span><span>${esc(d.file)}</span></div>`,retry=d.retry?`<button type="button" class="smallbtn" data-draft-retry="${d.key}">重試</button>`:'',drop=`<button type="button" class="smallbtn" data-draft-drop="${d.key}">捨棄</button>`;
+  if(d.status!=='done'&&d.status!=='fail')return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-progress tg-progress-busy"><div></div></div>${d.retry?`<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>`:''}</article>`;
+  if(d.status==='fail')return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error||'未能讀取。')}</p><div class="links">${retry}${drop}</div></article>`;
+  const warn=draftDup(d,all)||d.warn;
+  return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency"><option value="JPY">日圓 ¥</option><option value="HKD"${d.currency==='HKD'?' selected':''}>港幣 HK$</option></select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div>${d.items.length?`<ul class="tg-lines">${d.items.map(i=>`<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join('')}</ul>`:''}${warn?`<p class="note tg-warn">${esc(warn)}</p>`:''}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
+ }
+ function renderDrafts(){
+  const box=$('#tgDrafts');if(!box)return;
+  const all=drafts();if(!all.length){box.innerHTML='';return}
+  const a=document.activeElement,card=a?.closest?.('[data-draft]'),field=a?.dataset?.df;
+  const finished=all.filter(d=>d.status==='done'||d.status==='fail').length,ready=all.filter(d=>d.status==='done'&&!draftDup(d,all)).length,uploading=all.filter(d=>d.status==='upload').length,pct=Math.round(finished/all.length*100);
+  box.innerHTML=`<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready?`<button type="button" class="action primary" data-tg="draftsAddAll">全部加入（${ready}）</button>`:''}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading?`${uploading} 張正在上載${navigator.onLine?'':'（離線中，有網絡時會繼續）'}。`:''}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」使用下面表格的設定；有 ⚠️ 的不會在「全部加入」時加入。</p>${all.map(d=>draftHtml(d,all)).join('')}`;
+  if(card&&field){const el=box.querySelector(`[data-draft="${card.dataset.draft}"] [data-df="${field}"]`);if(el)el.focus()}
+ }
+ async function queueReceipts(files){
+  if(files.length>10){toast('一次最多 10 張，已取頭 10 張。');files=files.slice(0,10)}
+  const {fs,db}=fb;let n=0;
+  for(const f of files){
+   try{let image=await shrink(f);if(image.length>850000)image=await shrink(f,1200,.75);
+    fs.addDoc(fs.collection(db,'receiptJobs'),{image,file:String(f.name||'相片').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{toast('未能上載收據，請確認你仍在旅伴名單。');console.error(e)});n++}
+   catch(e){toast(`${f.name||'相片'}：${scanError(e)}`);console.error(e)}
+  }
+  if(n)toast(`已加入 ${n} 張收據，會在背景分析`);
+ }
+ const jobRef=id=>fb.fs.doc(fb.db,'receiptJobs',id);
+ function addDraft(d,ask){
+  const f=$('[data-tg-form="expense"]'),v=new FormData(f),split=v.getAll('split').map(String),amount=Number(d.amount);
+  if(!String(d.title).trim()||!(amount>0)||amount>1e7){toast('請檢查項目和金額。');return false}
+  if(!split.length){toast('請在下面表格最少選一位分帳旅伴。');return false}
+  const exp={title:String(d.title).trim().slice(0,80),amount:Math.round(amount*100)/100,currency:d.currency,paidBy:String(v.get('paidBy')),split,day:Number(d.day),items:d.items.slice(0,30)},dup=duplicateOf(exp);
+  if(dup&&ask&&!confirm(`似乎已經記錄過：\n${dupText(dup)}\n\n仍然要加入嗎？`))return false;
+  add('expenses',exp);fb.fs.deleteDoc(jobRef(d.key)).catch(()=>{});jobs=jobs.filter(j=>j.id!==d.key);delete localEdits[d.key];return true;
  }
  // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.
  async function lookupPlace(url){if(!navigator.onLine)throw new Error('offline');return (await (await callable('lookupPlace',45000))({url})).data}
@@ -162,7 +191,7 @@ window.Together=(()=>{
  }
  function forms(){
   if(state.tab==='notes')return `<form class="panel tg-form" data-tg-form="note"><label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾"></textarea></label><label>關於<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><button type="submit" class="locate-button">加入筆記</button></form>`;
-  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據</button><input type="file" accept="image/*" id="tgReceipt" hidden><div class="tg-progress" id="tgScanProgress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" hidden><div></div></div><p class="note" id="tgScanInfo">AI 會讀出店名、金額、日期及物品並填入下面，請檢查後才儲存。相片不會保存。</p></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
+  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據（可多張）</button><input type="file" accept="image/*" id="tgReceipt" multiple hidden><p class="note">AI 在背景讀出店名、金額、日期及物品，可以關閉網頁，稍後回來確認。分析後相片會刪除。</p></div><div id="tgDrafts" class="tg-drafts"></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
   return `<div class="chips" role="group" aria-label="選擇日子">${T().days.map(d=>`<button class="chip ${d.n===state.day?'active':''}" data-tg-stopday="${d.n}" aria-pressed="${d.n===state.day}">D${d.n}</button>`).join('')}</div><form class="panel tg-form" data-tg-form="stop"><div class="tg-row"><label>時間<input name="time" maxlength="20" placeholder="14:00–15:30"></label><label>地點或活動<input name="title" maxlength="80" required placeholder="例如：中洲屋台"></label></div><label>細節<textarea name="detail" rows="2" maxlength="500" placeholder="交通、預約或提醒（可留空）"></textarea></label><button type="submit" class="locate-button">加入 ${esc(dayLabel(state.day))}</button></form>`;
  }
  function page(){
@@ -213,6 +242,7 @@ window.Together=(()=>{
  function refresh(){
   if(!started&&!$('#tgPage'))$('#app').innerHTML=header('KYUSHU 2026','九州口袋旅伴')+'<div id="tgPage"></div>';
   const p=$('#tgPage');if(p)paint(p,page());
+  const box=$('#tgDrafts');if(box&&!box.childElementCount&&jobs.length)renderDrafts();
   const sp=$('#shopPage');if(sp)paint(sp,shopPage());
   document.querySelectorAll('[data-tg-day]').forEach(el=>paint(el,daySlot(Number(el.dataset.tgDay))));
   document.querySelectorAll('[data-tg-place]').forEach(el=>paint(el,placeSlot(el.dataset.tgPlace)));
@@ -235,7 +265,7 @@ window.Together=(()=>{
    const exp={title:str('title').slice(0,80),amount:Math.round(amount*100)/100,currency:v.get('currency')==='HKD'?'HKD':'JPY',paidBy:str('paidBy'),split,day:day||today(),items},dup=duplicateOf(exp);
    if(dup&&!confirm(`似乎已經記錄過：\n${dupText(dup)}\n\n仍然要加入嗎？`))return;
    add('expenses',exp);
-   f.reset();$('#tgItemRows').innerHTML=itemRow();$('#tgScanInfo').textContent='AI 會讀出店名、金額、日期及物品並填入下面，請檢查後才儲存。相片不會保存。';return;
+   f.reset();$('#tgItemRows').innerHTML=itemRow();return;
   }
   if(f.dataset.tgForm==='stop'){if(!str('title'))return;add('stops',{day:state.day,time:str('time').slice(0,20),title:str('title').slice(0,80),detail:str('detail').slice(0,500)})}
   if(f.dataset.tgForm==='shop'){
@@ -251,6 +281,10 @@ window.Together=(()=>{
   if(d.tg==='login')login();
   if(d.tg==='logout'&&fb)logout();
   if(d.tg==='scan')$('#tgReceipt')?.click();
+  if(d.draftDrop&&confirm('捨棄這張收據？')){fb.fs.deleteDoc(jobRef(d.draftDrop)).catch(()=>toast('未能刪除，請再試。'));delete localEdits[d.draftDrop]}
+  if(d.draftRetry)fb.fs.updateDoc(jobRef(d.draftRetry),{status:'pending',retries:fb.fs.increment(1)}).catch(()=>toast('未能重試，請再試。'));
+  if(d.draftAdd){const x=drafts().find(i=>i.key===d.draftAdd);if(x&&addDraft(x,true))renderDrafts()}
+  if(d.tg==='draftsAddAll'){const all=drafts(),ok=all.filter(x=>x.status==='done'&&!draftDup(x,all));let n=0;for(const x of ok)if(addDraft(x,false))n++;else break;renderDrafts();const left=drafts().filter(x=>x.status==='done').length;if(n)toast(`已加入 ${n} 筆${left?`，尚有 ${left} 筆待確認`:''}`)}
   if(d.tg==='itemAdd'){$('#tgItemRows').insertAdjacentHTML('beforeend',itemRow());$('#tgItemRows').lastElementChild.querySelector('input').focus()}
   if(d.tg==='itemDel'){const rows=$('#tgItemRows');el.closest('.tg-line-row').remove();if(!rows.children.length)rows.innerHTML=itemRow()}
   if(d.tg==='retry'){if(fb&&state.user){state.status='checking';refresh();listen()}else load().catch(()=>{})}
@@ -264,9 +298,14 @@ window.Together=(()=>{
   if(d.shopEdit){const x=state.shopping.find(i=>i.id===d.shopEdit);if(x){state.shopEdit=x.id;shopPhoto=x.photo||null;refresh();$('#shopPage')?.scrollIntoView({behavior:'smooth'})}}
   if(d.shopToggle){const x=state.shopping.find(i=>i.id===d.shopToggle);if(x)update('shopping',x.id,x.bought?{bought:false,boughtBy:null,boughtAt:null}:{bought:true,boughtBy:me().name,boughtAt:Date.now()})}
  });
- document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files[0]){scan(e.target.files[0]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}});
+ document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files.length){if(state.status==='ready')queueReceipts([...e.target.files]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}});
  document.addEventListener('click',e=>{const img=e.target.closest('[data-shop-zoom]');if(img)img.classList.toggle('zoom')});
- addEventListener('online',refresh);addEventListener('offline',refresh);
+ document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset?.df!==undefined)e.preventDefault()});
+ // Draft edits are kept locally while typing and saved to the job when a field is left, so they survive reloads.
+ document.addEventListener('input',e=>{const k=e.target.dataset?.df,card=e.target.closest?.('[data-draft]');if(!k||!card)return;(localEdits[card.dataset.draft]??={})[k]=e.target.value});
+ document.addEventListener('change',e=>{const k=e.target.dataset?.df,card=e.target.closest?.('[data-draft]');if(!k||!card||!fb)return;const v=k==='day'?Number(e.target.value):k==='amount'?(e.target.value===''?'':Number(e.target.value)):e.target.value;fb.fs.updateDoc(jobRef(card.dataset.draft),{['edit.'+k]:v}).catch(()=>{});if(k!=='title')renderDrafts()});
+ addEventListener('online',()=>{refresh();renderDrafts()});addEventListener('offline',()=>{refresh();renderDrafts()});
+ setInterval(()=>{if(jobs.some(j=>!['done','failed'].includes(j.status)))renderDrafts()},30000);
  load().catch(()=>{});
  return Object.freeze({render,renderShopping,refresh,lookupPlace,savePlace,deletePlace,restorePlace});
 })();

@@ -1,8 +1,8 @@
-// Receipt reader: a signed-in travel companion sends a receipt photo, DeepSeek reads it,
-// and the page pre-fills the expense form. Photos are not stored.
+// Receipt reader (DeepSeek, run in the background on receiptJobs) and Google Maps place lookup for the travel guide.
 import { initializeApp } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+import { getFirestore, FieldValue } from 'firebase-admin/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { cloudEvent } from '@google-cloud/functions-framework';
 import { defineSecret } from 'firebase-functions/params';
 
 initializeApp();
@@ -38,12 +38,7 @@ function clean(r) {
  };
 }
 
-export const scanReceipt = onCall({ region: 'asia-northeast1', secrets: [DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 60, maxInstances: 3 }, async req => {
- if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
- if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
- const image = req.data?.image;
- if (typeof image !== 'string' || !/^[A-Za-z0-9+/=]+$/.test(image) || image.length * 0.75 > MAX_IMAGE_BYTES) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
-
+async function readReceipt(image) {
  const res = await fetch('https://api.deepseek.com/chat/completions', {
   method: 'POST',
   headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY.value().trim()}`, 'Content-Type': 'application/json' },
@@ -65,6 +60,34 @@ export const scanReceipt = onCall({ region: 'asia-northeast1', secrets: [DEEPSEE
  } catch {
   console.error('Unreadable model reply', String(content).slice(0, 500));
   throw new HttpsError('internal', '未能讀取收據內容，請手動輸入。');
+ }
+}
+const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.test(image) && image.length * 0.75 <= MAX_IMAGE_BYTES;
+
+// Background receipts: the page stores a shrunk photo in receiptJobs (Firestore keeps unsent writes on the
+// phone and retries after a reload), and this trigger reads it server-side even if the page was closed.
+// Only members can create jobs (firestore.rules). The photo is removed once the receipt has been read.
+// Deployed with gcloud as a plain CloudEvent function (Eventarc, Firestore document.written on receiptJobs/{id}).
+// The event subject names the document; the job is read fresh here, so the event payload encoding does not matter.
+cloudEvent('processReceipt', async event => {
+ const path = String(event.subject || '').replace(/^documents\//, '');
+ if (!/^receiptJobs\/[A-Za-z0-9]+$/.test(path)) return;
+ const ref = getFirestore().doc(path);
+ const image = await getFirestore().runTransaction(async tx => {
+  const snap = await tx.get(ref);
+  if (!snap.exists || snap.get('status') !== 'pending') return null;
+  tx.update(ref, { status: 'processing', startedAt: Date.now() });
+  return snap.get('image') ?? '';
+ });
+ if (image === null) return;
+ try {
+  if (!validImage(image)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
+  const result = await readReceipt(image);
+  await ref.update(result.total
+   ? { status: 'done', result, image: FieldValue.delete(), doneAt: Date.now() }
+   : { status: 'failed', error: '讀不到金額，請手動輸入。', result, image: FieldValue.delete(), doneAt: Date.now() });
+ } catch (e) {
+  await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : '未能分析收據，請稍後再試。', doneAt: Date.now() });
  }
 });
 
