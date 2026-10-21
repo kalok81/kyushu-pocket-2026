@@ -31,3 +31,4 @@ html{scroll-behavior:auto}.topbar{position:sticky;top:0;z-index:30;background:va
 .tg-progress-busy>div{width:40%!important;animation:tg-busy 1.2s ease-in-out infinite}@keyframes tg-busy{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}@media(prefers-reduced-motion:reduce){.tg-progress-busy>div{animation:none;width:100%!important;opacity:.4}}
 .tg-scan .tg-check{min-height:36px;font-size:13px;color:var(--ink)}
 .tg-merge{display:grid;gap:8px}.tg-merge button{justify-self:start}
+.tg-pick{margin-left:auto;display:flex;align-items:center;gap:4px;color:var(--ink)}.tg-pick input{width:18px;height:18px}

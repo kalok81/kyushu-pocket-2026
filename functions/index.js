@@ -42,28 +42,32 @@ function clean(r) {
 }
 
 async function readReceipt(images) {
- const res = await fetch('https://api.deepseek.com/chat/completions', {
-  method: 'POST',
-  headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY.value().trim()}`, 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-   model: 'deepseek-flash',
-   response_format: { type: 'json_object' },
-   max_tokens: 3000,
-   messages: [{ role: 'user', content: [{ type: 'text', text: PROMPT }, ...images.map(image => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}`, detail: 'high' } }))] }],
-  }),
-  signal: AbortSignal.timeout(50_000),
- });
- if (!res.ok) {
-  console.error('DeepSeek request failed', res.status, (await res.text()).slice(0, 500));
-  throw new HttpsError('unavailable', '暫時未能分析收據，請稍後再試。');
+ // DeepSeek's JSON mode can return empty content (or run out of tokens on long receipts): log why and retry once.
+ for (let attempt = 1; attempt <= 2; attempt++) {
+  const res = await fetch('https://api.deepseek.com/chat/completions', {
+   method: 'POST',
+   headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY.value().trim()}`, 'Content-Type': 'application/json' },
+   body: JSON.stringify({
+    model: 'deepseek-flash',
+    response_format: { type: 'json_object' },
+    max_tokens: 8000,
+    messages: [{ role: 'user', content: [{ type: 'text', text: PROMPT }, ...images.map(image => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}`, detail: 'high' } }))] }],
+   }),
+   signal: AbortSignal.timeout(80_000),
+  });
+  if (!res.ok) {
+   console.error('DeepSeek request failed', res.status, (await res.text()).slice(0, 500));
+   throw new HttpsError('unavailable', '暫時未能分析收據，請稍後再試。');
+  }
+  const body = await res.json(), choice = body.choices?.[0];
+  const content = String(choice?.message?.content || '').replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '');
+  try {
+   return clean(JSON.parse(content));
+  } catch {
+   console.error('Unreadable model reply', JSON.stringify({ attempt, images: images.length, finish: choice?.finish_reason, usage: body.usage, reasoning: !!choice?.message?.reasoning_content, content: content.slice(0, 300) }));
+  }
  }
- const content = (await res.json()).choices?.[0]?.message?.content;
- try {
-  return clean(JSON.parse(content));
- } catch {
-  console.error('Unreadable model reply', String(content).slice(0, 500));
-  throw new HttpsError('internal', '未能讀取收據內容，請手動輸入。');
- }
+ throw new HttpsError('internal', '未能讀取收據內容，可以重試或手動輸入。');
 }
 const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.test(image) && image.length * 0.75 <= MAX_IMAGE_BYTES;
 
@@ -91,7 +95,7 @@ cloudEvent('processReceipt', async event => {
   if (!result.total && itemSum > 0) Object.assign(result, { total: itemSum, totalFromItems: true, confidence: 'low' });
   // Photos stay on the job until the traveller adds or discards it, so partial shots can still be merged or retried.
   await ref.update(result.total
-   ? { status: 'done', result, doneAt: Date.now() }
+   ? { status: 'done', result, error: FieldValue.delete(), doneAt: Date.now() }
    : { status: 'failed', error: '讀不到金額，可以重試或手動輸入。', result, doneAt: Date.now() });
  } catch (e) {
   await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : '未能分析收據，請稍後再試。', doneAt: Date.now() });

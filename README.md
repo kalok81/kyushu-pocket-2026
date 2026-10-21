@@ -38,14 +38,14 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 - `dist/vendor/firebase/`：Firebase 瀏覽器版本。
 - `scripts/trip-data.mjs`：上載或下載旅程資料。
 - `scripts/accounts.mjs`：管理旅伴帳號及名單。
-- `functions/`：`processReceipt` 在背景讀取收據（DeepSeek `deepseek-flash`）：網頁把縮細的相片存入 Firestore `receiptJobs`，就算關閉網頁或離線，下次打開時會繼續上載；旅伴在開支頁確認後才加入，加入或捨棄時刪除相片。同一張收據分開影的相片可在上載前剔選「當作同一張收據」，或由 AI 標示為上／下半部後在頁面按「合併並重新分析」。`lookupPlace` 負責 Google 地圖自動填寫。API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`）。
+- `functions/`：`processReceipt` 在背景讀取收據（DeepSeek `deepseek-flash`）：網頁把縮細的相片存入 Firestore `receiptJobs`，就算關閉網頁或離線，下次打開時會繼續上載；旅伴在開支頁確認後才加入，加入或捨棄時刪除相片。同一張收據分開影的相片，AI 會標示為上／下半部，頁面按上載次序配對並提示「合併並重新分析」；也可以在待確認收據剔選「選擇」後按「合併所選」。`lookupPlace` 負責 Google 地圖自動填寫。API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`）。
 
 部署 Cloud Functions（需要 Blaze 方案）：
 
 ```sh
 gcloud secrets versions add deepseek-api-key --data-file=-   # 貼上 DeepSeek API key，按 Enter 再按 Ctrl-D
 cd functions && npm install
-gcloud functions deploy processReceipt --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=processReceipt --trigger-location=asia-northeast1 --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' --trigger-event-filters-path-pattern=document='receiptJobs/{id}' --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --max-instances=3 --timeout=90s
+gcloud functions deploy processReceipt --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=processReceipt --trigger-location=asia-northeast1 --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' --trigger-event-filters-path-pattern=document='receiptJobs/{id}' --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --max-instances=3 --timeout=180s
 gcloud functions deploy lookupPlace --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=lookupPlace --trigger-http --allow-unauthenticated --set-secrets=PLACES_API_KEY=places-api-key:latest --max-instances=3
 ```
 - `firestore.rules`：資料庫權限規則。
