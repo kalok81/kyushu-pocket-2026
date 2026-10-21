@@ -71,10 +71,22 @@ window.Together=(()=>{
  // Receipt photos are shrunk on the phone, read by the scanReceipt Cloud Function, then only fill the form.
  let functionsModule;
  const callable=async(name,timeout)=>{functionsModule??=await import('./vendor/firebase/firebase-functions.js');return functionsModule.httpsCallable(functionsModule.getFunctions(fb.app,'asia-northeast1'),name,{timeout})};
+ // Browsers differ: try ImageBitmap (with and without EXIF rotation), then <img>; HEIC that the
+ // browser cannot read is converted on the phone with the vendored heic2any (loaded only when needed).
+ const isHeic=f=>/hei[cf]/i.test(f.type||'')||/\.hei[cf]$/i.test(f.name||'');
+ const viaImg=blob=>new Promise((ok,fail)=>{const url=URL.createObjectURL(blob),img=new Image();img.onload=()=>{ok(img);URL.revokeObjectURL(url)};img.onerror=()=>{URL.revokeObjectURL(url);fail(new Error('img'))};img.src=url});
+ let heicLib;
+ const loadHeic=()=>heicLib??=new Promise((ok,fail)=>{const js=document.createElement('script');js.src='vendor/heic2any/heic2any.min.js';js.onload=()=>ok(window.heic2any);js.onerror=()=>{heicLib=null;fail(new Error('heic2any'))};document.head.append(js)});
+ async function decodeImage(file){
+  for(const attempt of [()=>createImageBitmap(file,{imageOrientation:'from-image'}),()=>createImageBitmap(file),()=>viaImg(file)]){try{return await attempt()}catch{}}
+  if(!isHeic(file))throw new Error('unsupported image');
+  const out=await (await loadHeic())({blob:file,toType:'image/jpeg',quality:.9});
+  return viaImg(Array.isArray(out)?out[0]:out);
+ }
  async function shrink(file,max=1600,quality=.85){
-  const img=await createImageBitmap(file,{imageOrientation:'from-image'}),k=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement('canvas');
-  c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);img.close?.();
-  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',quality));
+  const img=await decodeImage(file),w=img.naturalWidth||img.width,h=img.naturalHeight||img.height,k=Math.min(1,max/Math.max(w,h)),c=document.createElement('canvas');
+  c.width=Math.round(w*k);c.height=Math.round(h*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);img.close?.();
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',quality));if(!blob)throw new Error('encode');
   return new Promise((ok,fail)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(',')[1]);fr.onerror=fail;fr.readAsDataURL(blob)});
  }
  // The function reports no progress, so the bar moves by stage and eases towards 90% while the AI reads.
@@ -96,7 +108,7 @@ window.Together=(()=>{
    const dup=r.currency!=='OTHER'&&duplicateOf({title:el.title.value,amount:r.total,currency:r.currency,day:Number(el.day.value)});
    info.textContent=dup?`⚠️ 可能重複：${dupText(dup)} 已經記錄過，請確認是否同一張收據。`:r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':'已填入，請檢查。';
    el.title.focus();
-  }catch(e){info.textContent=e?.message&&e.code?.startsWith('functions/')?e.message.replace(/\s*\[\d+\]$/,''):'未能分析收據，請手動輸入。';console.error(e)}
+  }catch(e){info.textContent=e?.message&&String(e?.code||'').startsWith('functions/')?e.message.replace(/\s*\[\d+\]$/,''):/unsupported|heic|img|encode/.test(e?.message)?'未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。':'未能分析收據，請手動輸入。';console.error(e)}
   finally{clearInterval(timer);btn.disabled=false;btn.textContent='📷 影收據／上載收據';setTimeout(()=>{const bar=$('#tgScanProgress');if(bar)bar.hidden=true},600)}
  }
  // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.
@@ -195,7 +207,7 @@ window.Together=(()=>{
  function renderShopping(){return `${header('SHOPPING LIST','要買的，都記下來。','相片、地點和價錢 · 旅伴共用，買了就打勾')}<div id="shopPage"></div>`}
  async function pickShopPhoto(file){
   try{let b=await shrink(file,900,.7);if(b.length>380000)b=await shrink(file,600,.6);shopPhoto=b;const p=$('#shopPreview');if(p)p.innerHTML=shopPreview()}
-  catch(e){toast('未能讀取這張相片。');console.error(e)}
+  catch(e){toast('未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。');console.error(e)}
  }
  function paint(el,{sig,shell,live={}}){if(el.dataset.sig!==sig){el.innerHTML=shell;el.dataset.sig=sig}for(const [k,v] of Object.entries(live)){const l=el.querySelector(`[data-tg-live="${k}"]`);if(l)l.innerHTML=v}}
  function refresh(){

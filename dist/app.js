@@ -80,7 +80,7 @@ async function lookupPlaceForm(){
   if(r.category&&![...el.cats].some(c=>c.checked))[...el.cats].forEach(c=>c.checked=c.value===r.category);
   if(Number.isFinite(r.lat)&&Number.isFinite(r.lng)){el.lat.value=r.lat;el.lng.value=r.lng;const near=basePlaces.map(p=>({p,d:Math.min(...(baseGeo[p.id]||[]).map(g=>window.Nearby.distance(r,g)),Infinity)})).sort((a,b)=>a.d-b.d)[0];if(near&&near.d<8000)put('f0',near.p.v[0])}
   info.textContent='已填入，請檢查後按儲存。';
- }catch(e){info.textContent=e?.code?.startsWith('functions/')&&e.message?e.message.replace(/\s*\[\d+\]$/,''):'未能自動填寫，請手動輸入。';console.error(e)}
+ }catch(e){info.textContent=String(e?.code||'').startsWith('functions/')&&e.message?e.message.replace(/\s*\[\d+\]$/,''):'未能自動填寫，請手動輸入。';console.error(e)}
  finally{btn.disabled=false}
 }
 function savePlaceForm(f){
