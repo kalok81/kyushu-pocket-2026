@@ -32,3 +32,4 @@ html{scroll-behavior:auto}.topbar{position:sticky;top:0;z-index:30;background:va
 .tg-scan .tg-check{min-height:36px;font-size:13px;color:var(--ink)}
 .tg-merge{display:grid;gap:8px}.tg-merge button{justify-self:start}
 .tg-pick{margin-left:auto;display:flex;align-items:center;gap:4px;color:var(--ink)}.tg-pick input{width:18px;height:18px}
+.shop-ai{display:grid;gap:6px;margin:14px 0 0}.shop-ai .note{margin:0}

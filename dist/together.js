@@ -40,7 +40,7 @@ window.Together=(()=>{
    const json=snap.get('json');if(started&&json!==state.trip[id]&&!staleNotice){staleNotice=true;toast('旅程資料已更新，重新整理網頁即可看到。')}
    state.trip[id]=json;start();
   },fail);
-  const watchJobs=fs.onSnapshot(fs.query(fs.collection(db,'receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts()},e=>console.error('receipt jobs',e));
+  const watchJobs=fs.onSnapshot(fs.query(fs.collection(db,'receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
   unsub=[watchJobs,...['notes','expenses','stops','members','shopping','places'].map(watch)].concat(['data','geo','content'].map(watchTrip));
  }
  function start(){
@@ -113,7 +113,7 @@ window.Together=(()=>{
   return {key:j.id,file:j.file,at:j.at||0,part:r.part||(j.status==='failed'?'unknown':'whole'),photos:j.images||(j.image!=null?[j.image]:[]),status:jobState(j),error:j.error,retry:canRetry(j),title:e.title??(r.merchant||'收據'),amount:e.amount??r.total??'',currency:e.currency??(r.currency==='HKD'?'HKD':'JPY'),day:Number(e.day??(day?day.n:today())),items:r.items||[],
    warn:r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.totalFromItems?'⚠️ 讀不到總額，已用物品合計，請對照收據。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':''};
  }
- const drafts=()=>jobs.map(draftOf);
+ const drafts=()=>jobs.filter(j=>j.kind!=='product').map(draftOf);
  const draftDup=(d,all=drafts())=>{const exp={title:d.title,amount:Number(d.amount),currency:d.currency,day:Number(d.day)},earlier=all.slice(0,all.findIndex(x=>x.key===d.key)).find(x=>x.status==='done'&&x.currency===exp.currency&&Math.abs(Number(x.amount)-exp.amount)<.005&&(Number(x.day)===exp.day||sameName(x.title,exp.title)));const dup=duplicateOf(exp);return dup?`⚠️ 可能重複：${dupText(dup)} 已經記錄過。`:earlier?`⚠️ 與「${earlier.title}」可能是同一張收據。`:''};
  // Partial shots: pair them in upload order (a top/middle shot followed by the next partial ones up to a bottom
  // shot, within 10 minutes, same shop when both names are known). Several split receipts give several suggestions.
@@ -174,6 +174,22 @@ window.Together=(()=>{
    catch(e){toast(`${f.name||'相片'}：${scanError(e)}`);console.error(e)}
   }
   if(n)toast(`已加入 ${n} 張收據，會在背景分析`);
+ }
+ // Product photos for the shopping list go through the same background jobs; the function adds the item itself.
+ async function queueProducts(files){
+  if(files.length>10){toast('一次最多 10 張，已取頭 10 張。');files=files.slice(0,10)}
+  const {fs,db}=fb;let n=0;
+  for(const f of files){
+   try{let image=await shrink(f,1000,.72);if(image.length>380000)image=await shrink(f,800,.65);
+    fs.addDoc(fs.collection(db,'receiptJobs'),{images:[image],kind:'product',file:String(f.name||'相片').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{toast('未能上載相片，請確認你仍在旅伴名單。');console.error(e)});n++}
+   catch(e){toast(`${f.name||'相片'}：${scanError(e)}`);console.error(e)}
+  }
+  if(n)toast(`已加入 ${n} 張物品相片，AI 會在背景辨識並加入清單`);
+ }
+ function productJobsHtml(){
+  const pj=jobs.filter(j=>j.kind==='product');if(!pj.length)return '';
+  const busy=pj.filter(j=>j.status!=='failed').length;
+  return `<div class="tg-drafts"><div class="tg-drafts-head"><b>${busy?`AI 辨識中 ${busy} 張`:'未能辨識的相片'}</b></div>${pj.map(j=>{const st=jobState(j),fail=st==='fail',retry=canRetry(j);return `<article class="tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta"><span class="badge">${fail?'未能辨識':STATUS[st]}</span><span>${esc(j.file)}</span></div>${fail?`<p class="note">${esc(j.error||'未能辨識。')}</p>`:'<div class="tg-progress tg-progress-busy"><div></div></div>'}${fail||retry?`<div class="links">${retry?`<button type="button" class="smallbtn" data-draft-retry="${esc(j.id)}">重試</button>`:''}<button type="button" class="smallbtn" data-draft-drop="${esc(j.id)}">捨棄</button></div>`:''}</article>`}).join('')}</div>`;
  }
  const jobRef=id=>fb.fs.doc(fb.db,'receiptJobs',id);
  function addDraft(d,ask){
@@ -267,7 +283,7 @@ window.Together=(()=>{
  }
  function shopItem(x){
   const price=x.price!=null?`<b class="shop-price">${esc(S.format(S.toMinor(x.price,x.currency),x.currency))}</b>`:'';
-  return `<article class="tg-item shop-item${x.bought?' bought':''}">${x.photo?`<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>`:''}<div>${meta(x)}<div class="tg-expense"><h3>${esc(x.name)}${x.qty?` <small>· ${esc(x.qty)}</small>`:''}</h3>${price}</div>${x.detail?`<p class="tg-text">${esc(x.detail)}</p>`:''}${x.place?`<p class="shop-place">📍 ${esc(x.place)} <a class="action" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}" target="_blank" rel="noopener noreferrer">地圖 ↗</a></p>`:''}${x.bought?`<p class="note">✓ ${esc(x.boughtBy||'旅伴')} 已買 · ${esc(when(x.boughtAt))}</p>`:''}<div class="links"><button class="action${x.bought?'':' primary'}" data-shop-toggle="${esc(x.id)}">${x.bought?'↺ 改回未買':'✓ 已買'}</button><button class="smallbtn" data-shop-edit="${esc(x.id)}">編輯</button>${del('shopping',x)}</div></div></article>`;
+  return `<article class="tg-item shop-item${x.bought?' bought':''}">${x.photo?`<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>`:''}<div>${meta(x,x.ai?'<span class="badge">AI 填寫</span>':'')}<div class="tg-expense"><h3>${esc(x.name)}${x.qty?` <small>· ${esc(x.qty)}</small>`:''}</h3>${price}</div>${x.detail?`<p class="tg-text">${esc(x.detail)}</p>`:''}${x.place?`<p class="shop-place">📍 ${esc(x.place)} <a class="action" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}" target="_blank" rel="noopener noreferrer">地圖 ↗</a></p>`:''}${x.bought?`<p class="note">✓ ${esc(x.boughtBy||'旅伴')} 已買 · ${esc(when(x.boughtAt))}</p>`:''}<div class="links"><button class="action${x.bought?'':' primary'}" data-shop-toggle="${esc(x.id)}">${x.bought?'↺ 改回未買':'✓ 已買'}</button><button class="smallbtn" data-shop-edit="${esc(x.id)}">編輯</button>${del('shopping',x)}</div></div></article>`;
  }
  function shopPage(){
   if(state.status!=='ready')return {sig:'wait',shell:'<div class="empty"><h2>正在連接…</h2></div>'};
@@ -275,7 +291,7 @@ window.Together=(()=>{
   const todo=state.shopping.filter(x=>!x.bought),shown=state.shopFilter==='todo'?todo:state.shopFilter==='done'?state.shopping.filter(x=>x.bought):state.shopping;
   const filters=[['todo','未買',todo.length],['done','已買',state.shopping.length-todo.length],['all','全部',state.shopping.length]].map(([k,t,n])=>`<button class="chip ${state.shopFilter===k?'active':''}" data-shop-filter="${k}" aria-pressed="${state.shopFilter===k}">${t} ${n}</button>`).join('');
   const list=shown.length?[...shown].sort((a,b)=>a.bought-b.bought||(b.at||0)-(a.at||0)).map(shopItem).join(''):`<div class="empty"><h2>${state.shopFilter==='done'?'還沒有已買的東西':'清單是空的'}</h2><p>${state.shopFilter==='done'?'買了之後按「✓ 已買」。':'把想買的東西加進來，旅伴都看得到。'}</p></div>`;
-  return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div>`,live:{status:statusBar(),filters,list}};
+  return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${edit?'':'<div class="panel shop-ai"><button type="button" class="locate-button" data-tg="shopAi">✨ 上載物品相片，AI 自動填寫（可多張）</button><input type="file" accept="image/*" id="shopAiInput" multiple hidden><p class="note">AI 會認出物品、規格，以及價錢牌上的價錢，自動加入清單，之後可以修改。可以關閉網頁，AI 會在背景完成。</p></div>'}<div data-tg-live="jobs"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div>`,live:{status:statusBar(),jobs:productJobsHtml(),filters,list}};
  }
  function renderShopping(){return `${header('SHOPPING LIST','要買的，都記下來。','相片、地點和價錢 · 旅伴共用，買了就打勾')}<div id="shopPage"></div>`}
  async function pickShopPhoto(file){
@@ -315,7 +331,7 @@ window.Together=(()=>{
   if(f.dataset.tgForm==='shop'){
    const price=v.get('price')===''?null:Number(v.get('price'));if(!str('name'))return;if(price!=null&&!(price>=0&&price<=1e7))return toast('價錢不正確。');
    const item={name:str('name').slice(0,80),qty:str('qty').slice(0,30),detail:str('detail').slice(0,500),place:str('place').slice(0,200),price:price==null?null:Math.round(price*100)/100,currency:v.get('currency')==='HKD'?'HKD':'JPY',photo:shopPhoto};
-   if(state.shopEdit){update('shopping',state.shopEdit,item);toast('已儲存')}else add('shopping',{...item,bought:false,boughtBy:null,boughtAt:null});
+   if(state.shopEdit){update('shopping',state.shopEdit,{...item,ai:false});toast('已儲存')}else add('shopping',{...item,bought:false,boughtBy:null,boughtAt:null});
    state.shopEdit=null;shopPhoto=null;$('#shopPage').dataset.sig='';refresh();return;
   }
   f.reset();
@@ -325,7 +341,7 @@ window.Together=(()=>{
   if(d.tg==='login')login();
   if(d.tg==='logout'&&fb)logout();
   if(d.tg==='scan')$('#tgReceipt')?.click();
-  if(d.draftDrop&&confirm('捨棄這張收據？')){fb.fs.deleteDoc(jobRef(d.draftDrop)).catch(()=>toast('未能刪除，請再試。'));delete localEdits[d.draftDrop]}
+  if(d.draftDrop&&confirm('確定捨棄？')){fb.fs.deleteDoc(jobRef(d.draftDrop)).catch(()=>toast('未能刪除，請再試。'));delete localEdits[d.draftDrop]}
   if(d.tg==='mergeDrafts')mergeDrafts(d.keys.split(','));
   if(d.draftRetry)fb.fs.updateDoc(jobRef(d.draftRetry),{status:'pending',retries:fb.fs.increment(1)}).catch(()=>toast('未能重試，請再試。'));
   if(d.draftAdd){const x=drafts().find(i=>i.key===d.draftAdd);if(x&&addDraft(x,true))renderDrafts()}
@@ -337,13 +353,14 @@ window.Together=(()=>{
   if(d.tgStopday){state.day=Number(d.tgStopday);refresh()}
   if(d.tgDel){const [name,id]=d.tgDel.split(':');remove(name,id)}
   if(d.tg==='shopPhoto')$('#shopPhotoInput')?.click();
+  if(d.tg==='shopAi')$('#shopAiInput')?.click();
   if(d.tg==='shopPhotoClear'){shopPhoto=null;$('#shopPreview').innerHTML=''}
   if(d.tg==='shopCancel'){state.shopEdit=null;shopPhoto=null;refresh()}
   if(d.shopFilter){state.shopFilter=d.shopFilter;refresh()}
   if(d.shopEdit){const x=state.shopping.find(i=>i.id===d.shopEdit);if(x){state.shopEdit=x.id;shopPhoto=x.photo||null;refresh();$('#shopPage')?.scrollIntoView({behavior:'smooth'})}}
   if(d.shopToggle){const x=state.shopping.find(i=>i.id===d.shopToggle);if(x)update('shopping',x.id,x.bought?{bought:false,boughtBy:null,boughtAt:null}:{bought:true,boughtBy:me().name,boughtAt:Date.now()})}
  });
- document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files.length){if(state.status==='ready')queueReceipts([...e.target.files]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}});
+ document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files.length){if(state.status==='ready')queueReceipts([...e.target.files]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}if(e.target.id==='shopAiInput'&&e.target.files.length){if(state.status==='ready')queueProducts([...e.target.files]);e.target.value=''}});
  document.addEventListener('click',e=>{const img=e.target.closest('[data-shop-zoom]');if(img)img.classList.toggle('zoom')});
  document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset?.df!==undefined)e.preventDefault()});
  // Draft edits are kept locally while typing and saved to the job when a field is left, so they survive reloads.

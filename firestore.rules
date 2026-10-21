@@ -16,7 +16,8 @@ service cloud.firestore {
     function day(v) { return v is int && v >= 1 && v <= 7; }
     function text(v, max) { return v is string && v.size() <= max; }
     function shopValid(d) {
-      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'by', 'byName', 'at', 'createdAt'])
+      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'by', 'byName', 'at', 'createdAt'])
+        && (!('ai' in d) || d.ai is bool)
         && text(d.name, 80) && d.name.size() > 0 && text(d.qty, 30) && text(d.detail, 500) && text(d.place, 200)
         && (d.price == null || (d.price is number && d.price >= 0 && d.price <= 10000000))
         && d.currency in ['JPY', 'HKD']
@@ -77,12 +78,13 @@ service cloud.firestore {
         && request.resource.data.by == resource.data.by && request.resource.data.at == resource.data.at
         && request.resource.data.createdAt == resource.data.createdAt;
     }
-    // Receipts read in the background by the processReceipt function; each companion sees only their own.
+    // Receipts and product photos read in the background by the processReceipt function; each companion sees only their own.
     match /receiptJobs/{id} {
       allow read, delete: if isMember() && resource.data.by == request.auth.uid;
       allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['image', 'images', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['image', 'images', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
         && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
+        && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product'])
         && (('images' in request.resource.data && request.resource.data.images is list
               && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
             || text(request.resource.data.image, 900000));

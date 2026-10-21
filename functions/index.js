@@ -41,8 +41,10 @@ function clean(r) {
  };
 }
 
-async function readReceipt(images) {
- // DeepSeek's JSON mode can return empty content (or run out of tokens on long receipts): log why and retry once.
+const readReceipt = images => askDeepSeek(PROMPT, images).then(clean);
+
+async function askDeepSeek(prompt, images) {
+ // DeepSeek's JSON mode can return empty content (or run out of tokens on long replies): log why and retry once.
  for (let attempt = 1; attempt <= 2; attempt++) {
   const res = await fetch('https://api.deepseek.com/chat/completions', {
    method: 'POST',
@@ -51,7 +53,7 @@ async function readReceipt(images) {
     model: 'deepseek-flash',
     response_format: { type: 'json_object' },
     max_tokens: 8000,
-    messages: [{ role: 'user', content: [{ type: 'text', text: PROMPT }, ...images.map(image => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}`, detail: 'high' } }))] }],
+    messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, ...images.map(image => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}`, detail: 'high' } }))] }],
    }),
    signal: AbortSignal.timeout(80_000),
   });
@@ -62,16 +64,32 @@ async function readReceipt(images) {
   const body = await res.json(), choice = body.choices?.[0];
   const content = String(choice?.message?.content || '').replace(/^\s*```(?:json)?\s*|\s*```\s*$/g, '');
   try {
-   return clean(JSON.parse(content));
+   return JSON.parse(content);
   } catch {
    console.error('Unreadable model reply', JSON.stringify({ attempt, images: images.length, finish: choice?.finish_reason, usage: body.usage, reasoning: !!choice?.message?.reasoning_content, content: content.slice(0, 300) }));
   }
  }
  throw new HttpsError('internal', '未能讀取收據內容，可以重試或手動輸入。');
 }
+const PRODUCT_PROMPT = `You identify products that travellers in Japan photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
+Reply with JSON only, in this shape:
+{"name": string, "spec": string, "detail": string, "price": number or null, "currency": "JPY" | "HKD", "place": string, "confidence": "high" | "medium" | "low"}
+- name: the product in Traditional Chinese (Hong Kong usage), with the brand and the original Japanese/English product name in brackets when different, at most 80 characters.
+- spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, ミント味), at most 30 characters; empty if unknown.
+- detail: one short Traditional Chinese line on what it is or what it is for, at most 60 characters.
+- price: only if a price tag or label with this product's price is visible (tax-included price if both are shown); otherwise null.
+- place: a shop name only if it is visible in the photo (price tag, shelf sign, bag); otherwise empty.
+- confidence: low if the photo is unclear or shows no identifiable product.`;
+
+function cleanProduct(r) {
+ const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ const price = typeof r.price === 'number' && Number.isFinite(r.price) && r.price > 0 && r.price <= 1e7 ? Math.round(r.price * 100) / 100 : null;
+ return { name: text(r.name, 80), qty: text(r.spec, 30), detail: text(r.detail, 500), place: text(r.place, 200), price, currency: r.currency === 'HKD' ? 'HKD' : 'JPY', confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
+}
+
 const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.test(image) && image.length * 0.75 <= MAX_IMAGE_BYTES;
 
-// Background receipts: the page stores a shrunk photo in receiptJobs (Firestore keeps unsent writes on the
+// Background receipts and product photos (kind: 'product'): the page stores shrunk photos in receiptJobs (Firestore keeps unsent writes on the
 // phone and retries after a reload), and this trigger reads it server-side even if the page was closed.
 // Only members can create jobs (firestore.rules). Photos are removed when the page adds or discards the job.
 // Deployed with gcloud as a plain CloudEvent function (Eventarc, Firestore document.written on receiptJobs/{id}).
@@ -80,15 +98,25 @@ cloudEvent('processReceipt', async event => {
  const path = String(event.subject || '').replace(/^documents\//, '');
  if (!/^receiptJobs\/[A-Za-z0-9]+$/.test(path)) return;
  const ref = getFirestore().doc(path);
- const images = await getFirestore().runTransaction(async tx => {
+ const job = await getFirestore().runTransaction(async tx => {
   const snap = await tx.get(ref);
   if (!snap.exists || snap.get('status') !== 'pending') return null;
   tx.update(ref, { status: 'processing', startedAt: Date.now() });
-  return snap.get('images') ?? [snap.get('image')];
+  return { images: snap.get('images') ?? [snap.get('image')], kind: snap.get('kind') || 'receipt', by: snap.get('by'), byName: snap.get('byName') };
  });
- if (images === null) return;
+ if (job === null) return;
+ const { images } = job;
  try {
   if (!Array.isArray(images) || !images.length || images.length > 4 || !images.every(validImage)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
+  if (job.kind === 'product') {
+   // Product photo: add the item straight to the shared shopping list (with the photo) and drop the job.
+   const { confidence: _confidence, ...item } = cleanProduct(await askDeepSeek(PRODUCT_PROMPT, images));
+   if (!item.name) throw new HttpsError('not-found', '認不出物品，可以重試或手動輸入。');
+   const db = getFirestore();
+   await db.collection('shopping').add({ ...item, photo: images[0].length <= 400000 ? images[0] : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
+   await ref.delete();
+   return;
+  }
   const result = await readReceipt(images);
   // No readable total line: fall back to the item sum, flagged so the page asks the traveller to check it.
   const itemSum = Math.round(result.items.reduce((t, i) => t + i.amount, 0) * 100) / 100;
@@ -98,7 +126,7 @@ cloudEvent('processReceipt', async event => {
    ? { status: 'done', result, error: FieldValue.delete(), doneAt: Date.now() }
    : { status: 'failed', error: '讀不到金額，可以重試或手動輸入。', result, doneAt: Date.now() });
  } catch (e) {
-  await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : '未能分析收據，請稍後再試。', doneAt: Date.now() });
+  await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : job.kind === 'product' ? '未能辨識物品，請稍後再試。' : '未能分析收據，請稍後再試。', doneAt: Date.now() });
  }
 });
 
