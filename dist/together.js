@@ -5,7 +5,7 @@ window.Together=(()=>{
  // Firebase web config is public by design; access is enforced by firestore.rules and the member list.
  const config={apiKey:'AIzaSyC_qsxlY9mX0OKK5bIXwUXvrrxCOFnc18M',authDomain:'kyushu-2e307.firebaseapp.com',projectId:'kyushu-2e307',storageBucket:'kyushu-2e307.firebasestorage.app',messagingSenderId:'672657048901',appId:'1:672657048901:web:d1e2f7dd92389f78f3ea2c'};
  const tabs={notes:'筆記',expenses:'開支',stops:'共用行程'};
- const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],stops:[],members:[],shopping:[],shopFilter:'todo',shopEdit:null,trip:{}};
+ const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],stops:[],members:[],shopping:[],places:[],placesLoaded:false,shopFilter:'todo',shopEdit:null,trip:{}};
  const T=()=>window.TripApp,S=window.Split,$=s=>document.querySelector(s);
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const toast=s=>{$('#toast').textContent=s;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2600)};
@@ -24,12 +24,13 @@ window.Together=(()=>{
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
   return loading;
  }
- function stop(){unsub.forEach(u=>u());unsub=[];Object.assign(state,{notes:[],expenses:[],stops:[],members:[],shopping:[],trip:{}})}
+ function stop(){unsub.forEach(u=>u());unsub=[];Object.assign(state,{notes:[],expenses:[],stops:[],members:[],shopping:[],places:[],placesLoaded:false,trip:{}})}
  function listen(){
   const {fs,db}=fb;
   const watch=name=>fs.onSnapshot(fs.collection(db,name),{includeMetadataChanges:true},snap=>{
    state[name]=snap.docs.map(d=>({...d.data(),id:d.id,pending:d.metadata.hasPendingWrites})).sort((a,b)=>(b.at||0)-(a.at||0));
    if(state.status!=='ready'){state.status='ready';saveProfile()}
+   if(name==='places'){state.placesLoaded=true;if(started)T().applyPlaceEdits(state.places);else start()}
    refresh();
   },err=>{stop();state.status=err.code==='permission-denied'?'denied':'error';state.error=err.code==='permission-denied'?'':'同步失敗，請稍後再試。';refresh()});
   const fail=err=>{stop();state.status=err.code==='permission-denied'?'denied':'error';state.error=err.code==='permission-denied'?'':'同步失敗，請稍後再試。';refresh()};
@@ -39,11 +40,11 @@ window.Together=(()=>{
    const json=snap.get('json');if(started&&json!==state.trip[id]&&!staleNotice){staleNotice=true;toast('旅程資料已更新，重新整理網頁即可看到。')}
    state.trip[id]=json;start();
   },fail);
-  unsub=['notes','expenses','stops','members','shopping'].map(watch).concat(['data','geo','content'].map(watchTrip));
+  unsub=['notes','expenses','stops','members','shopping','places'].map(watch).concat(['data','geo','content'].map(watchTrip));
  }
  function start(){
-  const t=state.trip;if(started||!t.data||!t.geo||!t.content)return;
-  try{const data=JSON.parse(t.data),geo=JSON.parse(t.geo),content=JSON.parse(t.content);started=true;window.TRIP_GEO=geo;document.body.classList.remove('locked');window.startTrip(data,content)}
+  const t=state.trip;if(started||!t.data||!t.geo||!t.content||!state.placesLoaded)return;
+  try{const data=JSON.parse(t.data),geo=JSON.parse(t.geo),content=JSON.parse(t.content);started=true;window.TRIP_GEO=geo;document.body.classList.remove('locked');window.startTrip(data,content);T().applyPlaceEdits(state.places)}
   catch(e){started=false;state.status='error';state.error='旅程資料格式有誤，請重新上載。';refresh();console.error(e)}
  }
  async function logout(){
@@ -68,7 +69,8 @@ window.Together=(()=>{
   toast(navigator.onLine?'已加入':'已加入，有網絡時會自動同步');
  }
  // Receipt photos are shrunk on the phone, read by the scanReceipt Cloud Function, then only fill the form.
- let callScan;
+ let functionsModule;
+ const callable=async(name,timeout)=>{functionsModule??=await import('./vendor/firebase/firebase-functions.js');return functionsModule.httpsCallable(functionsModule.getFunctions(fb.app,'asia-northeast1'),name,{timeout})};
  async function shrink(file,max=1600,quality=.85){
   const img=await createImageBitmap(file,{imageOrientation:'from-image'}),k=Math.min(1,max/Math.max(img.width,img.height)),c=document.createElement('canvas');
   c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);img.close?.();
@@ -80,8 +82,7 @@ window.Together=(()=>{
   if(!navigator.onLine)return toast('分析收據需要網絡，可以先手動輸入。');
   btn.disabled=true;btn.textContent='分析中…';info.textContent='正在讀取收據，大約需要數秒至半分鐘。';
   try{
-   if(!callScan){const m=await import('./vendor/firebase/firebase-functions.js');callScan=m.httpsCallable(m.getFunctions(fb.app,'asia-northeast1'),'scanReceipt',{timeout:70000})}
-   const r=(await callScan({image:await shrink(file)})).data;
+   const r=(await (await callable('scanReceipt',70000))({image:await shrink(file)})).data;
    if(!r.total){info.textContent='讀不到金額，請手動輸入。';return}
    const el=f.elements;if(r.merchant)el.title.value=r.merchant;el.amount.value=r.total;if(r.currency!=='OTHER')el.currency.value=r.currency;
    const day=r.date&&T().days.find(d=>d.iso===r.date.replaceAll('-','/'));if(day)el.day.value=day.n;
@@ -90,6 +91,20 @@ window.Together=(()=>{
   }catch(e){info.textContent=e?.message&&e.code?.startsWith('functions/')?e.message:'未能分析收據，請手動輸入。';console.error(e)}
   finally{btn.disabled=false;btn.textContent='📷 影收據／上載收據'}
  }
+ // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.
+ async function lookupPlace(url){if(!navigator.onLine)throw new Error('offline');return (await (await callable('lookupPlace',45000))({url})).data}
+ function savePlace({place,fields,cats,lat,lng,mapsUrl}){
+  const {fs,db}=fb,data={fields,cats,lat,lng,mapsUrl,deleted:false};
+  if(place?.custom){update('places',place.overlayId,data);toast('已儲存')}
+  else if(place){fs.setDoc(fs.doc(db,'places',place.id),{...data,base:place.id,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請再試。'));toast('已儲存')}
+  else add('places',{...data,base:null});
+ }
+ function deletePlace(place){
+  const {fs,db}=fb;
+  if(place.custom)return fs.deleteDoc(fs.doc(db,'places',place.overlayId)).catch(()=>toast('未能刪除，請再試。'));
+  fs.setDoc(fs.doc(db,'places',place.id),{base:place.id,fields:place.v.map(String),cats:place.cats,lat:null,lng:null,mapsUrl:'',deleted:true,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能刪除，請再試。'));
+ }
+ function restorePlace(id){fb.fs.deleteDoc(fb.fs.doc(fb.db,'places',id)).catch(()=>toast('未能還原，請再試。'))}
  function update(name,id,data){fb.fs.updateDoc(fb.fs.doc(fb.db,name,id),data).catch(()=>toast('未能儲存，請再試。'))}
  function remove(name,id){if(confirm('確定刪除？所有旅伴都會看不到這項。'))fb.fs.deleteDoc(fb.fs.doc(fb.db,name,id)).catch(()=>toast('未能刪除，請再試。'))}
 
@@ -218,5 +233,5 @@ window.Together=(()=>{
  document.addEventListener('click',e=>{const img=e.target.closest('[data-shop-zoom]');if(img)img.classList.toggle('zoom')});
  addEventListener('online',refresh);addEventListener('offline',refresh);
  load().catch(()=>{});
- return Object.freeze({render,renderShopping,refresh});
+ return Object.freeze({render,renderShopping,refresh,lookupPlace,savePlace,deletePlace,restorePlace});
 })();

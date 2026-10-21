@@ -55,6 +55,20 @@ service cloud.firestore {
         && request.resource.data.split is list && request.resource.data.split.size() > 0 && request.resource.data.split.size() <= 20
         && day(request.resource.data.day);
     }
+    function placeValid(d) {
+      return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'mapsUrl', 'deleted', 'by', 'byName', 'at', 'createdAt'])
+        && (d.base == null || text(d.base, 20)) && d.fields is list && d.fields.size() == 12
+        && d.cats is list && d.cats.size() <= 4
+        && (d.lat == null || d.lat is number) && (d.lng == null || d.lng is number)
+        && text(d.mapsUrl, 500) && d.deleted is bool;
+    }
+    // Companion edits to 探索: new places, or edits/deletions keyed by the Sheet place id.
+    match /places/{id} {
+      allow read, delete: if isMember();
+      allow create: if isMember() && owned() && placeValid(request.resource.data)
+        && (request.resource.data.base == null || request.resource.data.base == id);
+      allow update: if isMember() && placeValid(request.resource.data) && request.resource.data.base == resource.data.base;
+    }
     match /shopping/{id} {
       allow read, delete: if isMember();
       allow create: if isMember() && owned() && shopValid(request.resource.data);
