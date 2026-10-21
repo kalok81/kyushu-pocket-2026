@@ -38,7 +38,7 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 - `dist/vendor/firebase/`：Firebase 瀏覽器版本。
 - `scripts/trip-data.mjs`：上載或下載旅程資料。
 - `scripts/accounts.mjs`：管理旅伴帳號及名單。
-- `functions/`：`processReceipt` 在背景讀取收據（DeepSeek `deepseek-flash`）：網頁把縮細的相片存入 Firestore `receiptJobs`，就算關閉網頁或離線，下次打開時會繼續上載；伺服器讀完後刪除相片，旅伴在開支頁確認後才加入。`lookupPlace` 負責 Google 地圖自動填寫。API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`）。
+- `functions/`：`processReceipt` 在背景讀取收據（DeepSeek `deepseek-flash`）：網頁把縮細的相片存入 Firestore `receiptJobs`，就算關閉網頁或離線，下次打開時會繼續上載；旅伴在開支頁確認後才加入，加入或捨棄時刪除相片。同一張收據分開影的相片可在上載前剔選「當作同一張收據」，或由 AI 標示為上／下半部後在頁面按「合併並重新分析」。`lookupPlace` 負責 Google 地圖自動填寫。API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`）。
 
 部署 Cloud Functions（需要 Blaze 方案）：
 

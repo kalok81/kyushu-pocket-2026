@@ -81,9 +81,11 @@ service cloud.firestore {
     match /receiptJobs/{id} {
       allow read, delete: if isMember() && resource.data.by == request.auth.uid;
       allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['image', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
-        && request.resource.data.status == 'pending'
-        && text(request.resource.data.image, 900000) && text(request.resource.data.file, 120);
+        && request.resource.data.keys().hasOnly(['image', 'images', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+        && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
+        && (('images' in request.resource.data && request.resource.data.images is list
+              && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
+            || text(request.resource.data.image, 900000));
       allow update: if isMember() && resource.data.by == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries'])
         && (request.resource.data.status == resource.data.status || request.resource.data.status == 'pending');

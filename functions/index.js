@@ -11,12 +11,14 @@ const PLACES_API_KEY = defineSecret('PLACES_API_KEY');
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const PROMPT = `You read shop receipts photographed by travellers in Japan (sometimes Hong Kong).
 Reply with JSON only, in this shape:
-{"merchant": string, "total": number, "currency": "JPY" | "HKD" | "OTHER", "date": "YYYY-MM-DD" or null, "items": [{"name": string, "amount": number}], "confidence": "high" | "medium" | "low"}
+{"merchant": string, "total": number, "currency": "JPY" | "HKD" | "OTHER", "date": "YYYY-MM-DD" or null, "items": [{"name": string, "amount": number}], "confidence": "high" | "medium" | "low", "part": "whole" | "top" | "middle" | "bottom"}
 - merchant: the shop name as printed (keep Japanese), at most 60 characters.
-- total: the amount actually paid, tax included (合計 / お買上計 / 税込). Not the cash tendered (お預り) or change (お釣り).
+- The receipt may come as several photos (strips of a long receipt, or separate shots of its top and bottom, possibly overlapping and in any order): treat them as one receipt and do not count repeated lines twice.
+- total: the amount actually paid, tax included (合計 / お買上計 / 税込 / お支払 / お会計 / ご請求額 / 免税合計 / 免税対象合計). Not the cash tendered (お預り), change (お釣り), subtotal before tax (小計) or tax lines (消費税).
 - currency: JPY for yen (¥, 円), HKD for Hong Kong dollars, otherwise OTHER.
-- items: up to 8 main line items with their printed prices; empty list if unreadable.
+- items: up to 30 line items with their printed prices (quantity included in the name, e.g. ×2); empty list if unreadable.
 - confidence: low if the photo is blurry, cut off, or not a receipt.
+- part: whole if the photos show the complete receipt from the shop name to the total; top if the total is cut off; bottom if the shop name/header is cut off; middle if both are cut off.
 If it is not a receipt, return total 0 and confidence "low".`;
 
 async function isMember(token) {
@@ -33,20 +35,21 @@ function clean(r) {
   total: num(r.total),
   currency: ['JPY', 'HKD'].includes(r.currency) ? r.currency : 'OTHER',
   date: typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : null,
-  items: (Array.isArray(r.items) ? r.items : []).slice(0, 8).map(i => ({ name: text(i?.name, 40), amount: num(i?.amount) })).filter(i => i.name),
+  items: (Array.isArray(r.items) ? r.items : []).slice(0, 30).map(i => ({ name: text(i?.name, 40), amount: num(i?.amount) })).filter(i => i.name),
   confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low',
+  part: ['whole', 'top', 'middle', 'bottom'].includes(r.part) ? r.part : 'whole',
  };
 }
 
-async function readReceipt(image) {
+async function readReceipt(images) {
  const res = await fetch('https://api.deepseek.com/chat/completions', {
   method: 'POST',
   headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY.value().trim()}`, 'Content-Type': 'application/json' },
   body: JSON.stringify({
    model: 'deepseek-flash',
    response_format: { type: 'json_object' },
-   max_tokens: 1500,
-   messages: [{ role: 'user', content: [{ type: 'text', text: PROMPT }, { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}` } }] }],
+   max_tokens: 3000,
+   messages: [{ role: 'user', content: [{ type: 'text', text: PROMPT }, ...images.map(image => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}`, detail: 'high' } }))] }],
   }),
   signal: AbortSignal.timeout(50_000),
  });
@@ -66,26 +69,30 @@ const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.tes
 
 // Background receipts: the page stores a shrunk photo in receiptJobs (Firestore keeps unsent writes on the
 // phone and retries after a reload), and this trigger reads it server-side even if the page was closed.
-// Only members can create jobs (firestore.rules). The photo is removed once the receipt has been read.
+// Only members can create jobs (firestore.rules). Photos are removed when the page adds or discards the job.
 // Deployed with gcloud as a plain CloudEvent function (Eventarc, Firestore document.written on receiptJobs/{id}).
 // The event subject names the document; the job is read fresh here, so the event payload encoding does not matter.
 cloudEvent('processReceipt', async event => {
  const path = String(event.subject || '').replace(/^documents\//, '');
  if (!/^receiptJobs\/[A-Za-z0-9]+$/.test(path)) return;
  const ref = getFirestore().doc(path);
- const image = await getFirestore().runTransaction(async tx => {
+ const images = await getFirestore().runTransaction(async tx => {
   const snap = await tx.get(ref);
   if (!snap.exists || snap.get('status') !== 'pending') return null;
   tx.update(ref, { status: 'processing', startedAt: Date.now() });
-  return snap.get('image') ?? '';
+  return snap.get('images') ?? [snap.get('image')];
  });
- if (image === null) return;
+ if (images === null) return;
  try {
-  if (!validImage(image)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
-  const result = await readReceipt(image);
+  if (!Array.isArray(images) || !images.length || images.length > 4 || !images.every(validImage)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
+  const result = await readReceipt(images);
+  // No readable total line: fall back to the item sum, flagged so the page asks the traveller to check it.
+  const itemSum = Math.round(result.items.reduce((t, i) => t + i.amount, 0) * 100) / 100;
+  if (!result.total && itemSum > 0) Object.assign(result, { total: itemSum, totalFromItems: true, confidence: 'low' });
+  // Photos stay on the job until the traveller adds or discards it, so partial shots can still be merged or retried.
   await ref.update(result.total
-   ? { status: 'done', result, image: FieldValue.delete(), doneAt: Date.now() }
-   : { status: 'failed', error: '讀不到金額，請手動輸入。', result, image: FieldValue.delete(), doneAt: Date.now() });
+   ? { status: 'done', result, doneAt: Date.now() }
+   : { status: 'failed', error: '讀不到金額，可以重試或手動輸入。', result, doneAt: Date.now() });
  } catch (e) {
   await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : '未能分析收據，請稍後再試。', doneAt: Date.now() });
  }
