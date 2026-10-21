@@ -33,7 +33,8 @@ service cloud.firestore {
     match /members/{uid} {
       allow read: if isMember();
       allow write: if isMember() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name', 'email', 'at'])
+        && request.resource.data.keys().hasOnly(['name', 'email', 'at', 'saved'])
+        && (!('saved' in request.resource.data) || (request.resource.data.saved is list && request.resource.data.saved.size() <= 500))
         && text(request.resource.data.name, 40) && request.resource.data.email == request.auth.token.email;
     }
     match /notes/{id} {
@@ -91,6 +92,14 @@ service cloud.firestore {
       allow update: if isMember() && resource.data.by == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries'])
         && (request.resource.data.status == resource.data.status || request.resource.data.status == 'pending');
+    }
+    // Edited day plans: the whole stop list for one day (1-7); deleting the document restores the original plan.
+    match /planDays/{day} {
+      allow read, delete: if isMember();
+      allow write: if isMember() && day in ['1', '2', '3', '4', '5', '6', '7']
+        && request.resource.data.keys().hasOnly(['stops', 'by', 'byName', 'at'])
+        && request.resource.data.stops is list && request.resource.data.stops.size() <= 40
+        && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
     }
     match /stops/{id} {
       allow read, delete: if isMember();
