@@ -85,7 +85,7 @@ service cloud.firestore {
       allow create: if isMember() && owned()
         && request.resource.data.keys().hasOnly(['image', 'images', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
         && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
-        && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product'])
+        && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill'])
         && (('images' in request.resource.data && request.resource.data.images is list
               && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
             || text(request.resource.data.image, 900000));

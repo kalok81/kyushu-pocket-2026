@@ -108,6 +108,13 @@ cloudEvent('processReceipt', async event => {
  const { images } = job;
  try {
   if (!Array.isArray(images) || !images.length || images.length > 4 || !images.every(validImage)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
+  if (job.kind === 'productFill') {
+   // Photo added in the shopping form: return the details so the page can fill the empty fields.
+   const { confidence: _c, ...result } = cleanProduct(await askDeepSeek(PRODUCT_PROMPT, images));
+   if (!result.name) throw new HttpsError('not-found', '認不出物品，請手動輸入。');
+   await ref.update({ status: 'done', result, images: FieldValue.delete(), doneAt: Date.now() });
+   return;
+  }
   if (job.kind === 'product') {
    // Product photo: add the item straight to the shared shopping list (with the photo) and drop the job.
    const { confidence: _confidence, ...item } = cleanProduct(await askDeepSeek(PRODUCT_PROMPT, images));
@@ -126,7 +133,7 @@ cloudEvent('processReceipt', async event => {
    ? { status: 'done', result, error: FieldValue.delete(), doneAt: Date.now() }
    : { status: 'failed', error: '讀不到金額，可以重試或手動輸入。', result, doneAt: Date.now() });
  } catch (e) {
-  await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : job.kind === 'product' ? '未能辨識物品，請稍後再試。' : '未能分析收據，請稍後再試。', doneAt: Date.now() });
+  await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : job.kind !== 'receipt' ? '未能辨識物品，請稍後再試。' : '未能分析收據，請稍後再試。', doneAt: Date.now() });
  }
 });
 

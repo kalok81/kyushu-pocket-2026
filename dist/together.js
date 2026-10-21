@@ -42,7 +42,7 @@ window.Together=(()=>{
    const json=snap.get('json');if(started&&json!==state.trip[id]&&!staleNotice){staleNotice=true;toast('旅程資料已更新，重新整理網頁即可看到。')}
    state.trip[id]=json;start();
   },fail);
-  const watchJobs=fs.onSnapshot(fs.query(fs.collection(db,'receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
+  const watchJobs=fs.onSnapshot(fs.query(fs.collection(db,'receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();handleFillJobs();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
   unsub=[watchJobs,...['notes','expenses','members','shopping','places','planDays'].map(watch)].concat(['data','geo','content'].map(watchTrip));
  }
  function start(){
@@ -115,7 +115,7 @@ window.Together=(()=>{
   return {key:j.id,file:j.file,at:j.at||0,part:r.part||(j.status==='failed'?'unknown':'whole'),photos:j.images||(j.image!=null?[j.image]:[]),status:jobState(j),error:j.error,retry:canRetry(j),title:e.title??(r.merchant||'收據'),amount:e.amount??r.total??'',currency:e.currency??(r.currency==='HKD'?'HKD':'JPY'),day:Number(e.day??(day?day.n:today())),items:r.items||[],
    warn:r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.totalFromItems?'⚠️ 讀不到總額，已用物品合計，請對照收據。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':''};
  }
- const drafts=()=>jobs.filter(j=>j.kind!=='product').map(draftOf);
+ const drafts=()=>jobs.filter(j=>!j.kind||j.kind==='receipt').map(draftOf);
  const draftDup=(d,all=drafts())=>{const exp={title:d.title,amount:Number(d.amount),currency:d.currency,day:Number(d.day)},earlier=all.slice(0,all.findIndex(x=>x.key===d.key)).find(x=>x.status==='done'&&x.currency===exp.currency&&Math.abs(Number(x.amount)-exp.amount)<.005&&(Number(x.day)===exp.day||sameName(x.title,exp.title)));const dup=duplicateOf(exp);return dup?`⚠️ 可能重複：${dupText(dup)} 已經記錄過。`:earlier?`⚠️ 與「${earlier.title}」可能是同一張收據。`:''};
  // Partial shots: pair them in upload order (a top/middle shot followed by the next partial ones up to a bottom
  // shot, within 10 minutes, same shop when both names are known). Several split receipts give several suggestions.
@@ -289,7 +289,7 @@ window.Together=(()=>{
  const shopPreview=()=>shopPhoto?`<img src="${photoSrc(shopPhoto)}" alt="物品相片"><button type="button" class="smallbtn" data-tg="shopPhotoClear">移除相片</button>`:'';
  function shopForm(x){
   const v=k=>esc(x?.[k]??'');
-  return `<form class="panel tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div><button type="button" class="action primary" data-tg="shopPhoto">📷 影相／上載圖片</button><input type="file" accept="image/*" id="shopPhotoInput" hidden></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v('name')}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v('qty')}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v('detail')}"></label></div><label>購買地點／地址<input name="place" maxlength="200" placeholder="例如：博多阪急 B1 或地址" value="${v('place')}"></label><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price??''}"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD"${x?.currency==='HKD'?' selected':''}>港幣 HK$</option></select></label></div><div class="links"><button type="submit" class="locate-button">${x?'儲存修改':'加入購物清單'}</button>${x?'<button type="button" class="action" data-tg="shopCancel">取消</button>':''}</div></form>`;
+  return `<form class="panel tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div><button type="button" class="action primary" data-tg="shopPhoto">📷 影相／上載圖片（AI 填寫）</button><input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v('name')}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v('qty')}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v('detail')}"></label></div><label>購買地點／地址<input name="place" maxlength="500" placeholder="店名、地址，或貼上 Google 地圖連結" value="${v('place')}"></label><p class="note" id="shopPlaceInfo"></p><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price??''}"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD"${x?.currency==='HKD'?' selected':''}>港幣 HK$</option></select></label></div><div class="links"><button type="submit" class="locate-button">${x?'儲存修改':'加入購物清單'}</button>${x?'<button type="button" class="action" data-tg="shopCancel">取消</button>':''}</div></form>`;
  }
  function shopItem(x){
   const price=x.price!=null?`<b class="shop-price">${esc(S.format(S.toMinor(x.price,x.currency),x.currency))}</b>`:'';
@@ -301,12 +301,47 @@ window.Together=(()=>{
   const todo=state.shopping.filter(x=>!x.bought),shown=state.shopFilter==='todo'?todo:state.shopFilter==='done'?state.shopping.filter(x=>x.bought):state.shopping;
   const filters=[['todo','未買',todo.length],['done','已買',state.shopping.length-todo.length],['all','全部',state.shopping.length]].map(([k,t,n])=>`<button class="chip ${state.shopFilter===k?'active':''}" data-shop-filter="${k}" aria-pressed="${state.shopFilter===k}">${t} ${n}</button>`).join('');
   const list=shown.length?[...shown].sort((a,b)=>a.bought-b.bought||(b.at||0)-(a.at||0)).map(shopItem).join(''):`<div class="empty"><h2>${state.shopFilter==='done'?'還沒有已買的東西':'清單是空的'}</h2><p>${state.shopFilter==='done'?'買了之後按「✓ 已買」。':'把想買的東西加進來，旅伴都看得到。'}</p></div>`;
-  return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${edit?'':'<div class="panel shop-ai"><button type="button" class="locate-button" data-tg="shopAi">✨ 上載物品相片，AI 自動填寫（可多張）</button><input type="file" accept="image/*" id="shopAiInput" multiple hidden><p class="note">AI 會認出物品、規格，以及價錢牌上的價錢，自動加入清單，之後可以修改。可以關閉網頁，AI 會在背景完成。</p></div>'}<div data-tg-live="jobs"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div>`,live:{status:statusBar(),jobs:productJobsHtml(),filters,list}};
+  return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${edit?'':'<div class="panel shop-ai"><b>✨ AI 認物品，自動加入清單</b><div class="links"><button type="button" class="locate-button" data-tg="shopAiCam">📷 影相</button><button type="button" class="locate-button" data-tg="shopAi">🖼 上載相片（可多張）</button></div><input type="file" accept="image/*" capture="environment" id="shopAiCam" hidden><input type="file" accept="image/*" id="shopAiInput" multiple hidden><p class="note">AI 會認出物品、規格，以及價錢牌上的價錢，自動加入清單，之後可以修改。可以關閉網頁，AI 會在背景完成。</p></div>'}<div data-tg-live="jobs"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div><div data-tg-live="gifts"></div>`,live:{status:statusBar(),jobs:productJobsHtml(),filters,list,gifts:giftsHtml()}};
+ }
+ // 手信 from explore: suggestions that can be added to the shared shopping list in one tap.
+ function giftsHtml(){
+  const gifts=T().places.filter(p=>p.cats.includes('手信')||p.v[6]==='手信');if(!gifts.length)return '';
+  const listed=new Set(state.shopping.map(x=>String(x.name).replace(/\s+/g,'').toLowerCase()));
+  return `<details class="panel shop-gifts" open><summary>🎁 手信推介（${gifts.length}）</summary>${gifts.map(p=>{const inList=listed.has(p.v[1].replace(/\s+/g,'').toLowerCase());return `<article class="tg-item"><div class="tg-expense"><h3>${esc(p.v[1])}</h3><span class="note">${esc(p.v[0])}</span></div>${p.v[4]?`<p class="tg-text">${esc(p.v[4])}</p>`:''}${p.v[5]?`<p class="note">${esc(p.v[5].split('\n')[0])}</p>`:''}<div class="links">${inList?'<span class="badge">已在清單</span>':`<button class="action primary" data-gift-add="${esc(p.id)}">＋ 加入購物清單</button>`}<button class="action" data-place="${esc(p.id)}">地點資料</button></div></article>`}).join('')}</details>`;
+ }
+ function addGift(id){const p=T().places.find(x=>x.id===id);if(!p)return;add('shopping',{name:p.v[1].slice(0,80),qty:'',detail:p.v[4].slice(0,500),place:`${p.v[1]} ${p.v[3]}`.trim().slice(0,200),price:null,currency:'JPY',photo:null,bought:false,boughtBy:null,boughtAt:null})}
+ // A Google Maps link pasted into 購買地點 becomes the shop name and address.
+ const MAPS_LINK=/^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i;
+ async function placeFromMaps(input){
+  const url=input.value.trim().match(/https:\/\/\S+/)?.[0];if(!url||!MAPS_LINK.test(url)||input.dataset.looking)return;
+  const hint=$('#shopPlaceInfo');input.disabled=true;input.dataset.looking='1';if(hint)hint.textContent='正在查詢 Google 地圖…';
+  try{const r=await lookupPlace(url);input.value=[r.name,r.address].filter(Boolean).join(' ').slice(0,200);if(hint)hint.textContent='已由 Google 地圖填入。'}
+  catch(e){if(hint)hint.textContent='未能讀取地圖連結，請手動輸入店名或地址。';console.error(e)}
+  finally{input.disabled=false;delete input.dataset.looking}
  }
  function renderShopping(){return `${header('SHOPPING LIST','要買的，都記下來。','相片、地點和價錢 · 旅伴共用，買了就打勾')}<div id="shopPage"></div>`}
  async function pickShopPhoto(file){
-  try{let b=await shrink(file,900,.7);if(b.length>380000)b=await shrink(file,600,.6);shopPhoto=b;const p=$('#shopPreview');if(p)p.innerHTML=shopPreview()}
+  try{let b=await shrink(file,900,.7);if(b.length>380000)b=await shrink(file,600,.6);shopPhoto=b;const p=$('#shopPreview');if(p)p.innerHTML=shopPreview();requestFill(b)}
   catch(e){toast('未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。');console.error(e)}
+ }
+ // Form photo → a productFill job; when the function answers, fill the empty fields of the open form.
+ let fillJob=null;
+ function fillStatus(text,busy){const i=$('#shopFillInfo'),b=$('#shopFillBar');if(i)i.textContent=text;if(b)b.hidden=!busy}
+ function requestFill(image){
+  if(!navigator.onLine)return fillStatus('離線中，AI 未能辨識，請手動輸入。',false);
+  const {fs,db}=fb,ref=fs.doc(fs.collection(db,'receiptJobs'));fillJob=ref.id;
+  fs.setDoc(ref,{images:[image],kind:'productFill',file:'購物表格相片',status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{fillJob=null;fillStatus('未能上載相片給 AI，請手動輸入。',false);console.error(e)});
+  fillStatus('AI 正在辨識物品…',true);
+ }
+ function handleFillJobs(){
+  for(const j of jobs.filter(j=>j.kind==='productFill'&&(j.status==='done'||j.status==='failed'))){
+   if(j.id===fillJob){
+    fillJob=null;const f=$('[data-tg-form="shop"]');
+    if(j.status==='failed'||!f)fillStatus(j.error||'AI 未能辨識，請手動輸入。',false);
+    else{const el=f.elements,r=j.result||{},put=(n,v)=>{if(v!=null&&v!==''&&!String(el[n].value).trim())el[n].value=v};put('name',r.name);put('qty',r.qty);put('detail',r.detail);put('place',r.place);put('price',r.price);if(r.price!=null&&r.currency)el.currency.value=r.currency;fillStatus('AI 已填入空白欄位，請檢查。',false)}
+   }
+   fb.fs.deleteDoc(jobRef(j.id)).catch(()=>{});
+  }
  }
  function paint(el,{sig,shell,live={}}){if(el.dataset.sig!==sig){el.innerHTML=shell;el.dataset.sig=sig}for(const [k,v] of Object.entries(live)){const l=el.querySelector(`[data-tg-live="${k}"]`);if(l)l.innerHTML=v}}
  function refresh(){
@@ -362,14 +397,18 @@ window.Together=(()=>{
   if(d.tgDel){const [name,id]=d.tgDel.split(':');remove(name,id)}
   if(d.tg==='shopPhoto')$('#shopPhotoInput')?.click();
   if(d.tg==='shopAi')$('#shopAiInput')?.click();
+  if(d.giftAdd)addGift(d.giftAdd);
+  if(d.tg==='shopAiCam')$('#shopAiCam')?.click();
   if(d.tg==='shopPhotoClear'){shopPhoto=null;$('#shopPreview').innerHTML=''}
   if(d.tg==='shopCancel'){state.shopEdit=null;shopPhoto=null;refresh()}
   if(d.shopFilter){state.shopFilter=d.shopFilter;refresh()}
   if(d.shopEdit){const x=state.shopping.find(i=>i.id===d.shopEdit);if(x){state.shopEdit=x.id;shopPhoto=x.photo||null;refresh();$('#shopPage')?.scrollIntoView({behavior:'smooth'})}}
   if(d.shopToggle){const x=state.shopping.find(i=>i.id===d.shopToggle);if(x)update('shopping',x.id,x.bought?{bought:false,boughtBy:null,boughtAt:null}:{bought:true,boughtBy:me().name,boughtAt:Date.now()})}
  });
- document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files.length){if(state.status==='ready')queueReceipts([...e.target.files]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}if(e.target.id==='shopAiInput'&&e.target.files.length){if(state.status==='ready')queueProducts([...e.target.files]);e.target.value=''}});
+ document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files.length){if(state.status==='ready')queueReceipts([...e.target.files]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}if((e.target.id==='shopAiInput'||e.target.id==='shopAiCam')&&e.target.files.length){if(state.status==='ready')queueProducts([...e.target.files]);e.target.value=''}});
  document.addEventListener('click',e=>{const img=e.target.closest('[data-shop-zoom]');if(img)img.classList.toggle('zoom')});
+ document.addEventListener('change',e=>{if(e.target.name==='place'&&e.target.closest('[data-tg-form="shop"]'))placeFromMaps(e.target)});
+ document.addEventListener('paste',e=>{if(e.target.name==='place'&&e.target.closest('[data-tg-form="shop"]'))setTimeout(()=>placeFromMaps(e.target))});
  document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset?.df!==undefined)e.preventDefault()});
  // Draft edits are kept locally while typing and saved to the job when a field is left, so they survive reloads.
  document.addEventListener('change',e=>{const k=e.target.dataset?.draftPick;if(!k)return;e.target.checked?picked.add(k):picked.delete(k);renderDrafts()});

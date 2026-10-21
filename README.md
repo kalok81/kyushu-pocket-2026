@@ -33,6 +33,8 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 
 「探索」頁可以新增、修改及刪除地點；貼上 Google 地圖連結按「自動填寫」，會由 Cloud Function `lookupPlace` 經 Places API 填入名稱、地址、座標、類型及營業時間（Places API key 存放在 Secret Manager 的 `places-api-key`）。旅伴的修改存放在 Firestore 的 `places`，疊加在原本 Sheet 資料之上；修改過的地點可按「還原原本資料」。
 
+「購物」頁可以「📷 影相」或「🖼 上載相片」（可多張）由 AI 認物品；表格內加相片也會由 AI 填入空白欄位；「購買地點」可貼 Google 地圖連結。探索頁的「手信」改在購物頁「🎁 手信推介」列出，可一按加入清單（附近頁仍可按手信篩選）。
+
 「購物」頁可按「✨ 上載物品相片，AI 自動填寫」（可多張）：相片經同一個背景流程（`receiptJobs`，`kind: 'product'`）由 AI 認出物品名稱、規格、價錢牌價錢及店名，直接加入清單並標示「AI 填寫」。
 
 「購物」頁是共用購物清單：每件物品可加相片、數量、給誰、購買地點及價錢，買了按「已買」。相片在手機縮細後存放在 Firestore，只限旅伴查看。
