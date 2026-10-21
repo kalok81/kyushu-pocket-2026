@@ -18,7 +18,7 @@ window.Together=(()=>{
   loading=Promise.all(['app','auth','firestore'].map(n=>import(`./vendor/firebase/firebase-${n}.js`))).then(([app,auth,fs])=>{
    const a=app.initializeApp(config);
    let db;try{db=fs.initializeFirestore(a,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})})}catch{db=fs.getFirestore(a)}
-   fb={auth:auth.getAuth(a),A:auth,db,fs};
+   fb={app:a,auth:auth.getAuth(a),A:auth,db,fs};
    auth.onAuthStateChanged(fb.auth,user=>{stop();state.user=user;if(!user){if(started)return location.reload();state.status='signedOut';refresh();return}state.status='checking';refresh();listen()});
    return fb;
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
@@ -67,6 +67,29 @@ window.Together=(()=>{
   fs.addDoc(fs.collection(db,name),{...data,by:u.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請確認你仍在旅伴名單。'));
   toast(navigator.onLine?'已加入':'已加入，有網絡時會自動同步');
  }
+ // Receipt photos are shrunk on the phone, read by the scanReceipt Cloud Function, then only fill the form.
+ let callScan;
+ async function shrink(file){
+  const img=await createImageBitmap(file,{imageOrientation:'from-image'}),k=Math.min(1,1600/Math.max(img.width,img.height)),c=document.createElement('canvas');
+  c.width=Math.round(img.width*k);c.height=Math.round(img.height*k);c.getContext('2d').drawImage(img,0,0,c.width,c.height);img.close?.();
+  const blob=await new Promise(r=>c.toBlob(r,'image/jpeg',.85));
+  return new Promise((ok,fail)=>{const fr=new FileReader();fr.onload=()=>ok(String(fr.result).split(',')[1]);fr.onerror=fail;fr.readAsDataURL(blob)});
+ }
+ async function scan(file){
+  const f=$('[data-tg-form="expense"]'),btn=f?.querySelector('[data-tg="scan"]'),info=$('#tgScanInfo');if(!f)return;
+  if(!navigator.onLine)return toast('分析收據需要網絡，可以先手動輸入。');
+  btn.disabled=true;btn.textContent='分析中…';info.textContent='正在讀取收據，大約需要數秒至半分鐘。';
+  try{
+   if(!callScan){const m=await import('./vendor/firebase/firebase-functions.js');callScan=m.httpsCallable(m.getFunctions(fb.app,'asia-northeast1'),'scanReceipt',{timeout:70000})}
+   const r=(await callScan({image:await shrink(file)})).data;
+   if(!r.total){info.textContent='讀不到金額，請手動輸入。';return}
+   const el=f.elements;if(r.merchant)el.title.value=r.merchant;el.amount.value=r.total;if(r.currency!=='OTHER')el.currency.value=r.currency;
+   const day=r.date&&T().days.find(d=>d.iso===r.date.replaceAll('-','/'));if(day)el.day.value=day.n;
+   info.textContent=(r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':'已填入，請檢查。')+(r.items.length?' 項目：'+r.items.map(i=>`${i.name} ${i.amount}`).join('、'):'');
+   el.title.focus();
+  }catch(e){info.textContent=e?.message&&e.code?.startsWith('functions/')?e.message:'未能分析收據，請手動輸入。';console.error(e)}
+  finally{btn.disabled=false;btn.textContent='📷 影收據／上載收據'}
+ }
  function remove(name,id){if(confirm('確定刪除？所有旅伴都會看不到這項。'))fb.fs.deleteDoc(fb.fs.doc(fb.db,name,id)).catch(()=>toast('未能刪除，請再試。'))}
 
  const me=()=>{const u=state.user;return {id:u.uid,name:state.members.find(m=>m.id===u.uid)?.name||u.displayName||u.email.split('@')[0]}};
@@ -98,7 +121,7 @@ window.Together=(()=>{
  }
  function forms(){
   if(state.tab==='notes')return `<form class="panel tg-form" data-tg-form="note"><label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾"></textarea></label><label>關於<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><button type="submit" class="locate-button">加入筆記</button></form>`;
-  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" required></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
+  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據</button><input type="file" accept="image/*" id="tgReceipt" hidden><p class="note" id="tgScanInfo">AI 會讀出店名、金額及日期並填入下面，請檢查後才儲存。相片不會保存。</p></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" required></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
   return `<div class="chips" role="group" aria-label="選擇日子">${T().days.map(d=>`<button class="chip ${d.n===state.day?'active':''}" data-tg-stopday="${d.n}" aria-pressed="${d.n===state.day}">D${d.n}</button>`).join('')}</div><form class="panel tg-form" data-tg-form="stop"><div class="tg-row"><label>時間<input name="time" maxlength="20" placeholder="14:00–15:30"></label><label>地點或活動<input name="title" maxlength="80" required placeholder="例如：中洲屋台"></label></div><label>細節<textarea name="detail" rows="2" maxlength="500" placeholder="交通、預約或提醒（可留空）"></textarea></label><button type="submit" class="locate-button">加入 ${esc(dayLabel(state.day))}</button></form>`;
  }
  function page(){
@@ -146,11 +169,13 @@ window.Together=(()=>{
   const el=e.target.closest('button');if(!el)return;const d=el.dataset;
   if(d.tg==='login')login();
   if(d.tg==='logout'&&fb)logout();
+  if(d.tg==='scan')$('#tgReceipt')?.click();
   if(d.tg==='retry'){if(fb&&state.user){state.status='checking';refresh();listen()}else load().catch(()=>{})}
   if(d.tgTab){state.tab=d.tgTab;refresh()}
   if(d.tgStopday){state.day=Number(d.tgStopday);refresh()}
   if(d.tgDel){const [name,id]=d.tgDel.split(':');remove(name,id)}
  });
+ document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files[0]){scan(e.target.files[0]);e.target.value=''}});
  addEventListener('online',refresh);addEventListener('offline',refresh);
  load().catch(()=>{});
  return Object.freeze({render,refresh});

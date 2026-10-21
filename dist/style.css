@@ -20,3 +20,4 @@ html{scroll-behavior:auto}.topbar{position:sticky;top:0;z-index:30;background:va
 @media(min-width:900px){.bottomnav{width:460px}}
 .locked .bottomnav,.locked .topactions,.locked .skip-link{display:none}
 .tg-login .tg-form{text-align:left;margin:16px 0 8px}.tg-or{color:var(--muted);font-size:13px;margin:4px 0 10px}.tg-google{width:100%}
+.tg-scan{display:grid;gap:4px}.tg-scan .note{margin:0}

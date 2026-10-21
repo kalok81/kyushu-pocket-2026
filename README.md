@@ -32,6 +32,15 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 - `dist/vendor/firebase/`：Firebase 瀏覽器版本。
 - `scripts/trip-data.mjs`：上載或下載旅程資料。
 - `scripts/accounts.mjs`：管理旅伴帳號及名單。
+- `functions/`：Cloud Function `scanReceipt`，用 DeepSeek（`deepseek-flash`）讀取收據相片並填入開支表格；相片不會保存。API key 存放在 Secret Manager 的 `deepseek-api-key`。
+
+部署收據功能（需要 Blaze 方案）：
+
+```sh
+gcloud secrets versions add deepseek-api-key --data-file=-   # 貼上 DeepSeek API key，按 Enter 再按 Ctrl-D
+cd functions && npm install
+gcloud functions deploy scanReceipt --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=scanReceipt --trigger-http --allow-unauthenticated --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --max-instances=3
+```
 - `firestore.rules`：資料庫權限規則。
 
 第一次設定（Firebase console）：
