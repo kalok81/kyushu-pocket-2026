@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+const c={window:{}};runInNewContext(readFileSync('dist/nearby.js','utf8'),c);const n=c.window.Nearby;
+const origin={lat:33.59,lng:130.42},north=m=>({lat:origin.lat+m/6371008.8*180/Math.PI,lng:origin.lng});
+const places=[{id:'far',cats:['餐廳']},{id:'edge',cats:['商店']},{id:'near',cats:['餐廳']},{id:'missing',cats:['餐廳']}];
+const coords={far:[north(500)],edge:[north(200)],near:[north(50),north(20)],extra:[origin]};
+const ids=(r,cat)=>Array.from(n.find(places,coords,origin,r,cat),x=>x.place.id);
+assert(Math.abs(n.distance(origin,north(100))-100)<.00001);
+assert.deepEqual(ids(100),['near']);assert.deepEqual(ids(200),['near','edge']);assert.deepEqual(ids(500),['near','edge','far']);
+assert.deepEqual(ids(500,'餐廳'),['near','far']);assert.deepEqual(ids(100,'商店'),[]);
+assert.equal(n.find(places,coords,origin,500)[0].distance<21,true);
+assert.equal(n.find(places,coords,null,500).length,0);assert.equal(n.find(places,coords,origin,250).length,0);
+assert.equal(n.distance(origin,origin),0);assert(Number.isFinite(n.distance(origin,{lat:-33.59,lng:-49.58})));
+console.log('Nearby distance boundaries, nearest branch, category filters, sorting and missing-coordinate checks passed.');

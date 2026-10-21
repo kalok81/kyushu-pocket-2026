@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
+const c={window:{}};runInNewContext(readFileSync('dist/split.js','utf8'),c);const s=c.window.Split;
+const sum=o=>Object.values(o).reduce((a,b)=>a+b,0);
+let b=s.balances([{amount:1000,currency:'JPY',paidBy:'a',split:['a','b','c']}]);
+assert.deepEqual({...b.JPY},{a:666,b:-333,c:-333});assert.equal(sum(b.JPY),0);
+b=s.balances([{amount:100,currency:'JPY',paidBy:'a',split:['b','c','d']}]);assert.deepEqual({...b.JPY},{a:100,b:-34,c:-33,d:-33});
+b=s.balances([{amount:10.05,currency:'HKD',paidBy:'b',split:['a','b']},{amount:3000,currency:'JPY',paidBy:'a',split:['a','b']},{amount:1000,currency:'JPY',paidBy:'b',split:['a','b']}]);
+assert.deepEqual({...b.HKD},{b:503,a:-503});assert.deepEqual({...b.JPY},{a:1000,b:-1000});
+assert.deepEqual(Array.from(s.settle(b.JPY),m=>({...m})),[{from:'b',to:'a',amount:1000}]);
+b=s.balances([{amount:9000,currency:'JPY',paidBy:'a',split:['a','b','c']},{amount:3000,currency:'JPY',paidBy:'b',split:['a','b','c']}]);
+const moves=Array.from(s.settle(b.JPY),m=>({...m}));const after={...b.JPY};for(const m of moves){after[m.from]+=m.amount;after[m.to]-=m.amount}
+assert(Object.values(after).every(v=>v===0));assert.equal(moves.length,2);
+assert.deepEqual({...s.balances([{amount:-5,currency:'JPY',paidBy:'a',split:['b']},{amount:5,currency:'EUR',paidBy:'a',split:['b']},{amount:5,currency:'JPY',paidBy:'a',split:[]}])},{});
+assert.equal(s.format(123456,'JPY'),'¥123,456');assert.equal(s.format(1005,'HKD'),'HK$10.05');
+console.log('Expense split rounding, multi-currency balances and settlement checks passed.');

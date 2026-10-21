@@ -1,0 +1,59 @@
+rules_version = '2';
+// Only Google accounts listed in config/members (field "emails", an array) can read or write.
+// The member emails live in Firestore, not in this public repository.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function isMember() {
+      return signedIn() && request.auth.token.email.lower()
+        in get(/databases/$(database)/documents/config/members).data.emails;
+    }
+    function owned() {
+      let d = request.resource.data;
+      return d.by == request.auth.uid && d.byName is string && d.byName.size() <= 40
+        && d.at is int && d.createdAt == request.time;
+    }
+    function day(v) { return v is int && v >= 1 && v <= 7; }
+    function text(v, max) { return v is string && v.size() <= max; }
+
+    match /config/{id} { allow read, write: if false; }
+
+    // Trip data is uploaded with scripts/trip-data.mjs using the project owner's Google login.
+    match /trip/{id} { allow read: if isMember(); allow write: if false; }
+
+    match /members/{uid} {
+      allow read: if isMember();
+      allow write: if isMember() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'email', 'at'])
+        && text(request.resource.data.name, 40) && request.resource.data.email == request.auth.token.email;
+    }
+    match /notes/{id} {
+      allow read, delete: if isMember();
+      allow create: if isMember() && owned()
+        && request.resource.data.keys().hasOnly(['text', 'day', 'placeId', 'placeName', 'by', 'byName', 'at', 'createdAt'])
+        && text(request.resource.data.text, 1000) && request.resource.data.text.size() > 0
+        && (request.resource.data.day == null || day(request.resource.data.day))
+        && (request.resource.data.placeId == null || text(request.resource.data.placeId, 10))
+        && (request.resource.data.placeName == null || text(request.resource.data.placeName, 120));
+    }
+    match /expenses/{id} {
+      allow read, delete: if isMember();
+      allow create: if isMember() && owned()
+        && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'by', 'byName', 'at', 'createdAt'])
+        && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
+        && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 10000000
+        && request.resource.data.currency in ['JPY', 'HKD']
+        && request.resource.data.paidBy is string
+        && request.resource.data.split is list && request.resource.data.split.size() > 0 && request.resource.data.split.size() <= 20
+        && day(request.resource.data.day);
+    }
+    match /stops/{id} {
+      allow read, delete: if isMember();
+      allow create: if isMember() && owned()
+        && request.resource.data.keys().hasOnly(['day', 'time', 'title', 'detail', 'by', 'byName', 'at', 'createdAt'])
+        && day(request.resource.data.day) && text(request.resource.data.time, 20)
+        && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
+        && text(request.resource.data.detail, 500);
+    }
+  }
+}
