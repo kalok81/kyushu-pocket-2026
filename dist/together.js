@@ -303,13 +303,14 @@ window.Together=(()=>{
   const list=shown.length?[...shown].sort((a,b)=>a.bought-b.bought||(b.at||0)-(a.at||0)).map(shopItem).join(''):`<div class="empty"><h2>${state.shopFilter==='done'?'還沒有已買的東西':'清單是空的'}</h2><p>${state.shopFilter==='done'?'買了之後按「✓ 已買」。':'把想買的東西加進來，旅伴都看得到。'}</p></div>`;
   return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${edit?'':'<div class="panel shop-ai"><b>✨ AI 認物品，自動加入清單</b><div class="links"><button type="button" class="locate-button" data-tg="shopAiCam">📷 影相</button><button type="button" class="locate-button" data-tg="shopAi">🖼 上載相片（可多張）</button></div><input type="file" accept="image/*" capture="environment" id="shopAiCam" hidden><input type="file" accept="image/*" id="shopAiInput" multiple hidden><p class="note">AI 會認出物品、規格，以及價錢牌上的價錢，自動加入清單，之後可以修改。可以關閉網頁，AI 會在背景完成。</p></div>'}<div data-tg-live="jobs"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div><div data-tg-live="gifts"></div>`,live:{status:statusBar(),jobs:productJobsHtml(),filters,list,gifts:giftsHtml()}};
  }
- // 手信 from explore: suggestions that can be added to the shared shopping list in one tap.
+ // 手信推介: souvenir products (trip/content gifts) and the shop that sells each; one tap adds it to the list.
+ const norm=t=>String(t).replace(/\s+/g,'').toLowerCase();
  function giftsHtml(){
-  const gifts=T().places.filter(p=>p.cats.includes('手信')||p.v[6]==='手信');if(!gifts.length)return '';
-  const listed=new Set(state.shopping.map(x=>String(x.name).replace(/\s+/g,'').toLowerCase()));
-  return `<details class="panel shop-gifts" open><summary>🎁 手信推介（${gifts.length}）</summary>${gifts.map(p=>{const inList=listed.has(p.v[1].replace(/\s+/g,'').toLowerCase());return `<article class="tg-item"><div class="tg-expense"><h3>${esc(p.v[1])}</h3><span class="note">${esc(p.v[0])}</span></div>${p.v[4]?`<p class="tg-text">${esc(p.v[4])}</p>`:''}${p.v[5]?`<p class="note">${esc(p.v[5].split('\n')[0])}</p>`:''}<div class="links">${inList?'<span class="badge">已在清單</span>':`<button class="action primary" data-gift-add="${esc(p.id)}">＋ 加入購物清單</button>`}<button class="action" data-place="${esc(p.id)}">地點資料</button></div></article>`}).join('')}</details>`;
+  const gifts=T().gifts();if(!gifts.length)return '';
+  const listed=new Set(state.shopping.map(x=>norm(x.name)));
+  return `<details class="panel shop-gifts" open><summary>🎁 手信推介（${gifts.length}）</summary>${gifts.map((g,i)=>`<article class="tg-item"><div class="tg-expense"><h3>${esc(g.name)}</h3>${g.priceText?`<b class="shop-price">${esc(g.priceText)}</b>`:''}</div><p class="note">🏪 ${esc(g.place.v[1])} · ${esc(g.place.v[0])}${g.note?` · ${esc(g.note)}`:''}</p><div class="links">${listed.has(norm(g.name))?'<span class="badge">已在清單</span>':`<button class="action primary" data-gift-add="${i}">＋ 加入購物清單</button>`}<button class="action" data-place="${esc(g.place.id)}">店舖資料</button></div></article>`).join('')}</details>`;
  }
- function addGift(id){const p=T().places.find(x=>x.id===id);if(!p)return;add('shopping',{name:p.v[1].slice(0,80),qty:'',detail:p.v[4].slice(0,500),place:`${p.v[1]} ${p.v[3]}`.trim().slice(0,200),price:null,currency:'JPY',photo:null,bought:false,boughtBy:null,boughtAt:null})}
+ function addGift(i){const g=T().gifts()[Number(i)];if(!g)return;const p=g.place;add('shopping',{name:g.name.slice(0,80),qty:'',detail:[g.priceText&&!g.price?g.priceText:'',g.note].filter(Boolean).join('；').slice(0,500),place:`${p.v[1]} ${p.v[3]}`.trim().slice(0,200),price:g.price??null,currency:'JPY',photo:null,bought:false,boughtBy:null,boughtAt:null})}
  // A Google Maps link pasted into 購買地點 becomes the shop name and address.
  const MAPS_LINK=/^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i;
  async function placeFromMaps(input){

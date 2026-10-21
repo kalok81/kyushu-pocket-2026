@@ -28,6 +28,7 @@ function check(trip) {
  }
  assert(content?.base?.title && Array.isArray(content.hotels) && content.hotels.length && content.suggestions, 'Missing page content');
  for (const h of content.hotels) assert(h.title?.length && h.target && /^https:\/\//.test(h.site) && h.notebook?.title, 'Invalid hotel entry');
+ for (const g of content.gifts || []) assert(g.name && /^p\d+$/.test(g.placeId) && (g.price === null || Number.isFinite(g.price)), 'Invalid souvenir entry');
  for (const a of content.areas || []) assert(a.region && a.name && Number.isFinite(a.lat) && Number.isFinite(a.lng) && typeof a.kw === 'string', 'Invalid sub-area');
  for (const [day, stops] of Object.entries(content.suggestions)) assert(/^[1-7]$/.test(day) && stops.every(s => s.time && s.title), 'Invalid suggested itinerary');
  for (const id of DOCS) assert(Buffer.byteLength(JSON.stringify(trip[id])) < 1_000_000, `trip/${id} is over the Firestore document limit`);
