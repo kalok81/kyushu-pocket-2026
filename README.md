@@ -70,7 +70,7 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 
 交通建議：行程上下兩個時段之間有一個交通點（有住宿時第一站之前亦有，由酒店出發），按下查詢兩站之間的交通；同一時段有多個地點時可先選出發地及目的地，選定的交通顯示在交通點旁，用 Google Routes API（`suggestRoutes` function，App Check、每日上限與地圖查詢共用）查詢公共交通／步行／駕車的多個方案，列出路線、站名、班次時間及車費，選用後寫入該站的「交通」，亦可自行修改。日本的公共交通 Google 不經 API 提供，只會提供「在 Google 地圖查看」連結；旁邊的「✨ AI 分析」用 DeepSeek（`aiRoutes` function，計入每日 AI 上限）按出發地、目的地及時間建議多個路線（路線及站名用當地文字，時間及車費為估算），選用後同樣寫入交通。行程日期太遠（60 天後）或已過時，班次按下一個相同星期估算。
 
-自動測試：`tests/smoke.mjs` 用虛構的測試旅程及假 Firebase（`tests/fake/`）在 Chromium 測試登入、各頁、行程、開支、清單及住宿；GitHub Actions 每次 push 先執行 `scripts/validate.mjs` 及這個測試，通過才發佈網站。本機執行：`cd tests && npm ci && npx playwright install chromium && npm test`。
+自動測試：`tests/smoke.mjs` 用虛構的測試旅程及假 Firebase（`tests/fake/`）在 Chromium 測試登入、各頁、行程、開支、清單及住宿；`tests/layout.mjs` 用一個資料很多、名稱很長的虛構旅程（`tests/layout-seed.mjs`），在 320／390／768／1280px 寬度檢查所有頁面及主要視窗：整頁左右捲動、內容超出畫面、文字被截斷或溢出、同一行按鈕高度不一（加 `SHOTS=資料夾` 可儲存截圖）。GitHub Actions 每次 push 先執行 `scripts/validate.mjs` 及這兩個測試，通過才發佈網站。本機執行：`cd tests && npm ci && npx playwright install chromium && npm test`（或 `npm run smoke`／`npm run layout`）。
 
 旅程頁可「⧉ 複製為新旅程」（複製探索地點、每日行程、清單及購物清單，新旅程只有你一位旅伴）；行程頁「🖨 列印／PDF」列印整個行程（航班、住宿及每日站點），在列印視窗選「另存為 PDF」即可。
 
