@@ -70,7 +70,7 @@ gcloud functions deploy lookupPlace --gen2 --region=asia-northeast1 --runtime=no
 4. 用 `scripts/accounts.mjs` 建立旅伴帳號或加入 Google 帳戶（見下）。
 5. 建議：Google Cloud console → APIs & Services → Credentials，把這個 Browser key 限制為 `https://kalok81.github.io/*` 及 `http://localhost:8000/*`。
 
-旅伴帳號（先執行 `gcloud auth login`）：
+旅伴帳號（先執行 `gcloud auth login`；加入哪個旅程由環境變數 `TRIP` 指定，預設 `fukuoka-2026`）：
 
 ```sh
 node scripts/accounts.mjs add amy 阿美      # 建立帳號 ID，會顯示一次隨機密碼
