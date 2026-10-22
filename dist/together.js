@@ -311,7 +311,7 @@ window.Together=(()=>{
  const DOC_MAX=6,docItem=(kind,id)=>(state[kind]||[]).find(x=>x.id===id);
  async function openDocs(kind,id){
   const x=docItem(kind,id);if(!x)return;const docs=x.docs||[],title=kind==='hotels'?x.name:`${x.flightNo} ${x.from||''} → ${x.to||''}`;
-  $('#detailBody').innerHTML=`<div class="eyebrow" data-docs-for="${esc(kind)}:${esc(id)}">DOCUMENTS</div><h2 class="detailtitle">${esc(title)}</h2><p class="note">訂單確認、電子機票或截圖，只限這個旅程的旅伴登入查看。</p><div class="doc-list">${docs.length?docs.map(d=>`<div class="doc-row" data-doc-path="${esc(d.path)}"><div class="doc-thumb">${d.type==='application/pdf'?'PDF':'…'}</div><div><b>${esc(d.name)}</b><small>${esc(d.byName||'')} · ${Math.max(1,Math.round(d.size/1024))} KB</small></div><a class="action" data-doc-open hidden target="_blank" rel="noopener">打開</a><button type="button" class="smallbtn" data-doc-del="${esc(kind)}:${esc(id)}:${esc(d.path)}" aria-label="刪除 ${esc(d.name)}">刪除</button></div>`).join(''):'<div class="empty"><p>還沒有文件。</p></div>'}</div>${docs.length<DOC_MAX?`<button type="button" class="action primary" data-doc-add="${esc(kind)}:${esc(id)}">📎 上載文件（相片或 PDF）</button><input type="file" id="docInput" accept="image/*,application/pdf" multiple hidden>`:`<p class="note">每項最多 ${DOC_MAX} 個文件。</p>`}`;
+  $('#detailBody').innerHTML=`<div class="eyebrow" data-docs-for="${esc(kind)}:${esc(id)}">DOCUMENTS</div><h2 class="detailtitle">${esc(title)}</h2><p class="note">訂單確認、電子機票或截圖，只限這個旅程的旅伴登入查看。</p><div class="doc-list">${docs.length?docs.map(d=>`<div class="doc-row" data-doc-path="${esc(d.path)}"><div class="doc-thumb">${d.type==='application/pdf'?'PDF':'…'}</div><div><b>${esc(d.name)}</b><small>${esc(d.byName||'')} · ${Math.max(1,Math.round(d.size/1024))} KB</small></div><a class="action" data-doc-open hidden target="_blank" rel="noopener">打開</a><button type="button" class="smallbtn" data-doc-del="${esc(kind)}:${esc(id)}:${esc(d.path)}" aria-label="刪除 ${esc(d.name)}">刪除</button></div>`).join(''):'<div class="empty"><p>還沒有文件。</p></div>'}</div>${docs.length<DOC_MAX?`<button type="button" class="action primary" data-doc-add>📎 上載文件（相片或 PDF）</button><input type="file" id="docInput" data-target="${esc(kind)}:${esc(id)}" accept="image/*,application/pdf" multiple hidden>`:`<p class="note">每項最多 ${DOC_MAX} 個文件。</p>`}`;
   if(!$('#detail').open)$('#detail').showModal();
   if(!docs.length)return;
   try{const {m,st}=await storage(),urls=[];$('#detail').addEventListener('close',()=>urls.forEach(URL.revokeObjectURL),{once:true});
@@ -627,7 +627,7 @@ window.Together=(()=>{
   if(d.fxSet)setRate(d.fxSet);
   if(d.tg==='checkSuggest')addSuggestions();
   if(d.docs){const [k,i]=d.docs.split(':');openDocs(k,i)}
-  if(d.docAdd){$('#docInput').dataset.target=d.docAdd;$('#docInput').click()}
+  if(d.docAdd)$('#docInput')?.click();
   if(d.docDel){const [k,i,...rest]=d.docDel.split(':');deleteDocFile(k,i,rest.join(':'))}
   if(d.settle){state.settleMode=d.settle;refresh()}
   if(d.expCat){const x=state.expenses.find(i=>i.id===d.expCat);if(x)UI.choose('開支分類',CATS,x.category||'food').then(v=>{if(v&&CATS[v]&&v!==x.category)update('expenses',x.id,{category:v})})}
