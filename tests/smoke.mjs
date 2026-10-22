@@ -157,6 +157,17 @@ try {
   await page.click('[data-notebook-type=購物]'); await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detailBody .shop-item');
   await page.keyboard.press('Escape');
  });
+ await step('plan stops follow their explore place', async () => {
+  await page.goto(base + '/#explore'); await page.locator('#results .card.place', { hasText: '淺草寺' }).locator('[data-place]').click();
+  await page.click('#detail [data-place-edit]'); await page.fill('#placeForm [name=f1]', '淺草寺（雷門）'); await page.click('#placeForm button[type=submit]');
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
+  assert.ok((await page.locator('.timeline h3').allInnerTexts()).includes('淺草寺（雷門）'), 'stop shows the new place name');
+  const i = await page.locator('.stopcontent', { hasText: '淺草寺（雷門）' }).locator('[data-stop-more]').getAttribute('data-stop-more');
+  await page.click(`[data-stop-more="${i}"]`); await page.click(`[data-stop-edit="${i}"]`); await page.waitForSelector('#stopForm');
+  assert.equal(await page.locator('#stopForm [name=title]').count(), 0); assert.match(await page.locator('#stopForm .notice').innerText(), /跟隨探索地點/);
+  await page.fill('#stopForm [name=time]', '10:30'); await page.click('#stopForm button[type=submit]');
+  await page.waitForFunction(() => [...document.querySelectorAll('.stop')].some((s) => s.textContent.includes('10:30') && s.textContent.includes('淺草寺（雷門）')));
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

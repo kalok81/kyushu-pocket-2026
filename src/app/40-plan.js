@@ -2,7 +2,34 @@
   // Each day's plan lives in Firestore planDays/{day}: the stop list and the day's title.
   let planEdits = {},
     openStop = null;
-  const stopsFor = (day) => planEdits[day]?.stops || [];
+  // A stop for an explore place or a hotel shows that place's current name, area, details and address, so editing the
+  // place in 探索 (or the hotel in 住宿) updates every stop; the copy saved in the stop is only a fallback.
+  function resolveStop(s) {
+    const p = s.placeId && places.find((x) => x.id === s.placeId);
+    if (p)
+      return {
+        ...s,
+        title: p.v[1],
+        area: areaOf(p) || p.v[0],
+        detail: p.v[4],
+        target: `${p.v[1]} ${p.v[3]}`.trim(),
+        ref: urlList(p.v[10])[0] || "",
+        linked: "place",
+      };
+    const h = s.hotelId && lists().hotels.find((x) => x.id === s.hotelId);
+    if (h)
+      return {
+        ...s,
+        title: h.name,
+        area: "住宿",
+        detail: h.address || "",
+        target: `${h.name} ${h.address || ""}`.trim(),
+        ...(Number.isFinite(h.lat) ? { lat: h.lat, lng: h.lng } : {}),
+        linked: "hotel",
+      };
+    return s;
+  }
+  const stopsFor = (day) => (planEdits[day]?.stops || []).map(resolveStop);
   const stopFields = (s) => ({
     time: String(s.time || "").slice(0, 30),
     area: String(s.area || "").slice(0, 60),
@@ -47,11 +74,13 @@
       paintWeather();
     }
   }
-  function stopForm(day, index, slot = null) {
-    const s = index == null ? (slot != null ? { time: stopsFor(day)[slot]?.time || "" } : {}) : stopsFor(day)[index] || {},
-      v = (k) => esc(s[k] || "");
+  // Editing a stop: time and transport always; the place itself is edited in 探索 / 住宿 when the stop is linked to one.
+  function stopForm(day, index) {
+    const s = stopsFor(day)[index] || {},
+      v = (k) => esc(s[k] || ""),
+      own = !s.linked;
     openDialog(
-      `<div class="eyebrow">${esc(days[day - 1].date)} · DAY ${day}</div><h2 class="detailtitle">${index == null ? "新增站點" : "修改站點"}</h2><form class="tg-form" id="stopForm" data-day="${day}" data-index="${index ?? ""}" data-slot="${slot ?? ""}"><label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結"><button type="button" class="action primary" id="stopLookup">自動填寫</button></span></label><p class="note" id="stopLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位。</p><div class="tg-row"><label>時間<input name="time" maxlength="30" placeholder="例如：14:00–15:30" value="${v("time")}"></label><label>區域<input name="area" maxlength="60" value="${v("area")}"></label></div><label>地點／活動<input name="title" required maxlength="80" value="${v("title")}"></label><label>內容<textarea name="detail" rows="3" maxlength="1000">${v("detail")}</textarea></label><label>交通<textarea name="transport" rows="2" maxlength="500">${v("transport")}</textarea></label><label>導航目的地（可留空）<input name="target" maxlength="200" value="${v("target")}"></label><p class="note">${index == null ? "會按時間自動排位，之後可用 ↑↓ 調整次序。" : ""}</p><button type="submit" class="locate-button">${index == null ? "加入行程" : "儲存修改"}</button></form>`,
+      `<div class="eyebrow">${esc(days[day - 1].date)} · DAY ${day}</div><h2 class="detailtitle">修改站點</h2><form class="tg-form" id="stopForm" data-day="${day}" data-index="${index}">${own ? `<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結"><button type="button" class="action primary" id="stopLookup">自動填寫</button></span></label><p class="note" id="stopLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位。</p>` : `<div class="notice">「${esc(s.title)}」的名稱、地址及介紹跟隨${s.linked === "place" ? "探索地點" : "住宿資料"}，修改後所有行程會一併更新。<div class="links">${s.linked === "place" ? `<button type="button" class="action" data-place-edit="${esc(s.placeId)}">✎ 修改地點資料</button>` : `<button type="button" class="action" data-hotel-edit="${esc(s.hotelId)}">✎ 修改住宿資料</button>`}</div></div>`}<div class="tg-row"><label>時間<input name="time" maxlength="30" placeholder="例如：14:00–15:30" value="${v("time")}"></label>${own ? `<label>區域<input name="area" maxlength="60" value="${v("area")}"></label>` : ""}</div>${own ? `<label>地點／活動<input name="title" required maxlength="80" value="${v("title")}"></label><label>內容<textarea name="detail" rows="3" maxlength="1000">${v("detail")}</textarea></label>` : ""}<label>交通<textarea name="transport" rows="2" maxlength="500">${v("transport")}</textarea></label>${own ? `<label>導航目的地（可留空）<input name="target" maxlength="200" value="${v("target")}"></label>` : ""}<button type="submit" class="locate-button">儲存修改</button></form>`,
     );
   }
   // Sub-area name for a coordinate (same centres as the explore filter), else the nearest place's region.
@@ -98,32 +127,22 @@
   }
   function saveStopForm(f) {
     const day = Number(f.dataset.day),
-      index = f.dataset.index === "" ? null : Number(f.dataset.index),
+      index = Number(f.dataset.index),
       v = new FormData(f),
       get = (k) => String(v.get(k) || "").trim(),
-      list = [...stopsFor(day)];
-    if (!get("title")) return;
-    const stop = {
-      ...(index == null ? {} : list[index]),
-      time: get("time"),
-      area: get("area"),
-      title: get("title"),
-      detail: get("detail"),
-      transport: get("transport"),
-      target: get("target"),
-    };
-    if (f.dataset.ref && !stop.ref) stop.ref = f.dataset.ref;
-    const slot = f.dataset.slot === "" ? null : slotEnd(list, Number(f.dataset.slot));
-    savePlan(
-      day,
-      index != null
-        ? list.map((s, i) => (i === index ? stop : s))
-        : slot != null
-          ? [...list.slice(0, slot + 1), stop, ...list.slice(slot + 1)]
-          : insertByTime(list, stop),
-    );
+      list = [...stopsFor(day)],
+      old = list[index];
+    if (!old) return;
+    const stop = { ...old, time: get("time"), transport: get("transport") };
+    if (!old.linked) {
+      if (!get("title")) return;
+      Object.assign(stop, { area: get("area"), title: get("title"), detail: get("detail"), target: get("target") });
+      if (f.dataset.ref && !stop.ref) stop.ref = f.dataset.ref;
+    }
+    list[index] = stop;
+    savePlan(day, list);
     $("#detail").close();
-    toast(index == null ? "已加入行程" : "已儲存");
+    toast("已儲存");
   }
   function addPlaceToPlan(p) {
     const today = days.find((d) => d.iso === new Date().toLocaleDateString("en-CA").replaceAll("-", "/"))?.n,

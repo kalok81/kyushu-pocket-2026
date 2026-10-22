@@ -57,6 +57,7 @@
     if (params.has("category")) category = exploreCats.includes(params.get("category")) ? params.get("category") : "全部";
     if (params.has("day")) selectedDay = Math.min(days.length, Math.max(1, Number(params.get("day")) || 1));
     setActive(view);
+    openStop = null; // a page opened afresh shows no stop's edit buttons
     $("#app").innerHTML = sectionViews[view]() + footer();
     if (view === "explore") bindExplore();
     if (view === "notebook") bindNotebook();
