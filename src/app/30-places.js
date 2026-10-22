@@ -260,6 +260,7 @@
         .trim()
         .slice(0, 500),
     });
+    if (f.dataset.linkShop && newId) window.Together.linkShopping(f.dataset.linkShop.split(","), newId);
     if (f.dataset.day && newId) {
       // Also a plan stop for that place (as an alternative of a time slot, or at the time entered).
       const day = Number(f.dataset.day),

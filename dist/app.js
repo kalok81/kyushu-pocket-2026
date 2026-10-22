@@ -511,6 +511,7 @@ window.startTrip = (meta = {}) => {
         .trim()
         .slice(0, 500),
     });
+    if (f.dataset.linkShop && newId) window.Together.linkShopping(f.dataset.linkShop.split(","), newId);
     if (f.dataset.day && newId) {
       // Also a plan stop for that place (as an alternative of a time slot, or at the time entered).
       const day = Number(f.dataset.day),
@@ -1629,6 +1630,7 @@ window.startTrip = (meta = {}) => {
       const sp = buySpots[Number(el.dataset.spotExplore)];
       if (sp) {
         placeForm(null);
+        $("#placeForm").dataset.linkShop = sp.ids.join(",");
         const f = $("#placeForm").elements;
         f.f1.value = sp.name;
         if (sp.address && sp.address !== sp.name) f.f3.value = sp.address;

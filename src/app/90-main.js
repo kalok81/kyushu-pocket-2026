@@ -144,6 +144,7 @@
       const sp = buySpots[Number(el.dataset.spotExplore)];
       if (sp) {
         placeForm(null);
+        $("#placeForm").dataset.linkShop = sp.ids.join(",");
         const f = $("#placeForm").elements;
         f.f1.value = sp.name;
         if (sp.address && sp.address !== sp.name) f.f3.value = sp.address;

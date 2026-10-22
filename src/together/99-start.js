@@ -9,6 +9,7 @@
     shoppingPlaces,
     shoppingFor,
     shoppingAt,
+    linkShopping,
     lists: tripLists,
     openShopItem,
     saveItem,

@@ -150,10 +150,14 @@
         qty: str("qty").slice(0, 30),
         detail: str("detail").slice(0, 500),
         place: str("place").slice(0, 200),
+        placeId: str("placeId").slice(0, 40),
         price: price == null ? null : Math.round(price * 100) / 100,
         currency: pickCur(String(v.get("currency"))),
         photo: shopPhoto,
       };
+      // A chosen explore place fills an empty 購買地點 with its name and address.
+      const chosen = item.placeId && item.placeId !== "-" && T().places.find((p) => p.id === item.placeId);
+      if (chosen && !item.place) item.place = `${chosen.v[1]} ${chosen.v[3]}`.trim().slice(0, 200);
       if (state.shopEdit) {
         update("shopping", state.shopEdit, { ...item, ai: false });
         toast("已儲存");

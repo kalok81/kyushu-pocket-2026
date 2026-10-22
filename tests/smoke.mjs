@@ -168,6 +168,15 @@ try {
   await page.fill('#stopForm [name=time]', '10:30'); await page.click('#stopForm button[type=submit]');
   await page.waitForFunction(() => [...document.querySelectorAll('.stop')].some((s) => s.textContent.includes('10:30') && s.textContent.includes('淺草寺（雷門）')));
  });
+ await step('shopping item linked to a chosen explore place', async () => {
+  await page.goto(base + '/#shopping'); await page.waitForSelector('[data-tg-form=shop]');
+  await page.fill('[data-tg-form=shop] [name=name]', '雷門煎餅'); await page.selectOption('[data-tg-form=shop] [name=placeId]', { label: '淺草寺（雷門） · 淺草' });
+  await page.click('[data-tg-form=shop] button[type=submit]');
+  await page.waitForSelector('.shop-item:has-text("雷門煎餅") .shop-place');
+  assert.match(await page.locator('.shop-item', { hasText: '雷門煎餅' }).innerText(), /探索：\s*淺草寺（雷門）[\s\S]*📍 淺草寺（雷門） 東京都台東区浅草2-3-1/);
+  await page.goto(base + '/#explore'); await page.waitForSelector('#results .card.place');
+  assert.match(await page.locator('#results .card.place', { hasText: '淺草寺（雷門）' }).locator('.buy-here').innerText(), /雷門煎餅/);
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

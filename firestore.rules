@@ -31,8 +31,8 @@ service cloud.firestore {
         && text(d.depart, 20) && text(d.arrive, 20) && text(d.note, 500);
     }
     function shopValid(d) {
-      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'by', 'byName', 'at', 'createdAt'])
-        && (!('ai' in d) || d.ai is bool)
+      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'placeId', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'by', 'byName', 'at', 'createdAt'])
+        && (!('ai' in d) || d.ai is bool) && (!('placeId' in d) || text(d.placeId, 40))
         && (!('lat' in d) || d.lat == null || d.lat is number) && (!('lng' in d) || d.lng == null || d.lng is number)
         && (!('geoFor' in d) || text(d.geoFor, 200))
         && text(d.name, 80) && d.name.size() > 0 && text(d.qty, 30) && text(d.detail, 500) && text(d.place, 200)
