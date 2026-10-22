@@ -1,6 +1,6 @@
 'use strict';
-// Sign-in gate, trip data, shared notes/expenses/shopping list, plan edits and favourites for travel companions (Firebase).
-// Trip data lives in Firestore (trip/data, trip/geo, trip/content); the public site holds no trip details.
+// Sign-in gate, trip choice, trip data, shared notes/expenses/shopping list, plan edits and favourites (Firebase).
+// Each trip lives under trips/{tripId} (its own member list); the public site holds no trip details.
 window.Together=(()=>{
  // Firebase web config is public by design; access is enforced by firestore.rules and the member list.
  const config={apiKey:'AIzaSyC_qsxlY9mX0OKK5bIXwUXvrrxCOFnc18M',authDomain:'kyushu-2e307.firebaseapp.com',projectId:'kyushu-2e307',storageBucket:'kyushu-2e307.firebasestorage.app',messagingSenderId:'672657048901',appId:'1:672657048901:web:d1e2f7dd92389f78f3ea2c'};
@@ -10,7 +10,9 @@ window.Together=(()=>{
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const toast=s=>{$('#toast').textContent=s;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2600)};
  const header=(k,t,p)=>`<div class="pagehead"><div class="eyebrow">${k}</div><h1>${t}</h1>${p?`<p>${p}</p>`:''}</div>`;
- let fb,loading,unsub=[],started=false,staleNotice=false;
+ let fb,loading,unsub=[],started=false,staleNotice=false,tripId=null;
+ const tcol=name=>fb.fs.collection(fb.db,'trips',tripId,name),tdoc=(name,id)=>fb.fs.doc(fb.db,'trips',tripId,name,String(id));
+ const TRIP_KEY='pocket-trip',lastTrip={get(){try{return localStorage.getItem(TRIP_KEY)}catch{return null}},set(v){try{localStorage.setItem(TRIP_KEY,v)}catch{}}};
 
  function load(){
   if(fb)return Promise.resolve(fb);if(loading)return loading;
@@ -19,15 +21,28 @@ window.Together=(()=>{
    const a=app.initializeApp(config);
    let db;try{db=fs.initializeFirestore(a,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})})}catch{db=fs.getFirestore(a)}
    fb={app:a,auth:auth.getAuth(a),A:auth,db,fs};
-   auth.onAuthStateChanged(fb.auth,user=>{stop();state.user=user;if(!user){if(started)return location.reload();state.status='signedOut';refresh();return}state.status='checking';refresh();listen()});
+   auth.onAuthStateChanged(fb.auth,user=>{stop();state.user=user;if(!user){if(started)return location.reload();state.status='signedOut';refresh();return}state.status='checking';refresh();chooseTrip()});
    return fb;
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
   return loading;
  }
  function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],placesLoaded:false,trip:{}})}
+ // Trips this companion belongs to (trips/{id}.members holds lower-case emails); open the last one used.
+ async function chooseTrip(){
+  const {fs,db}=fb,email=String(state.user.email||'').toLowerCase();
+  try{
+   const snap=await fs.getDocs(fs.query(fs.collection(db,'trips'),fs.where('members','array-contains',email)));
+   state.trips=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
+  }catch(e){state.status=e.code==='permission-denied'?'denied':'error';state.error=e.code==='permission-denied'?'':'未能載入旅程，請稍後再試。';refresh();return}
+  if(!state.trips.length){state.status='denied';refresh();return}
+  const keep=state.trips.find(t=>t.id===lastTrip.get())||state.trips[0];tripId=keep.id;lastTrip.set(tripId);state.trip=keep;
+  document.title=`${keep.name} · 口袋旅伴`;const sub=$('.brand small');if(sub)sub.textContent=keep.name;
+  listen();
+ }
+ function switchTrip(id){if(id&&id!==tripId){lastTrip.set(id);location.reload()}}
  function listen(){
   const {fs,db}=fb;
-  const watch=name=>fs.onSnapshot(fs.collection(db,name),{includeMetadataChanges:true},snap=>{
+  const watch=name=>fs.onSnapshot(tcol(name),{includeMetadataChanges:true},snap=>{
    state[name]=snap.docs.map(d=>({...d.data(),id:d.id,pending:d.metadata.hasPendingWrites})).sort((a,b)=>(b.at||0)-(a.at||0));
    if(state.status!=='ready'){state.status='ready';saveProfile()}
    if(name==='shopping'&&started)setTimeout(geocodeShopping,1000);
@@ -37,13 +52,13 @@ window.Together=(()=>{
    refresh();
   },err=>{stop();state.status=err.code==='permission-denied'?'denied':'error';state.error=err.code==='permission-denied'?'':'同步失敗，請稍後再試。';refresh()});
   const fail=err=>{stop();state.status=err.code==='permission-denied'?'denied':'error';state.error=err.code==='permission-denied'?'':'同步失敗，請稍後再試。';refresh()};
-  const watchTrip=id=>fs.onSnapshot(fs.doc(db,'trip',id),snap=>{
+  const watchTrip=id=>fs.onSnapshot(tdoc('trip',id),snap=>{
    if(!snap.exists()){if(!snap.metadata.fromCache){state.empty=true;refresh()}return}
    state.empty=false;
    const json=snap.get('json');if(started&&json!==state.trip[id]&&!staleNotice){staleNotice=true;toast('旅程資料已更新，重新整理網頁即可看到。')}
    state.trip[id]=json;start();
   },fail);
-  const watchJobs=fs.onSnapshot(fs.query(fs.collection(db,'receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();handleFillJobs();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
+  const watchJobs=fs.onSnapshot(fs.query(tcol('receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();handleFillJobs();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
   unsub=[watchJobs,...['notes','expenses','members','shopping','places','planDays'].map(watch)].concat(['data','geo','content'].map(watchTrip));
  }
  function start(){
@@ -56,7 +71,7 @@ window.Together=(()=>{
   try{await fb.A.signOut(fb.auth);await fb.fs.terminate(fb.db);await fb.fs.clearIndexedDbPersistence(fb.db)}catch{}
   location.reload();
  }
- function saveProfile(){const u=state.user;fb.fs.setDoc(fb.fs.doc(fb.db,'members',u.uid),{name:(u.displayName||u.email.split('@')[0]).slice(0,40),email:u.email,at:Date.now()},{merge:true}).catch(()=>{})}
+ function saveProfile(){const u=state.user;fb.fs.setDoc(tdoc('members',u.uid),{name:(u.displayName||u.email.split('@')[0]).slice(0,40),email:u.email,at:Date.now()},{merge:true}).catch(()=>{})}
  // Account IDs map to addresses on a reserved domain; accounts are created with scripts/accounts.mjs.
  const ACCOUNT_DOMAIN='kyushu-trip.invalid',authError=e=>({'auth/invalid-credential':'帳號或密碼不正確。','auth/wrong-password':'帳號或密碼不正確。','auth/user-not-found':'帳號或密碼不正確。','auth/invalid-email':'帳號格式不正確。','auth/too-many-requests':'嘗試次數太多，請稍後再試。','auth/network-request-failed':'未能連線，請檢查網絡。','auth/unauthorized-domain':'這個網址未加入 Firebase 登入網域。','auth/operation-not-allowed':'這種登入方式未啟用。'})[e.code]||'登入失敗，請再試。';
  async function login(){
@@ -69,7 +84,7 @@ window.Together=(()=>{
  }
  function add(name,data){
   const {fs,db}=fb,u=state.user;
-  fs.addDoc(fs.collection(db,name),{...data,by:u.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請確認你仍在旅伴名單。'));
+  fs.addDoc(tcol(name),{...data,by:u.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請確認你仍在旅伴名單。'));
   toast(navigator.onLine?'已加入':'已加入，有網絡時會自動同步');
  }
  // Receipt photos are shrunk on the phone, read by the scanReceipt Cloud Function, then only fill the form.
@@ -143,7 +158,7 @@ window.Together=(()=>{
   keys.forEach(k=>picked.delete(k));
   const {fs,db}=fb;
   const src=group.map(d=>jobs.find(j=>j.id===d.key)||{}),hashes=src.flatMap(j=>j.hashes||[]).slice(0,4),stored=src.flatMap(j=>j.photos||[]);
-  fs.addDoc(fs.collection(db,'receiptJobs'),{images,hashes,file:group.map(d=>d.file).join(' + ').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()})
+  fs.addDoc(tcol('receiptJobs'),{images,hashes,file:group.map(d=>d.file).join(' + ').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()})
    .then(ref=>{group.forEach(d=>{fs.deleteDoc(jobRef(d.key)).catch(()=>{});delete localEdits[d.key]});if(stored.length&&stored.length<=4)fs.updateDoc(ref,{photos:stored}).catch(()=>{})},()=>toast('未能合併，請再試。'));
   toast('已合併，正在重新分析');
  }
@@ -193,7 +208,7 @@ window.Together=(()=>{
   for(const [i,f] of files.entries()){
    try{
     let images=await receiptImages(f);if(images.join('').length>850000)images=[await shrink(f,1400,.7)];
-    const ref=fs.doc(fs.collection(db,'receiptJobs'));
+    const ref=fs.doc(tcol('receiptJobs'));
     fs.setDoc(ref,{images,hashes:hashes[i]?[hashes[i]]:[],file:String(f.name||'相片').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{toast('未能上載收據，請確認你仍在旅伴名單。');console.error(e)});
     n++;
     bigCopy(f).then(b=>putPhotos(ref.id,[b])).then(photos=>fs.updateDoc(ref,{photos})).catch(e=>console.warn('receipt photo upload',e));
@@ -207,7 +222,7 @@ window.Together=(()=>{
   const {fs,db}=fb;let n=0;
   for(const f of files){
    try{let image=await shrink(f,1000,.72);if(image.length>380000)image=await shrink(f,800,.65);
-    fs.addDoc(fs.collection(db,'receiptJobs'),{images:[image],kind:'product',file:String(f.name||'相片').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{toast('未能上載相片，請確認你仍在旅伴名單。');console.error(e)});n++}
+    fs.addDoc(tcol('receiptJobs'),{images:[image],kind:'product',file:String(f.name||'相片').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{toast('未能上載相片，請確認你仍在旅伴名單。');console.error(e)});n++}
    catch(e){toast(`${f.name||'相片'}：${scanError(e)}`);console.error(e)}
   }
   if(n)toast(`已加入 ${n} 張物品相片，AI 會在背景辨識並加入清單`);
@@ -217,7 +232,7 @@ window.Together=(()=>{
   const busy=pj.filter(j=>j.status!=='failed').length;
   return `<div class="tg-drafts"><div class="tg-drafts-head"><b>${busy?`AI 辨識中 ${busy} 張`:'未能辨識的相片'}</b></div>${pj.map(j=>{const st=jobState(j),fail=st==='fail',retry=canRetry(j);return `<article class="tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta"><span class="badge">${fail?'未能辨識':STATUS[st]}</span><span>${esc(j.file)}</span></div>${fail?`<p class="note">${esc(j.error||'未能辨識。')}</p>`:'<div class="tg-progress tg-progress-busy"><div></div></div>'}${fail||retry?`<div class="links">${retry?`<button type="button" class="smallbtn" data-draft-retry="${esc(j.id)}">重試</button>`:''}<button type="button" class="smallbtn" data-draft-drop="${esc(j.id)}">捨棄</button></div>`:''}</article>`}).join('')}</div>`;
  }
- const jobRef=id=>fb.fs.doc(fb.db,'receiptJobs',id);
+ const jobRef=id=>tdoc('receiptJobs',id);
 
  async function addDraft(d,ask){
   const f=$('[data-tg-form="expense"]'),v=new FormData(f),split=v.getAll('split').map(String),amount=Number(d.amount);
@@ -234,18 +249,18 @@ window.Together=(()=>{
  function savePlace({place,fields,cats,lat,lng,mapsUrl}){
   const {fs,db}=fb,data={fields,cats,lat,lng,mapsUrl,deleted:false};
   if(place?.custom){update('places',place.overlayId,data);toast('已儲存')}
-  else if(place){fs.setDoc(fs.doc(db,'places',place.id),{...data,base:place.id,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請再試。'));toast('已儲存')}
+  else if(place){fs.setDoc(tdoc('places',place.id),{...data,base:place.id,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請再試。'));toast('已儲存')}
   else add('places',{...data,base:null});
  }
  function deletePlace(place){
   const {fs,db}=fb;
-  if(place.custom)return fs.deleteDoc(fs.doc(db,'places',place.overlayId)).catch(()=>toast('未能刪除，請再試。'));
-  fs.setDoc(fs.doc(db,'places',place.id),{base:place.id,fields:place.v.map(String),cats:place.cats,lat:null,lng:null,mapsUrl:'',deleted:true,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能刪除，請再試。'));
+  if(place.custom)return fs.deleteDoc(tdoc('places',place.overlayId)).catch(()=>toast('未能刪除，請再試。'));
+  fs.setDoc(tdoc('places',place.id),{base:place.id,fields:place.v.map(String),cats:place.cats,lat:null,lng:null,mapsUrl:'',deleted:true,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能刪除，請再試。'));
  }
  // Day plans: planDays/{day} holds the whole edited stop list for that day; deleting it restores the original.
  const planMap=()=>Object.fromEntries(state.planDays.map(d=>[Number(d.id),d]));
- function savePlanDay(day,stops){fb.fs.setDoc(fb.fs.doc(fb.db,'planDays',String(day)),{stops,by:state.user.uid,byName:me().name,at:Date.now()}).catch(()=>toast('未能儲存行程，請再試。'))}
- function resetPlanDay(day){fb.fs.deleteDoc(fb.fs.doc(fb.db,'planDays',String(day))).then(()=>toast('已還原原本行程'),()=>toast('未能還原，請再試。'))}
+ function savePlanDay(day,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,by:state.user.uid,byName:me().name,at:Date.now()}).catch(()=>toast('未能儲存行程，請再試。'))}
+ function resetPlanDay(day){fb.fs.deleteDoc(tdoc('planDays',String(day))).then(()=>toast('已還原原本行程'),()=>toast('未能還原，請再試。'))}
  // Favourites: members/{uid}.saved. The first time, seed with the old yellow Sheet records plus this device's stars.
  function syncFavorites(){
   const mine=state.members.find(m=>m.id===state.user?.uid);if(!mine||!started)return;
@@ -253,10 +268,10 @@ window.Together=(()=>{
   const seed=[...new Set([...T().places.filter(p=>p.marked).map(p=>p.id),...T().savedIds()])];
   saveFavorites(seed);T().setSaved(seed);
  }
- function saveFavorites(ids){fb.fs.setDoc(fb.fs.doc(fb.db,'members',state.user.uid),{saved:ids.slice(0,500)},{merge:true}).catch(()=>toast('未能同步收藏。'))}
- function restorePlace(id){fb.fs.deleteDoc(fb.fs.doc(fb.db,'places',id)).catch(()=>toast('未能還原，請再試。'))}
- function update(name,id,data){fb.fs.updateDoc(fb.fs.doc(fb.db,name,id),data).catch(()=>toast('未能儲存，請再試。'))}
- function remove(name,id){if(!confirm(name==='expenses'?'確定刪除？所有旅伴都會看不到這項，收據相片亦會一併刪除。':'確定刪除？所有旅伴都會看不到這項。'))return;const paths=name==='expenses'?state.expenses.find(e=>e.id===id)?.receipts:null;fb.fs.deleteDoc(fb.fs.doc(fb.db,name,id)).then(()=>dropPhotos(paths),()=>toast('未能刪除，請再試。'))}
+ function saveFavorites(ids){fb.fs.setDoc(tdoc('members',state.user.uid),{saved:ids.slice(0,500)},{merge:true}).catch(()=>toast('未能同步收藏。'))}
+ function restorePlace(id){fb.fs.deleteDoc(tdoc('places',id)).catch(()=>toast('未能還原，請再試。'))}
+ function update(name,id,data){fb.fs.updateDoc(tdoc(name,id),data).catch(()=>toast('未能儲存，請再試。'))}
+ function remove(name,id){if(!confirm(name==='expenses'?'確定刪除？所有旅伴都會看不到這項，收據相片亦會一併刪除。':'確定刪除？所有旅伴都會看不到這項。'))return;const paths=name==='expenses'?state.expenses.find(e=>e.id===id)?.receipts:null;fb.fs.deleteDoc(tdoc(name,id)).then(()=>dropPhotos(paths),()=>toast('未能刪除，請再試。'))}
  // Receipt viewer: photos are read with the companion's login (getBlob), never through public links.
  async function showReceipts(id){
   const e=state.expenses.find(x=>x.id===id);if(!e?.receipts?.length)return;
@@ -288,7 +303,8 @@ window.Together=(()=>{
   return `<section class="panel tg-summary"><h3>分帳結算</h3>${cs.map(c=>{const total=state.expenses.filter(e=>e.currency===c).reduce((t,e)=>t+S.toMinor(e.amount,c),0),moves=S.settle(bal[c]);return `<div class="tg-currency"><div class="eyebrow">${c} · 合共 ${esc(S.format(total,c))}</div>${moves.length?moves.map(m=>`<p><b>${esc(nameOf(m.from))}</b> 要畀 <b>${esc(nameOf(m.to))}</b> ${esc(S.format(m.amount,c))}</p>`).join(''):'<p>已經清數。</p>'}</div>`}).join('')}<p class="note">日圓和港幣分開計算，不作匯率換算。</p></section>`;
  }
 
- function statusBar(){const online=navigator.onLine,pending=['notes','expenses','shopping'].reduce((t,k)=>t+state[k].filter(x=>x.pending).length,0);return `<span>已登入：<b>${esc(me().name)}</b></span><span class="tg-pending-${online?'on':'off'}">${online?pending?`${pending} 項同步中…`:'已同步':'離線中 · 修改會在有網絡時同步'}</span><button class="smallbtn" data-tg="logout">登出</button>`}
+ const tripSwitch=()=>state.trips?.length>1?`<select class="trip-switch" data-trip-switch aria-label="切換旅程">${state.trips.map(t=>`<option value="${esc(t.id)}"${t.id===tripId?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`:`<span class="trip-name">${esc(state.trip?.name||'')}</span>`;
+ function statusBar(){const online=navigator.onLine,pending=['notes','expenses','shopping'].reduce((t,k)=>t+state[k].filter(x=>x.pending).length,0);return `${tripSwitch()}<span>已登入：<b>${esc(me().name)}</b></span><span class="tg-pending-${online?'on':'off'}">${online?pending?`${pending} 項同步中…`:'已同步':'離線中 · 修改會在有網絡時同步'}</span><button class="smallbtn" data-tg="logout">登出</button>`}
  function lists(){
   if(state.tab==='notes')return state.notes.length?state.notes.map(noteItem).join(''):'<div class="empty"><h2>還沒有筆記</h2><p>寫下提醒、想吃的東西或任何旅程點滴。</p></div>';
   if(state.tab==='expenses')return summary()+(state.expenses.length?state.expenses.map(expenseItem).join(''):'<div class="empty"><h2>還沒有開支</h2><p>每筆開支記下誰付款、分給誰，網站會計算誰要畀誰。</p></div>');
@@ -303,7 +319,7 @@ window.Together=(()=>{
   if(['idle','loading','checking'].includes(s))return {sig:s,shell:'<div class="empty"><h2>正在連接…</h2><p>第一次載入需要數秒。</p></div>'};
   if(s==='error')return {sig:s+state.error,shell:`<div class="empty"><h2>${esc(state.error||'發生錯誤')}</h2><button class="action primary" data-tg="retry">再試</button></div>`};
   if(s==='signedOut')return {sig:s,shell:`<section class="panel tg-login"><h2>旅伴專用</h2><p>行程、地點、住宿、筆記和開支只限旅伴登入查看，不會公開在網站上。</p><form class="tg-form" data-tg-form="login"><label>帳號<input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="60" required></label><label>密碼<input name="password" type="password" autocomplete="current-password" required></label><button type="submit" class="locate-button">登入</button></form><div class="tg-or">或</div><button class="action tg-google" data-tg="login">用 Google 帳戶登入</button><p class="note">這部手機會記住登入狀態，之後離線也可以查看。</p></section>`};
-  if(s==='denied')return {sig:s+state.user?.uid,shell:`<section class="panel tg-login"><h2>這個帳戶未在旅伴名單</h2><p>你已用 <b>${esc(state.user?.email)}</b> 登入。請負責人把這個電郵加入 Firebase 的旅伴名單，然後按再試。</p><div class="links"><button class="action primary" data-tg="retry">再試</button><button class="action" data-tg="logout">登出／換帳戶</button></div></section>`};
+  if(s==='denied')return {sig:s+state.user?.uid,shell:`<section class="panel tg-login"><h2>這個帳戶未加入任何旅程</h2><p>你已用 <b>${esc(state.user?.email)}</b> 登入，但未加入任何旅程。請旅程負責人把你加入旅伴名單，然後按再試。</p><div class="links"><button class="action primary" data-tg="retry">再試</button><button class="action" data-tg="logout">登出／換帳戶</button></div></section>`};
   if(!started)return state.empty?{sig:'empty',shell:'<div class="empty"><h2>暫時未有旅程資料</h2><p>請負責人先上載旅程資料。</p></div>'}:{sig:'trip',shell:'<div class="empty"><h2>正在載入旅程資料…</h2></div>'};
   const sig=['ready',state.tab,state.day,state.user.uid,people().map(p=>p.id+p.name).join()].join('|');
   return {sig,shell:`<div class="tg-status" data-tg-live="status"></div><div class="chips" role="tablist">${Object.entries(tabs).map(([k,v])=>`<button class="chip ${k===state.tab?'active':''}" data-tg-tab="${k}" aria-pressed="${k===state.tab}">${v}</button>`).join('')}</div>${forms()}<div class="tg-list" data-tg-live="list"></div>`,live:{status:statusBar(),list:lists()}};
@@ -371,8 +387,8 @@ window.Together=(()=>{
   try{
    const call=await callable('lookupPlace',45000);
    for(const x of todo){
-    try{const r=(await call({query:x.place})).data;await fb.fs.updateDoc(fb.fs.doc(fb.db,'shopping',x.id),{lat:Number.isFinite(r.lat)?r.lat:null,lng:Number.isFinite(r.lng)?r.lng:null,geoFor:x.place})}
-    catch(e){if(String(e?.code||'').endsWith('not-found'))await fb.fs.updateDoc(fb.fs.doc(fb.db,'shopping',x.id),{lat:null,lng:null,geoFor:x.place}).catch(()=>{});else{console.error('geocode',e);break}}
+    try{const r=(await call({query:x.place})).data;await fb.fs.updateDoc(tdoc('shopping',x.id),{lat:Number.isFinite(r.lat)?r.lat:null,lng:Number.isFinite(r.lng)?r.lng:null,geoFor:x.place})}
+    catch(e){if(String(e?.code||'').endsWith('not-found'))await fb.fs.updateDoc(tdoc('shopping',x.id),{lat:null,lng:null,geoFor:x.place}).catch(()=>{});else{console.error('geocode',e);break}}
    }
   }finally{geocoding=false}
  }
@@ -397,7 +413,7 @@ window.Together=(()=>{
  function fillStatus(text,busy){const i=$('#shopFillInfo'),b=$('#shopFillBar');if(i)i.textContent=text;if(b)b.hidden=!busy}
  function requestFill(image){
   if(!navigator.onLine)return fillStatus('離線中，AI 未能辨識，請手動輸入。',false);
-  const {fs,db}=fb,ref=fs.doc(fs.collection(db,'receiptJobs'));fillJob=ref.id;
+  const {fs,db}=fb,ref=fs.doc(tcol('receiptJobs'));fillJob=ref.id;
   fs.setDoc(ref,{images:[image],kind:'productFill',file:'購物表格相片',status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{fillJob=null;fillStatus('未能上載相片給 AI，請手動輸入。',false);console.error(e)});
   fillStatus('AI 正在辨識物品…',true);
  }
@@ -413,7 +429,7 @@ window.Together=(()=>{
  }
  function paint(el,{sig,shell,live={}}){if(el.dataset.sig!==sig){el.innerHTML=shell;el.dataset.sig=sig}for(const [k,v] of Object.entries(live)){const l=el.querySelector(`[data-tg-live="${k}"]`);if(l)l.innerHTML=v}}
  function refresh(){
-  if(!started&&!$('#tgPage'))$('#app').innerHTML=header('KYUSHU 2026','九州口袋旅伴')+'<div id="tgPage"></div>';
+  if(!started&&!$('#tgPage'))$('#app').innerHTML=header('POCKET TRAVEL','口袋旅伴')+'<div id="tgPage"></div>';
   const p=$('#tgPage');if(p)paint(p,page());
   const box=$('#tgDrafts');if(box&&!box.childElementCount&&jobs.length)renderDrafts();
   const sp=$('#shopPage');if(sp)paint(sp,shopPage());
@@ -461,7 +477,7 @@ window.Together=(()=>{
   if(d.receipts)showReceipts(d.receipts);
   if(d.tg==='itemAdd'){$('#tgItemRows').insertAdjacentHTML('beforeend',itemRow());$('#tgItemRows').lastElementChild.querySelector('input').focus()}
   if(d.tg==='itemDel'){const rows=$('#tgItemRows');el.closest('.tg-line-row').remove();if(!rows.children.length)rows.innerHTML=itemRow()}
-  if(d.tg==='retry'){if(fb&&state.user){state.status='checking';refresh();listen()}else load().catch(()=>{})}
+  if(d.tg==='retry'){if(fb&&state.user){state.status='checking';refresh();chooseTrip()}else load().catch(()=>{})}
   if(d.tgTab){state.tab=d.tgTab;refresh()}
   if(d.tgDel){const [name,id]=d.tgDel.split(':');remove(name,id)}
   if(d.tg==='shopPhoto')$('#shopPhotoInput')?.click();
@@ -481,6 +497,7 @@ window.Together=(()=>{
  const placeField=t=>t.name==='place'&&t.closest('[data-tg-form="shop"]');
  document.addEventListener('change',e=>{if(placeField(e.target))placeFromMaps(e.target)});
  document.addEventListener('paste',e=>{if(placeField(e.target))setTimeout(()=>placeFromMaps(e.target))});
+ document.addEventListener('change',e=>{if(e.target.dataset?.tripSwitch!==undefined)switchTrip(e.target.value)});
  document.addEventListener('input',e=>{if(e.target.id==='shopSearch'){state.shopSearch=e.target.value;const sp=$('#shopPage');if(sp)paint(sp,shopPage())}});
  document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset?.df!==undefined)e.preventDefault()});
  // Draft edits are kept locally while typing and saved to the job when a field is left, so they survive reloads.

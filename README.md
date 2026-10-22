@@ -12,7 +12,7 @@
 
 ## 更新旅程資料
 
-旅程資料（Sheet 快照、地點座標、建議行程、酒店資料、探索頁小區 `content.areas`）放在 Firestore 的 `trip/data`、`trip/geo`、`trip/content`。資料檔放在 `private/`（已在 `.gitignore`），不要 commit。
+旅程資料（Sheet 快照、地點座標、建議行程、酒店資料、探索頁小區 `content.areas`）放在 Firestore 的 `trips/{tripId}/trip/data`、`…/geo`、`…/content`。資料檔放在 `private/`（已在 `.gitignore`），不要 commit。
 
 ```sh
 gcloud auth login                                     # 用 Firebase 專案擁有者的 Google 帳戶
@@ -24,6 +24,10 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 探索頁的小區按座標分配到同一區域內最近的小區中心（6 公里內），沒有座標的地點用地址關鍵字（`kw`）判斷；新增地點會自動分區。
 
 上載前會檢查航班資料只含公開欄位。旅伴重新整理網頁後就會看到新資料。Google Sheet 與 Firestore 不會自動同步。
+
+## 旅程
+
+網站支援多個旅程：每個旅程的資料都放在 Firestore `trips/{tripId}/…`（例如 `trips/fukuoka-2026`），`trips/{tripId}.members` 是該旅程旅伴的電郵（小寫）。登入後會開啟上次使用的旅程，有多個旅程時可在「共用」頁頂切換。
 
 ## 旅伴共用（Firebase）
 
@@ -53,7 +57,7 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 ```sh
 gcloud secrets versions add deepseek-api-key --data-file=-   # 貼上 DeepSeek API key，按 Enter 再按 Ctrl-D
 cd functions && npm install
-gcloud functions deploy processReceipt --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=processReceipt --trigger-location=asia-northeast1 --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' --trigger-event-filters-path-pattern=document='receiptJobs/{id}' --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --max-instances=3 --timeout=180s
+gcloud functions deploy processReceipt --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=processReceipt --trigger-location=asia-northeast1 --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' --trigger-event-filters-path-pattern=document='trips/{trip}/receiptJobs/{id}' --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --max-instances=3 --timeout=180s
 gcloud functions deploy lookupPlace --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=lookupPlace --trigger-http --allow-unauthenticated --set-secrets=PLACES_API_KEY=places-api-key:latest --max-instances=3
 ```
 - `firestore.rules`：資料庫權限規則。

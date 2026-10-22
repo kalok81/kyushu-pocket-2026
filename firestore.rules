@@ -1,10 +1,11 @@
 rules_version = '2';
-// Only Google accounts listed in config/members (field "emails", an array) can read or write.
-// The member emails live in Firestore, not in this public repository.
+// Everything lives under trips/{t}; only that trip's companions (trips/{t}.members, lower-case emails) can read or
+// write it. Emails live in Firestore, not in this public repository.
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
-    function isMember() {
+    // Site allowlist (who may sign in and use AI tools); each trip has its own member list.
+    function siteMember() {
       return signedIn() && request.auth.token.email.lower()
         in get(/databases/$(database)/documents/config/members).data.emails;
     }
@@ -29,90 +30,101 @@ service cloud.firestore {
 
     match /config/{id} { allow read, write: if false; }
 
-    // Trip data is uploaded with scripts/trip-data.mjs using the project owner's Google login.
-    match /trip/{id} { allow read: if isMember(); allow write: if false; }
+    // Trips: trips/{t}.members holds the lower-case emails of that trip's companions. Trip documents are
+    // created and changed by the owner's tools for now; companions read their own trips (array-contains query).
+    match /trips/{t} {
+      function tripMember() {
+        return signedIn() && request.auth.token.email.lower() in get(/databases/$(database)/documents/trips/$(t)).data.members;
+      }
+      allow read: if signedIn() && request.auth.token.email.lower() in resource.data.members;
+      allow write: if false;
 
-    match /members/{uid} {
-      allow read: if isMember();
-      allow write: if isMember() && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(['name', 'email', 'at', 'saved'])
-        && (!('saved' in request.resource.data) || (request.resource.data.saved is list && request.resource.data.saved.size() <= 500))
-        && text(request.resource.data.name, 40) && request.resource.data.email == request.auth.token.email;
-    }
-    match /notes/{id} {
-      allow read, delete: if isMember();
-      allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['text', 'day', 'placeId', 'placeName', 'by', 'byName', 'at', 'createdAt'])
-        && text(request.resource.data.text, 1000) && request.resource.data.text.size() > 0
-        && (request.resource.data.day == null || day(request.resource.data.day))
-        && (request.resource.data.placeId == null || text(request.resource.data.placeId, 10))
-        && (request.resource.data.placeName == null || text(request.resource.data.placeName, 120));
-    }
-    match /expenses/{id} {
-      allow read, delete: if isMember();
-      allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'items', 'receipts', 'receiptHashes', 'by', 'byName', 'at', 'createdAt'])
-        && (!('receipts' in request.resource.data) || (request.resource.data.receipts is list && request.resource.data.receipts.size() <= 4))
-        && (!('receiptHashes' in request.resource.data) || (request.resource.data.receiptHashes is list && request.resource.data.receiptHashes.size() <= 4))
-        && (!('items' in request.resource.data) || (request.resource.data.items is list && request.resource.data.items.size() <= 30))
-        && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
-        && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 10000000
-        && request.resource.data.currency in ['JPY', 'HKD']
-        && request.resource.data.paidBy is string
-        && request.resource.data.split is list && request.resource.data.split.size() > 0 && request.resource.data.split.size() <= 20
-        && day(request.resource.data.day);
-    }
-    function placeValid(d) {
-      return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'mapsUrl', 'deleted', 'by', 'byName', 'at', 'createdAt'])
-        && (d.base == null || text(d.base, 20)) && d.fields is list && d.fields.size() == 12
-        && d.cats is list && d.cats.size() <= 4
-        && (d.lat == null || d.lat is number) && (d.lng == null || d.lng is number)
-        && text(d.mapsUrl, 500) && d.deleted is bool;
-    }
-    // Companion edits to 探索: new places, or edits/deletions keyed by the Sheet place id.
-    match /places/{id} {
-      allow read, delete: if isMember();
-      allow create: if isMember() && owned() && placeValid(request.resource.data)
-        && (request.resource.data.base == null || request.resource.data.base == id);
-      allow update: if isMember() && placeValid(request.resource.data) && request.resource.data.base == resource.data.base;
-    }
-    match /shopping/{id} {
-      allow read, delete: if isMember();
-      allow create: if isMember() && owned() && shopValid(request.resource.data);
-      allow update: if isMember() && shopValid(request.resource.data)
-        && request.resource.data.by == resource.data.by && request.resource.data.at == resource.data.at
-        && request.resource.data.createdAt == resource.data.createdAt;
-    }
-    // Receipts and product photos read in the background by the processReceipt function; each companion sees only their own.
-    match /receiptJobs/{id} {
-      allow read, delete: if isMember() && resource.data.by == request.auth.uid;
-      allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['image', 'images', 'hashes', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
-        && (!('hashes' in request.resource.data) || (request.resource.data.hashes is list && request.resource.data.hashes.size() <= 4))
-        && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
-        && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill'])
-        && (('images' in request.resource.data && request.resource.data.images is list
-              && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
-            || text(request.resource.data.image, 900000));
-      allow update: if isMember() && resource.data.by == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries', 'photos'])
-        && (request.resource.data.status == resource.data.status || request.resource.data.status == 'pending');
-    }
-    // Edited day plans: the whole stop list for one day (1-7); deleting the document restores the original plan.
-    match /planDays/{day} {
-      allow read, delete: if isMember();
-      allow write: if isMember() && day in ['1', '2', '3', '4', '5', '6', '7']
-        && request.resource.data.keys().hasOnly(['stops', 'by', 'byName', 'at'])
-        && request.resource.data.stops is list && request.resource.data.stops.size() <= 40
-        && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
-    }
-    match /stops/{id} {
-      allow read, delete: if isMember();
-      allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['day', 'time', 'title', 'detail', 'by', 'byName', 'at', 'createdAt'])
-        && day(request.resource.data.day) && text(request.resource.data.time, 20)
-        && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
-        && text(request.resource.data.detail, 500);
+
+      // Trip data is uploaded with scripts/trip-data.mjs using the project owner's Google login.
+      match /trip/{id} { allow read: if tripMember(); allow write: if false; }
+
+      match /members/{uid} {
+        allow read: if tripMember();
+        allow write: if tripMember() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['name', 'email', 'at', 'saved'])
+          && (!('saved' in request.resource.data) || (request.resource.data.saved is list && request.resource.data.saved.size() <= 500))
+          && text(request.resource.data.name, 40) && request.resource.data.email == request.auth.token.email;
+      }
+      match /notes/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned()
+          && request.resource.data.keys().hasOnly(['text', 'day', 'placeId', 'placeName', 'by', 'byName', 'at', 'createdAt'])
+          && text(request.resource.data.text, 1000) && request.resource.data.text.size() > 0
+          && (request.resource.data.day == null || day(request.resource.data.day))
+          && (request.resource.data.placeId == null || text(request.resource.data.placeId, 10))
+          && (request.resource.data.placeName == null || text(request.resource.data.placeName, 120));
+      }
+      match /expenses/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned()
+          && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'items', 'receipts', 'receiptHashes', 'by', 'byName', 'at', 'createdAt'])
+          && (!('receipts' in request.resource.data) || (request.resource.data.receipts is list && request.resource.data.receipts.size() <= 4))
+          && (!('receiptHashes' in request.resource.data) || (request.resource.data.receiptHashes is list && request.resource.data.receiptHashes.size() <= 4))
+          && (!('items' in request.resource.data) || (request.resource.data.items is list && request.resource.data.items.size() <= 30))
+          && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
+          && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 10000000
+          && request.resource.data.currency in ['JPY', 'HKD']
+          && request.resource.data.paidBy is string
+          && request.resource.data.split is list && request.resource.data.split.size() > 0 && request.resource.data.split.size() <= 20
+          && day(request.resource.data.day);
+      }
+      function placeValid(d) {
+        return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'mapsUrl', 'deleted', 'by', 'byName', 'at', 'createdAt'])
+          && (d.base == null || text(d.base, 20)) && d.fields is list && d.fields.size() == 12
+          && d.cats is list && d.cats.size() <= 4
+          && (d.lat == null || d.lat is number) && (d.lng == null || d.lng is number)
+          && text(d.mapsUrl, 500) && d.deleted is bool;
+      }
+      // Companion edits to 探索: new places, or edits/deletions keyed by the Sheet place id.
+      match /places/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned() && placeValid(request.resource.data)
+          && (request.resource.data.base == null || request.resource.data.base == id);
+        allow update: if tripMember() && placeValid(request.resource.data) && request.resource.data.base == resource.data.base;
+      }
+      match /shopping/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned() && shopValid(request.resource.data);
+        allow update: if tripMember() && shopValid(request.resource.data)
+          && request.resource.data.by == resource.data.by && request.resource.data.at == resource.data.at
+          && request.resource.data.createdAt == resource.data.createdAt;
+      }
+      // Receipts and product photos read in the background by the processReceipt function; each companion sees only their own.
+      match /receiptJobs/{id} {
+        allow read, delete: if tripMember() && resource.data.by == request.auth.uid;
+        allow create: if tripMember() && owned()
+          && request.resource.data.keys().hasOnly(['image', 'images', 'hashes', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+          && (!('hashes' in request.resource.data) || (request.resource.data.hashes is list && request.resource.data.hashes.size() <= 4))
+          && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
+          && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill'])
+          && (('images' in request.resource.data && request.resource.data.images is list
+                && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
+              || text(request.resource.data.image, 900000));
+        allow update: if tripMember() && resource.data.by == request.auth.uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries', 'photos'])
+          && (request.resource.data.status == resource.data.status || request.resource.data.status == 'pending');
+      }
+      // Edited day plans: the whole stop list for one day (1-7); deleting the document restores the original plan.
+      match /planDays/{day} {
+        allow read, delete: if tripMember();
+        allow write: if tripMember() && day in ['1', '2', '3', '4', '5', '6', '7']
+          && request.resource.data.keys().hasOnly(['stops', 'by', 'byName', 'at'])
+          && request.resource.data.stops is list && request.resource.data.stops.size() <= 40
+          && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
+      }
+      match /stops/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned()
+          && request.resource.data.keys().hasOnly(['day', 'time', 'title', 'detail', 'by', 'byName', 'at', 'createdAt'])
+          && day(request.resource.data.day) && text(request.resource.data.time, 20)
+          && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
+          && text(request.resource.data.detail, 500);
+      }
     }
   }
 }

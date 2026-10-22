@@ -92,11 +92,13 @@ const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.tes
 // Background receipts and product photos (kind: 'product'): the page stores shrunk photos in receiptJobs (Firestore keeps unsent writes on the
 // phone and retries after a reload), and this trigger reads it server-side even if the page was closed.
 // Only members can create jobs (firestore.rules). Photos are removed when the page adds or discards the job.
-// Deployed with gcloud as a plain CloudEvent function (Eventarc, Firestore document.written on receiptJobs/{id}).
+// Deployed with gcloud as a plain CloudEvent function (Eventarc, Firestore document.written on trips/{trip}/receiptJobs/{id}).
 // The event subject names the document; the job is read fresh here, so the event payload encoding does not matter.
 cloudEvent('processReceipt', async event => {
  const path = String(event.subject || '').replace(/^documents\//, '');
- if (!/^receiptJobs\/[A-Za-z0-9]+$/.test(path)) return;
+ const m = path.match(/^trips\/([A-Za-z0-9_-]+)\/receiptJobs\/[A-Za-z0-9]+$/);
+ if (!m) return;
+ const trip = m[1];
  const ref = getFirestore().doc(path);
  const job = await getFirestore().runTransaction(async tx => {
   const snap = await tx.get(ref);
@@ -120,7 +122,7 @@ cloudEvent('processReceipt', async event => {
    const { confidence: _confidence, ...item } = cleanProduct(await askDeepSeek(PRODUCT_PROMPT, images));
    if (!item.name) throw new HttpsError('not-found', '認不出物品，可以重試或手動輸入。');
    const db = getFirestore();
-   await db.collection('shopping').add({ ...item, photo: images[0].length <= 400000 ? images[0] : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
+   await db.collection(`trips/${trip}/shopping`).add({ ...item, photo: images[0].length <= 400000 ? images[0] : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
    await ref.delete();
    return;
   }

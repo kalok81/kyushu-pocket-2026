@@ -1,4 +1,4 @@
-// Upload or download the private trip data kept in Firestore (trip/data, trip/geo, trip/content).
+// Upload or download a trip's private data kept in Firestore (trips/{trip}/trip/data, geo, content).
 // Uses your own Google login: run `gcloud auth login` first. Keep the JSON file out of this repository.
 //   node scripts/trip-data.mjs check    private/trip.json
 //   node scripts/trip-data.mjs upload   private/trip.json
@@ -8,7 +8,8 @@ import { execFileSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 
 const PROJECT = 'kyushu-2e307', DOCS = ['data', 'geo', 'content'];
-const base = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/trip/`;
+const TRIP = process.env.TRIP || 'fukuoka-2026';
+const base = `https://firestore.googleapis.com/v1/projects/${PROJECT}/databases/(default)/documents/trips/${TRIP}/trip/`;
 const [mode, file] = process.argv.slice(2);
 if (!['check', 'upload', 'download'].includes(mode) || !file) {
  console.error('Usage: node scripts/trip-data.mjs check|upload|download <file.json>');process.exit(1);
