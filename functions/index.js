@@ -331,3 +331,61 @@ export const manageTrip = onCall({ region: 'asia-northeast1', enforceAppCheck: t
  }
  throw new HttpsError('invalid-argument', '未知的操作。');
 });
+
+// Route suggestions between two plan stops (Routes API): public transport, walking or driving, with alternatives
+// summarised for the plan (lines, stations, times, fare). Times are the destination's local time.
+const ZONES = { JP: 'Asia/Tokyo', KR: 'Asia/Seoul', TW: 'Asia/Taipei', HK: 'Asia/Hong_Kong', MO: 'Asia/Macau', CN: 'Asia/Shanghai', TH: 'Asia/Bangkok', SG: 'Asia/Singapore', MY: 'Asia/Kuala_Lumpur', VN: 'Asia/Ho_Chi_Minh', PH: 'Asia/Manila', ID: 'Asia/Jakarta', GB: 'Europe/London', FR: 'Europe/Paris', DE: 'Europe/Berlin', IT: 'Europe/Rome', ES: 'Europe/Madrid', NL: 'Europe/Amsterdam', CH: 'Europe/Zurich', US: 'America/New_York', CA: 'America/Toronto', AU: 'Australia/Sydney', NZ: 'Pacific/Auckland' };
+// The UTC instant of a wall-clock time ('YYYY-MM-DDTHH:mm') in a time zone.
+function zonedToUtc(local, zone) {
+ const guess = Date.parse(local + ':00Z');
+ const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(guess)).map(x => [x.type, x.value]));
+ return new Date(guess - (Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`) - guess));
+}
+const point = v => v && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Math.abs(v.lat) <= 90 && Math.abs(v.lng) <= 180
+ ? { location: { latLng: { latitude: v.lat, longitude: v.lng } } }
+ : typeof v?.address === 'string' && v.address.trim() ? { address: v.address.trim().slice(0, 200) } : null;
+const mins = d => Math.max(0, Math.round(parseInt(d || '0', 10) / 60));
+const ROUTE_FIELDS = ['duration', 'distanceMeters', 'travelAdvisory.transitFare', 'legs.steps.travelMode', 'legs.steps.staticDuration', 'legs.steps.distanceMeters', 'legs.steps.transitDetails'].map(f => 'routes.' + f).join(',');
+
+export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
+ if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
+ if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
+ const d = req.data || {}, origin = point(d.origin), destination = point(d.destination);
+ if (!origin || !destination) throw new HttpsError('invalid-argument', '起點或終點沒有位置資料。');
+ const mode = ['TRANSIT', 'WALK', 'DRIVE'].includes(d.mode) ? d.mode : 'TRANSIT';
+ const country = typeof d.country === 'string' && /^[A-Z]{2}$/.test(d.country) ? d.country : '';
+ const zone = ZONES[country] || 'UTC';
+ await useQuota(req.auth.uid, 'maps');
+ // Timetables only reach a few weeks ahead: for a past or far-off date, use the same weekday and time next week.
+ let when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.time || '') ? zonedToUtc(d.time, zone) : null, estimated = false;
+ if (when && (when < Date.now() + 10 * 60e3 || when > Date.now() + 60 * 864e5)) {
+  const days = Math.ceil((Date.now() + 864e5 - when) / (7 * 864e5)) * 7;
+  when = new Date(when.getTime() + days * 864e5); estimated = true;
+ }
+ const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': PLACES_API_KEY.value().trim(), 'X-Goog-FieldMask': ROUTE_FIELDS },
+  body: JSON.stringify({ origin, destination, travelMode: mode, computeAlternativeRoutes: mode !== 'WALK', languageCode: langFor(country), units: 'METRIC', ...(country ? { regionCode: country } : {}), ...(mode === 'TRANSIT' && when ? { departureTime: when.toISOString() } : {}) }),
+  signal: AbortSignal.timeout(20_000),
+ });
+ if (!res.ok) { console.error('Routes request failed', res.status, (await res.text()).slice(0, 500)); throw new HttpsError('unavailable', '未能查詢路線，請稍後再試。'); }
+ const routes = (await res.json()).routes || [];
+ const clock = t => t ? new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t)) : '';
+ const options = routes.slice(0, 6).map(r => {
+  const leg = r.legs?.[0] || {}, steps = [];
+  for (const s of leg.steps || []) {
+   if (s.travelMode === 'TRANSIT' && s.transitDetails) {
+    const t = s.transitDetails, line = t.transitLine || {}, sd = t.stopDetails || {};
+    steps.push({ mode: 'TRANSIT', vehicle: line.vehicle?.type || '', line: (line.nameShort || line.name || line.vehicle?.name?.text || '').slice(0, 60), headsign: (t.headsign || '').slice(0, 60), from: (sd.departureStop?.name || '').slice(0, 60), to: (sd.arrivalStop?.name || '').slice(0, 60), stops: t.stopCount || 0, depart: clock(sd.departureTime), arrive: clock(sd.arrivalTime), minutes: mins(s.staticDuration) });
+   } else {
+    const m = mins(s.staticDuration), last = steps.at(-1);
+    if (last && last.mode === s.travelMode) { last.minutes += m; last.meters += s.distanceMeters || 0; } else steps.push({ mode: s.travelMode || mode, minutes: m, meters: s.distanceMeters || 0 });
+   }
+  }
+  const fare = r.travelAdvisory?.transitFare;
+  return { minutes: mins(r.duration), meters: r.distanceMeters || 0, fare: fare?.currencyCode ? { currency: fare.currencyCode, amount: Number(fare.units || 0) + (fare.nanos || 0) / 1e9 } : null, steps: steps.filter(s => s.mode === 'TRANSIT' || s.minutes > 0) };
+ });
+ // Alternatives that differ only in departure time are the same way to go: keep the first of each.
+ const seen = new Set(), unique = options.filter(o => { const k = o.steps.map(x => x.mode === 'TRANSIT' ? `${x.line}|${x.from}|${x.to}` : x.mode).join('>'); return !seen.has(k) && seen.add(k); });
+ return { options: unique.slice(0, 4), estimated, when: when ? when.toISOString() : null };
+});

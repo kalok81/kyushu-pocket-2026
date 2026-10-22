@@ -286,6 +286,7 @@ window.Together=(()=>{
   add('expenses',{...exp,...(receipts.length?{receipts:receipts.slice(0,4)}:{}),...(job.hashes?.length?{receiptHashes:job.hashes.slice(0,4)}:{})});fb.fs.deleteDoc(jobRef(d.key)).catch(()=>{});jobs=jobs.filter(j=>j.id!==d.key);delete localEdits[d.key];return true;
  }
  // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.
+ async function suggestRoutes(data){if(!navigator.onLine)throw new Error('offline');return (await (await callable('suggestRoutes',45000))(data)).data}
  async function lookupPlace(url){if(!navigator.onLine)throw new Error('offline');return (await (await callable('lookupPlace',45000))({url,country:state.meta?.country||''})).data}
  function savePlace({place,fields,cats,lat,lng,points=[],mapsUrl}){
   const {fs,db}=fb,data={fields,cats,lat,lng,points,mapsUrl,deleted:false};
@@ -688,5 +689,5 @@ window.Together=(()=>{
  addEventListener('online',()=>{refresh();renderDrafts()});addEventListener('offline',()=>{refresh();renderDrafts()});
  setInterval(()=>{if(jobs.some(j=>!['done','failed'].includes(j.status)))renderDrafts()},30000);
  load().catch(()=>{});
- return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,lists:tripLists,saveItem,removeItem,setDayLabel,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
+ return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,lists:tripLists,saveItem,removeItem,setDayLabel,lookupPlace,suggestRoutes,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
 })();

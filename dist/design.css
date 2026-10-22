@@ -169,3 +169,11 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
  .stop-group:before{left:0}
  .stop-group:after{left:-4px;top:0}
 }
+
+/* ---- Route suggestions ---- */
+.route-results{display:grid;gap:10px;margin:6px 0 14px}
+.route-option{border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;background:var(--card);box-shadow:var(--shadow-sm)}
+.route-option.picked{border-color:var(--primary);box-shadow:0 0 0 2px var(--secondary)}
+.route-head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:6px}.route-head b{font-size:16px}.route-head span{font-size:13px;color:var(--muted-foreground)}
+.route-steps{list-style:none;margin:0 0 10px;padding:0 0 0 12px;border-left:2px solid var(--secondary);display:grid;gap:6px;font-size:13px}
+.route-steps small{color:var(--muted-foreground)}.route-steps div{color:var(--muted-foreground);font-size:12px}
