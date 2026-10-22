@@ -193,3 +193,6 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
  .stop-link:before{left:0}
  .route-dot{margin-left:-23px}
 }
+.route-option.ai{border-style:dashed}
+.route-ai-head{padding:10px 12px;border-radius:var(--radius);background:var(--muted-bg)}.route-ai-head p{margin:4px 0 0;font-size:13px}
+.route-ai-wait{padding:12px;border:1px dashed var(--input);border-radius:var(--radius)}.route-ai-wait .note{margin:4px 0 0}

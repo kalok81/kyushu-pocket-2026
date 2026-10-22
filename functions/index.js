@@ -389,3 +389,37 @@ export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck
  const seen = new Set(), unique = options.filter(o => { const k = o.steps.map(x => x.mode === 'TRANSIT' ? `${x.line}|${x.from}|${x.to}` : x.mode).join('>'); return !seen.has(k) && seen.add(k); });
  return { options: unique.slice(0, 4), estimated, when: when ? when.toISOString() : null };
 });
+
+// AI route advice (DeepSeek) for a plan link, mainly where Google offers no public transport data (Japan).
+// Returns options in the same shape as suggestRoutes; times and fares are the model's estimates.
+const placeText = p => [p?.name, p?.address, Number.isFinite(p?.lat) && Number.isFinite(p?.lng) ? `(${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})` : ''].filter(Boolean).join(' ').slice(0, 300);
+export const aiRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 120, maxInstances: 3 }, async req => {
+ if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
+ if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
+ const d = req.data || {}, from = placeText(d.origin), to = placeText(d.destination);
+ if (!from || !to) throw new HttpsError('invalid-argument', '起點或終點沒有資料。');
+ await useQuota(req.auth.uid, 'ai');
+ const where = String(d.destination?.region || d.place || '').slice(0, 80), when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.time || '') ? d.time.replace('T', ' ') : '';
+ const cur = typeof d.currency === 'string' && /^[A-Z]{3}$/.test(d.currency) ? d.currency : 'JPY';
+ const prompt = `You are a local transport expert helping Hong Kong travellers${where ? ` in ${where}` : ''}.
+Suggest the practical ways to get from A to B${when ? ` leaving around ${when} local time` : ''}.
+A: ${from}
+B: ${to}
+Reply with JSON only:
+{"options": [{"title": string, "minutes": number, "fare": number or null, "steps": [{"mode": "WALK" | "TRANSIT" | "TAXI" | "DRIVE", "vehicle": "SUBWAY" | "HEAVY_RAIL" | "HIGH_SPEED_TRAIN" | "BUS" | "TRAM" | "MONORAIL" | "FERRY" | "" , "line": string, "from": string, "to": string, "minutes": number}], "note": string}], "advice": string}
+- Up to 4 options, best first: e.g. fastest, cheapest, fewest transfers, taxi if sensible. Only one option if there is clearly one sensible way (e.g. a short walk).
+- Use real line, station and stop names as written on local signs (Japanese in Japan, Korean in Korea); do not invent lines or stations. If unsure of a detail, say so in note.
+- minutes: door-to-door total including walking and typical waiting; steps' minutes add up roughly to it. Walking steps have empty line/from/to.
+- fare: per adult in ${cur} (IC card fare where it applies), null if unknown.
+- title, note and advice in Traditional Chinese as used in Hong Kong, short. note: what to watch out for (exit to use, transfer, last train, crowding). advice: one or two sentences comparing the options.`;
+ let r;
+ try { r = await askDeepSeek(prompt, []); } catch (e) { console.error('aiRoutes', e?.message); throw new HttpsError('unavailable', 'AI 暫時未能分析路線，請稍後再試。'); }
+ const num = (v, max) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? Math.round(v) : 0);
+ const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ const options = (Array.isArray(r?.options) ? r.options : []).slice(0, 4).map(o => ({
+  title: text(o.title, 40), minutes: num(o.minutes, 1440), note: text(o.note, 200),
+  fare: typeof o.fare === 'number' && o.fare > 0 && o.fare < 1e6 ? { currency: cur, amount: Math.round(o.fare * 100) / 100 } : null,
+  steps: (Array.isArray(o.steps) ? o.steps : []).slice(0, 10).map(s => ({ mode: ['WALK', 'TRANSIT', 'TAXI', 'DRIVE'].includes(s.mode) ? s.mode : 'TRANSIT', vehicle: text(s.vehicle, 30), line: text(s.line, 60), from: text(s.from, 60), to: text(s.to, 60), minutes: num(s.minutes, 1440) })),
+ })).filter(o => o.steps.length);
+ return { options, advice: text(r?.advice, 300) };
+});
