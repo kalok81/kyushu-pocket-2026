@@ -48,7 +48,7 @@ window.Together=(()=>{
  }
  function start(){
   const t=state.trip;if(started||!t.data||!t.geo||!t.content||!state.placesLoaded)return;
-  try{const data=JSON.parse(t.data),geo=JSON.parse(t.geo),content=JSON.parse(t.content);started=true;window.TRIP_GEO=geo;document.body.classList.remove('locked');window.startTrip(data,content);T().applyPlaceEdits(state.places);T().applyPlanEdits(planMap());syncFavorites()}
+  try{const data=JSON.parse(t.data),geo=JSON.parse(t.geo),content=JSON.parse(t.content);started=true;window.TRIP_GEO=geo;document.body.classList.remove('locked');window.startTrip(data,content);T().applyPlaceEdits(state.places);T().applyPlanEdits(planMap());syncFavorites();setTimeout(geocodeShopping,1500)}
   catch(e){started=false;state.status='error';state.error='旅程資料格式有誤，請重新上載。';refresh();console.error(e)}
  }
  async function logout(){
