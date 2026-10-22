@@ -248,9 +248,8 @@ window.Together=(()=>{
  }
  // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.
  async function lookupPlace(url){if(!navigator.onLine)throw new Error('offline');return (await (await callable('lookupPlace',45000))({url})).data}
- function savePlace({place,fields,cats,lat,lng,mapsUrl}){
-  const {fs,db}=fb,data={fields,cats,lat,lng,mapsUrl,deleted:false};
-  const old=place?.overlayId&&state.places.find(o=>o.id===place.overlayId);if(old?.points&&(old.lat!==lat||old.lng!==lng))data.points=[];
+ function savePlace({place,fields,cats,lat,lng,points=[],mapsUrl}){
+  const {fs,db}=fb,data={fields,cats,lat,lng,points,mapsUrl,deleted:false};
   if(place?.custom){update('places',place.overlayId,data);toast('已儲存')}
   else if(place){fs.setDoc(tdoc('places',place.id),{...data,base:place.id,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請再試。'));toast('已儲存')}
   else add('places',{...data,base:null});
