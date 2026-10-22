@@ -188,6 +188,7 @@ async function readProductLink(link) {
 }
 const pagePrompt = (t, f) => `${productPrompt(t)}
 The traveller pasted a link to this web page instead of a photo; the picture (if any) is the page's main image.
+If the page is not about one specific product (a home, category, search or shop page), reply with an empty name and confidence low.
 Use the page for the name, spec and detail; the price only if it is in ${tripInfo(t).cur} or ${tripInfo(t).home}; place: the shop or brand selling it if clear.
 Page: ${JSON.stringify({ site: f.site, title: f.title, brand: f.brand, description: f.description, price: f.price, currency: f.currency, text: f.text.slice(0, 2000) })}`;
 
@@ -222,8 +223,8 @@ cloudEvent('processReceipt', async event => {
     throw new HttpsError('unavailable', '未能開啟這個網址（網站可能不允許讀取），可以改為截圖上載。');
    });
    const pics = got.image ? [got.image] : [];
-   const { confidence: _c, ...item } = cleanProduct(await askDeepSeek(got.facts ? pagePrompt(tripDoc, got.facts) : productPrompt(tripDoc), pics), tripDoc);
-   if (!item.name) throw new HttpsError('not-found', '未能從這個連結認出物品，可以手動輸入。');
+   const { confidence, ...item } = cleanProduct(await askDeepSeek(got.facts ? pagePrompt(tripDoc, got.facts) : productPrompt(tripDoc), pics), tripDoc);
+   if (!item.name || confidence === 'low') throw new HttpsError('not-found', '這個連結看不到特定商品，請貼上產品頁面或產品圖片。');
    await getFirestore().collection(`trips/${trip}/shopping`).add({ ...item, url: got.link.slice(0, 500), photo: got.image && got.image.length <= 400000 ? got.image : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
    await ref.delete();
    return;
