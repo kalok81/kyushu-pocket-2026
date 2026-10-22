@@ -130,6 +130,13 @@ try {
   await page.click('[data-cat=購物清單]'); assert.equal(await page.locator('#results .card.place').count(), 2);
   await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('[data-place]').click(); await page.waitForSelector('#detail .detail-section >> text=購物清單（1）');
   await page.click('#detail [data-shop-open]'); await page.waitForFunction(() => /人形燒/.test(document.querySelector('#detailBody').textContent)); await page.keyboard.press('Escape');
+  // a 購買地點 that is not an explore place: its own card, and 加入探索 makes it one
+  await page.goto(base + '/#shopping'); await page.fill('[data-tg-form=shop] [name=name]', '蘋果批'); await page.fill('[data-tg-form=shop] [name=place]', 'RINGO 上野店'); await page.click('[data-tg-form=shop] button[type=submit]');
+  await page.goto(base + '/#explore'); await page.click('[data-cat=購物清單]'); await page.waitForSelector('.shop-spot');
+  assert.match(await page.locator('.shop-spot').innerText(), /RINGO 上野店[\s\S]*要買：[\s\S]*蘋果批/);
+  await page.click('[data-spot-explore]'); assert.equal(await page.inputValue('#placeForm [name=f1]'), 'RINGO 上野店');
+  await page.fill('#placeForm [name=f0]', '上野'); await page.click('#placeForm button[type=submit]');
+  await page.waitForFunction(() => !document.querySelector('.shop-spot') && /蘋果批/.test(document.querySelector('#results').textContent));
   await page.click('[data-cat=全部]');
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
   assert.match(await page.locator('.stopcontent', { hasText: '淺草寺' }).first().innerText(), /要買：御守/);

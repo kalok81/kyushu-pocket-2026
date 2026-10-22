@@ -487,7 +487,7 @@ window.Together=(()=>{
  // spaces/brackets/punctuation and with 雞/鶏 treated alike; generic words (博多, 本店…) never match on their own.
  const norm=t=>String(t).toLowerCase().replace(/[雞鷄]/g,'鶏').replace(/[\s（）()【】「」『』・･,，、.。:：\-－−&＆’']/g,'');
  const GENERIC=new Set(['博多','天神','福岡','本店','博多店','天神店','jr','博多駅','博多站','由布院','湯布院','別府','佐賀','太宰府','中洲','大名','店','分店','cafe','coffee','shop']);
- const nameWords=n=>String(n).split(/[\s（）()【】「」『』・･,，、]+/).map(norm).filter(x=>x.length>=2&&!GENERIC.has(x));
+ const nameWords=n=>String(n).split(/[\s（）()【】「」『』・･,，、]+/).map(norm).filter(x=>x.length>=(/^[a-z0-9]+$/.test(x)?4:2)&&!GENERIC.has(x));
  const placeFor=text=>{const t=norm(text);if(!t)return null;const ps=T().places;return ps.find(p=>norm(p.v[1]).length>=2&&t.includes(norm(p.v[1])))||ps.find(p=>nameWords(p.v[1]).some(k=>t.includes(k)))};
  // 附近 › 購物: spots where unbought list items can be bought. An explore shop named in 購買地點 uses its pin;
  // otherwise the item's own coordinates (geocoded from 購買地點). Items at the same spot share one card.
@@ -509,7 +509,7 @@ window.Together=(()=>{
   const spots={};
   for(const x of state.shopping.filter(x=>!x.bought&&x.place)){
    const p=placeFor(x.place),key=p?'p:'+p.id:'t:'+norm(shopLabel(x.place));
-   (spots[key]??={name:p?p.v[1]:shopLabel(x.place),placeId:p?p.id:null,address:p?p.v[3]:x.place,...(Number.isFinite(x.lat)&&Number.isFinite(x.lng)?{lat:x.lat,lng:x.lng}:{}),items:[]}).items.push(x.name);
+   const spot=(spots[key]??={name:p?p.v[1]:shopLabel(x.place),placeId:p?p.id:null,address:p?p.v[3]:x.place,...(Number.isFinite(x.lat)&&Number.isFinite(x.lng)?{lat:x.lat,lng:x.lng}:{}),items:[],ids:[]});spot.items.push(x.name);spot.ids.push(x.id);
   }
   return Object.values(spots);
  }
