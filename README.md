@@ -66,6 +66,10 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 
 住宿及機票可按「📎 文件」上載訂單確認、電子機票或截圖（相片轉為 JPEG，PDF 保持原檔，上限 15 MB，每項最多 6 個），存放於 Firebase Storage `trips/{t}/docs/`，`storage.rules` 只限該旅程旅伴讀取；刪除住宿／航班時一併刪除。
 
+行程頁每天可選「這晚住宿」（預設按住宿的入住／退房日期，選了就以選擇為準，存於 `planDays/{day}.hotel`）。
+
+自動測試：`tests/smoke.mjs` 用虛構的測試旅程及假 Firebase（`tests/fake/`）在 Chromium 測試登入、各頁、行程、開支、清單及住宿；GitHub Actions 每次 push 先執行 `scripts/validate.mjs` 及這個測試，通過才發佈網站。本機執行：`cd tests && npm ci && npx playwright install chromium && npm test`。
+
 旅程頁可「⧉ 複製為新旅程」（複製探索地點、每日行程、清單及購物清單，新旅程只有你一位旅伴）；行程頁「🖨 列印／PDF」列印整個行程（航班、住宿及每日站點），在列印視窗選「另存為 PDF」即可。
 
 費用保護：`lookupPlace`、`manageTrip` 要求 Firebase App Check（reCAPTCHA Enterprise，網站金鑰在 `together.js` 的 `APP_CHECK_KEY`，只限 kalok81.github.io 及 localhost）；每位旅伴每日最多 80 次 AI 分析、300 次 Google 地圖查詢（`usage/{uid}_{日期}`，網頁不可讀寫）；Google Cloud 預算「口袋旅伴 每月預算」HK$80，用量達 50%、90%、100% 時電郵通知。自動測試在 headless 瀏覽器用 App Check debug token（不在 repo 內）。

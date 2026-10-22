@@ -164,7 +164,8 @@ service cloud.firestore {
       match /planDays/{day} {
         allow read, delete: if tripMember();
         allow write: if tripMember() && day.matches('^[1-9][0-9]?$') && int(day) <= 60
-          && request.resource.data.keys().hasOnly(['stops', 'label', 'by', 'byName', 'at'])
+          && request.resource.data.keys().hasOnly(['stops', 'label', 'hotel', 'by', 'byName', 'at'])
+          && (!('hotel' in request.resource.data) || text(request.resource.data.hotel, 40))
           && request.resource.data.stops is list && request.resource.data.stops.size() <= 40
           && (!('label' in request.resource.data) || text(request.resource.data.label, 40))
           && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;

@@ -301,6 +301,8 @@ window.Together=(()=>{
  // Day plans: planDays/{day} holds the whole edited stop list for that day; deleting it restores the original.
  const planMap=()=>Object.fromEntries(state.planDays.map(d=>[Number(d.id),d]));
  function savePlanDay(day,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,by:state.user.uid,byName:me().name,at:Date.now()},{merge:true}).catch(()=>toast('未能儲存行程，請再試。'))}
+ // The hotel for one night, chosen on the plan ('' = follow the hotels' check-in / check-out dates).
+ function setDayHotel(day,hotel,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,hotel,by:state.user.uid,byName:me().name,at:Date.now()},{merge:true}).catch(()=>toast('未能儲存，請再試。'))}
  function setDayLabel(day,label,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,label,by:state.user.uid,byName:me().name,at:Date.now()},{merge:true}).catch(()=>toast('未能儲存，請再試。'))}
  // Hotels and flights (trips created on the site).
  const tripLists=()=>({hotels:state.hotels,flights:state.flights});
@@ -688,5 +690,5 @@ window.Together=(()=>{
  addEventListener('online',()=>{refresh();renderDrafts()});addEventListener('offline',()=>{refresh();renderDrafts()});
  setInterval(()=>{if(jobs.some(j=>!['done','failed'].includes(j.status)))renderDrafts()},30000);
  load().catch(()=>{});
- return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,lists:tripLists,saveItem,removeItem,setDayLabel,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
+ return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,lists:tripLists,saveItem,removeItem,setDayLabel,setDayHotel,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
 })();
