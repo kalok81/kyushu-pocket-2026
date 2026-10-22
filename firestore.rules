@@ -100,6 +100,19 @@ service cloud.firestore {
         allow update: if tripMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['category'])
           && expenseCat(request.resource.data.category);
       }
+      // Shared packing / pre-trip checklist; each companion ticks items for themselves (doneBy: their uids).
+      function checkValid(d) {
+        return text(d.text, 60) && d.text.size() > 0 && d.group in ['pre', 'pack', 'other']
+          && d.doneBy is list && d.doneBy.size() <= 20;
+      }
+      match /checklist/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned()
+          && request.resource.data.keys().hasOnly(['text', 'group', 'doneBy', 'by', 'byName', 'at', 'createdAt'])
+          && checkValid(request.resource.data);
+        allow update: if tripMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'group', 'doneBy'])
+          && checkValid(request.resource.data);
+      }
       // Exchange rates companions set by hand (home-currency units per 1 unit), shared by the whole trip.
       match /settings/{id} {
         allow read: if tripMember();

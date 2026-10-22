@@ -5,7 +5,9 @@ window.Together=(()=>{
  // Firebase web config is public by design; access is enforced by firestore.rules and the member list.
  const config={apiKey:'AIzaSyC_qsxlY9mX0OKK5bIXwUXvrrxCOFnc18M',authDomain:'kyushu-2e307.firebaseapp.com',projectId:'kyushu-2e307',storageBucket:'kyushu-2e307.firebasestorage.app',messagingSenderId:'672657048901',appId:'1:672657048901:web:d1e2f7dd92389f78f3ea2c'};
  const APP_CHECK_KEY='6Lfpt_otAAAAADBIq06Vcd_4KI5NJtGosFA4ZlTG';
- const tabs={notes:'筆記',expenses:'開支'};
+ const tabs={notes:'筆記',expenses:'開支',checklist:'清單'};
+ const CHECK_GROUPS={pre:'行前準備',pack:'行李',other:'其他'};
+ const CHECK_SUGGEST={pre:['旅遊保險','網卡／eSIM','兌換外幣','入境登記／簽證','預約機場交通'],pack:['護照','信用卡及現金','手機充電器','尿袋','轉插','常用藥物','換洗衣物','雨傘','個人用品','購物袋']};
  // The trip's local and home currencies (trips/{t}.currency, homeCurrency); names for the pickers.
  const CURRENCY_NAMES={JPY:'日圓',HKD:'港幣',KRW:'韓圜',TWD:'新台幣',THB:'泰銖',CNY:'人民幣',SGD:'新加坡元',MYR:'馬幣',USD:'美元',EUR:'歐元',GBP:'英鎊',AUD:'澳元',CAD:'加元',VND:'越南盾',PHP:'菲律賓披索',IDR:'印尼盾'};
  const tripCurrencies=()=>[...new Set([state.meta?.currency||'JPY',state.meta?.homeCurrency||'HKD'])];
@@ -39,7 +41,7 @@ window.Together=(()=>{
   fb.fs.setDoc(tdoc('settings','fx'),{rates,by:state.user.uid,byName:me().name,at:Date.now()}).catch(()=>toast('未能儲存匯率，請再試。'));
   toast(v.trim()?'已設定匯率，所有旅伴都會使用':'已改回自動匯率');
  }
- const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,shopFilter:'todo',shopSearch:'',shopView:'list',shopEdit:null,trip:{},fx:null,liveFx:null,settleMode:null};
+ const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],checklist:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,shopFilter:'todo',shopSearch:'',shopView:'list',shopEdit:null,trip:{},fx:null,liveFx:null,settleMode:null};
  const T=()=>window.TripApp,S=window.Split,$=s=>document.querySelector(s);
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const toast=s=>window.UI.toast(s);
@@ -62,7 +64,7 @@ window.Together=(()=>{
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
   return loading;
  }
- function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,trip:{},fx:null})}
+ function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],checklist:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,trip:{},fx:null})}
  // Trips this companion belongs to (trips/{id}.members holds lower-case emails); open the last one used.
  async function chooseTrip(){
   const {fs,db}=fb,email=String(state.user.email||'').toLowerCase();
@@ -97,7 +99,7 @@ window.Together=(()=>{
   },fail);
   const watchJobs=fs.onSnapshot(fs.query(tcol('receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();handleFillJobs();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
   const watchFx=fs.onSnapshot(tdoc('settings','fx'),snap=>{state.fx=snap.data()||null;refresh()},()=>{});loadFx();
-  unsub=[watchJobs,watchFx,...['notes','expenses','members','shopping','places','planDays','hotels','flights'].map(watch)].concat(state.meta.generic?[]:['data','geo','content'].map(watchTrip));
+  unsub=[watchJobs,watchFx,...['notes','expenses','checklist','members','shopping','places','planDays','hotels','flights'].map(watch)].concat(state.meta.generic?[]:['data','geo','content'].map(watchTrip));
  }
  function start(){
   const t=state.trip,generic=!!state.meta?.generic;if(started||!state.placesLoaded||(!generic&&(!t.data||!t.geo||!t.content)))return;
@@ -371,12 +373,27 @@ window.Together=(()=>{
  }
 
  const tripSwitch=()=>state.trips?.length>1?`<select class="trip-switch" data-trip-switch aria-label="切換旅程">${state.trips.map(t=>`<option value="${esc(t.id)}"${t.id===tripId?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`:`<span class="trip-name">${esc(state.meta?.name||'')}</span>`;
- function statusBar(){const online=navigator.onLine,pending=['notes','expenses','shopping'].reduce((t,k)=>t+state[k].filter(x=>x.pending).length,0);return `${tripSwitch()}<span>已登入：<b>${esc(me().name)}</b></span><span class="tg-pending-${online?'on':'off'}">${online?pending?`${pending} 項同步中…`:'已同步':'離線中 · 修改會在有網絡時同步'}</span><button class="smallbtn" data-tg="logout">登出</button>`}
+ function statusBar(){const online=navigator.onLine,pending=['notes','expenses','shopping','checklist'].reduce((t,k)=>t+state[k].filter(x=>x.pending).length,0);return `${tripSwitch()}<span>已登入：<b>${esc(me().name)}</b></span><span class="tg-pending-${online?'on':'off'}">${online?pending?`${pending} 項同步中…`:'已同步':'離線中 · 修改會在有網絡時同步'}</span><button class="smallbtn" data-tg="logout">登出</button>`}
  function lists(){
   if(state.tab==='notes')return state.notes.length?state.notes.map(noteItem).join(''):'<div class="empty"><h2>還沒有筆記</h2><p>寫下提醒、想吃的東西或任何旅程點滴。</p></div>';
+  if(state.tab==='checklist')return checklist();
   if(state.tab==='expenses')return stats()+summary()+(state.expenses.length?state.expenses.map(expenseItem).join(''):'<div class="empty"><h2>還沒有開支</h2><p>每筆開支記下誰付款、分給誰，網站會計算誰要畀誰。</p></div>');
  }
+ // Shared checklist: everyone sees the same items and ticks them off for themselves (doneBy holds their uids).
+ function checklist(){
+  const me=state.user.uid,items=[...state.checklist].sort((a,b)=>(a.at||0)-(b.at||0));
+  if(!items.length)return '<div class="empty"><h2>還沒有清單</h2><p>加入要準備和要帶的東西，每位旅伴各自剔選。</p><button type="button" class="action primary" data-tg="checkSuggest">加入建議項目</button></div>';
+  const mine=items.filter(i=>(i.doneBy||[]).includes(me)).length,ppl=people();
+  const row=i=>{const done=(i.doneBy||[]).includes(me),others=(i.doneBy||[]).filter(u=>u!==me).map(nameOf);return `<li class="check-row${done?' done':''}"><label><input type="checkbox" data-check="${esc(i.id)}"${done?' checked':''}><span>${esc(i.text)}</span></label>${ppl.length>1?`<small>${others.length?`✓ ${esc(others.join('、'))}`:''}</small>`:''}<button type="button" class="smallbtn" data-tg-del="checklist:${esc(i.id)}" aria-label="刪除 ${esc(i.text)}">×</button></li>`};
+  return `<div class="check-progress"><b>你已完成 ${mine}／${items.length}</b><div class="tg-progress"><div style="width:${Math.round(mine/items.length*100)}%"></div></div></div>${Object.entries(CHECK_GROUPS).map(([g,label])=>{const list=items.filter(i=>(CHECK_GROUPS[i.group]?i.group:'other')===g);return list.length?`<section class="panel check-group"><h3>${label}</h3><ul>${list.map(row).join('')}</ul></section>`:''}).join('')}<button type="button" class="smallbtn" data-tg="checkSuggest">＋ 加入未有的建議項目</button>`;
+ }
+ function addSuggestions(){
+  const have=new Set(state.checklist.map(i=>i.text.trim()));let n=0;
+  for(const [group,list] of Object.entries(CHECK_SUGGEST))for(const text of list)if(!have.has(text)){fb.fs.addDoc(tcol('checklist'),{text,group,doneBy:[],by:state.user.uid,byName:me().name,at:Date.now()+n,createdAt:fb.fs.serverTimestamp()}).catch(()=>{});n++}
+  toast(n?`已加入 ${n} 項`:'建議項目已全部在清單內');
+ }
  function forms(){
+  if(state.tab==='checklist')return `<form class="panel tg-form check-form" data-tg-form="check"><div class="tg-row"><label>項目<input name="text" maxlength="60" required placeholder="例如：護照、尿袋"></label><label>分類<select name="group">${Object.entries(CHECK_GROUPS).map(([k,v])=>`<option value="${k}">${v}</option>`).join('')}</select></label></div><button type="submit" class="locate-button">加入清單</button></form>`;
   if(state.tab==='notes')return `<form class="panel tg-form" data-tg-form="note"><label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾"></textarea></label><label>關於<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><button type="submit" class="locate-button">加入筆記</button></form>`;
   if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據（可多張）</button><input type="file" accept="image/*" id="tgReceipt" multiple hidden><p class="note">AI 在背景讀出店名、金額、日期及物品，可以關閉網頁，稍後回來確認。同一張收據分開影的相片會提示合併，也可以自己選擇合併。加入或捨棄後相片會刪除。</p></div><div id="tgDrafts" class="tg-drafts"></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><label>分類<select name="category"><option value="">未分類</option>${catOptions('')}</select></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency">${curOptions(tripCurrencies()[0])}</select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
   return '';
@@ -544,6 +561,7 @@ window.Together=(()=>{
   if(state.status!=='ready')return;e.preventDefault();
   const v=new FormData(f),str=k=>String(v.get(k)||'').trim(),day=Number(v.get('day'))||null;
   if(f.dataset.tgForm==='note'){const placeId=f.dataset.placeId||null,place=placeId&&T().places.find(p=>p.id===placeId);if(!str('text'))return;add('notes',{text:str('text').slice(0,1000),day:placeId?null:day,placeId,placeName:place?place.v[1]:null})}
+  if(f.dataset.tgForm==='check'){if(!str('text'))return;add('checklist',{text:str('text').slice(0,60),group:CHECK_GROUPS[str('group')]?str('group'):'other',doneBy:[]});f.elements.text.value='';f.elements.text.focus();return}
   if(f.dataset.tgForm==='expense'){
    const prices=v.getAll('itemAmount'),items=v.getAll('itemName').map((n,i)=>({name:String(n).trim().slice(0,40),amount:prices[i]===''?null:Math.round(Number(prices[i])*100)/100})).filter(i=>i.name&&(i.amount==null||(i.amount>=0&&i.amount<=1e7))).slice(0,30);
    const sum=items.reduce((t,i)=>t+(i.amount||0),0),amount=v.get('amount')===''?sum:Number(v.get('amount')),split=v.getAll('split').map(String);
@@ -573,6 +591,7 @@ window.Together=(()=>{
   if(d.tg==='draftsAddAll')(async()=>{const all=drafts(),ok=all.filter(x=>x.status==='done'&&!draftDup(x,all));let n=0;for(const x of ok)if(await addDraft(x,false))n++;else break;renderDrafts();const left=drafts().filter(x=>x.status==='done').length;if(n)toast(`已加入 ${n} 筆${left?`，尚有 ${left} 筆待確認`:''}`)})();
   if(d.receipts)showReceipts(d.receipts);
   if(d.fxSet)setRate(d.fxSet);
+  if(d.tg==='checkSuggest')addSuggestions();
   if(d.settle){state.settleMode=d.settle;refresh()}
   if(d.expCat){const x=state.expenses.find(i=>i.id===d.expCat);if(x)UI.choose('開支分類',CATS,x.category||'food').then(v=>{if(v&&CATS[v]&&v!==x.category)update('expenses',x.id,{category:v})})}
   if(d.tg==='itemAdd'){$('#tgItemRows').insertAdjacentHTML('beforeend',itemRow());$('#tgItemRows').lastElementChild.querySelector('input').focus()}
@@ -595,6 +614,7 @@ window.Together=(()=>{
   if((d.shopToggle||d.tgDel?.startsWith('shopping:'))&&$('#detail').open&&$('#detailBody .shop-detail-photo, #detailBody .shop-item'))$('#detail').close();
  });
  document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files.length){if(state.status==='ready')queueReceipts([...e.target.files]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}if((e.target.id==='shopAiInput'||e.target.id==='shopAiCam')&&e.target.files.length){if(state.status==='ready')queueProducts([...e.target.files]);e.target.value=''}});
+ document.addEventListener('change',e=>{const id=e.target.dataset?.check;if(!id)return;const x=state.checklist.find(i=>i.id===id),me=state.user.uid;if(!x)return;const fs=fb.fs,done=new Set(x.doneBy||[]);e.target.checked?done.add(me):done.delete(me);update('checklist',id,{doneBy:fs.arrayUnion?(e.target.checked?fs.arrayUnion(me):fs.arrayRemove(me)):[...done]})});
  document.addEventListener('toggle',e=>{if(e.target.classList?.contains('tg-fx'))state.fxOpen=e.target.open},true);
  document.addEventListener('click',e=>{const img=e.target.closest('[data-shop-zoom]');if(img)img.classList.toggle('zoom')});
  const placeField=t=>t.name==='place'&&t.closest('[data-tg-form="shop"]');
