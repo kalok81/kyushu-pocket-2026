@@ -303,29 +303,31 @@ window.Together=(()=>{
   const list=shown.length?[...shown].sort((a,b)=>a.bought-b.bought||(b.at||0)-(a.at||0)).map(shopItem).join(''):`<div class="empty"><h2>${state.shopFilter==='done'?'還沒有已買的東西':'清單是空的'}</h2><p>${state.shopFilter==='done'?'買了之後按「✓ 已買」。':'把想買的東西加進來，旅伴都看得到。'}</p></div>`;
   return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${edit?'':'<div class="panel shop-ai"><b>✨ AI 認物品，自動加入清單</b><div class="links"><button type="button" class="locate-button" data-tg="shopAiCam">📷 影相</button><button type="button" class="locate-button" data-tg="shopAi">🖼 上載相片（可多張）</button></div><input type="file" accept="image/*" capture="environment" id="shopAiCam" hidden><input type="file" accept="image/*" id="shopAiInput" multiple hidden><p class="note">AI 會認出物品、規格，以及價錢牌上的價錢，自動加入清單，之後可以修改。可以關閉網頁，AI 會在背景完成。</p></div>'}<div data-tg-live="jobs"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div><details class="panel shop-gifts" open><summary>🎁 手信推介（<span data-tg-live="giftCount"></span>）</summary><div class="links gift-tools"><button type="button" class="action primary" data-tg="giftNew">＋ 新增手信</button></div>${giftForm()}<div data-tg-live="gifts"></div></details>`,live:{status:statusBar(),jobs:productJobsHtml(),filters,list,giftCount:String(state.gifts.length),gifts:giftsList()}};
  }
- // 手信推介 (Firestore gifts): souvenir products and the shop selling them; companions add, edit and delete.
+ // 手信推介 (Firestore gifts): same fields as shopping items (name, spec, description, place with address, price),
+ // plus an optional price note; companions add, edit and delete. placeId links the shop in explore.
  const norm=t=>String(t).replace(/\s+/g,'').toLowerCase();
  let giftEdit=null;
- const giftShopPlaces=()=>T().places.filter(p=>p.cats.includes('手信')||p.cats.includes('商店')||['手信','商店'].includes(p.v[6]));
- const giftPlace=g=>T().places.find(p=>p.id===g.placeId)||T().places.find(p=>g.shop&&norm(p.v[1])===norm(g.shop));
- function giftForm(){return `<form class="tg-form gift-form" id="giftForm" hidden><label>手信<input name="name" maxlength="80" required placeholder="例如：明太子沙律醬"></label><label>售賣店舖<input name="shop" maxlength="120" list="giftShops" placeholder="揀探索中的店舖，或輸入店名"><datalist id="giftShops">${giftShopPlaces().map(p=>`<option value="${esc(p.v[1])}">`).join('')}</datalist></label><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" step="1" placeholder="日圓"></label><label>價錢說明<input name="priceText" maxlength="120" placeholder="例如：小盒 ¥972"></label></div><label>備註<input name="note" maxlength="300" placeholder="例如：需冷藏"></label><div class="links"><button type="submit" class="locate-button" id="giftSubmit">加入手信推介</button><button type="button" class="action" data-tg="giftCancel">取消</button></div></form>`}
+ const placeFor=text=>{const t=norm(text);return t?T().places.filter(p=>norm(p.v[1]).length>=2).find(p=>t.includes(norm(p.v[1]))):null};
+ const giftPlace=g=>T().places.find(p=>p.id===g.placeId)||placeFor(g.place);
+ function giftForm(){return `<form class="tg-form gift-form" id="giftForm" hidden><label>手信<input name="name" maxlength="80" required placeholder="例如：治一郎 年輪蛋糕（治一郎のバウムクーヘン）"></label><div class="tg-row"><label>規格／數量<input name="qty" maxlength="30" placeholder="例如：4cm、1個"></label><label>價錢（日圓，可留空）<input name="price" type="number" inputmode="decimal" min="0" step="1"></label></div><label>價錢說明（可留空）<input name="priceText" maxlength="120" placeholder="例如：4cm ¥1,580／8cm ¥2,780"></label><label>描述<input name="detail" maxlength="500" placeholder="一句介紹，例如：需冷藏"></label><label>購買地點／地址<input name="place" maxlength="500" placeholder="店名、地址，或貼上 Google 地圖連結"></label><p class="note" id="giftPlaceInfo"></p><div class="links"><button type="submit" class="locate-button" id="giftSubmit">加入手信推介</button><button type="button" class="action" data-tg="giftCancel">取消</button></div></form>`}
  function giftsList(){
   const listed=new Set(state.shopping.map(x=>norm(x.name))),gifts=[...state.gifts].sort((a,b)=>(a.at||0)-(b.at||0));
-  return gifts.length?gifts.map(g=>{const p=giftPlace(g);return `<article class="tg-item"><div class="tg-expense"><h3>${esc(g.name)}</h3>${g.priceText||g.price!=null?`<b class="shop-price">${esc(g.priceText||S.format(S.toMinor(g.price,'JPY'),'JPY'))}</b>`:''}</div><p class="note">${g.shop||p?`🏪 ${esc(g.shop||p.v[1])}${p?` · ${esc(p.v[0])}`:''}`:''}${g.note?` · ${esc(g.note)}`:''}</p><div class="links">${listed.has(norm(g.name))?'<span class="badge">已在清單</span>':`<button class="action primary" data-gift-add="${esc(g.id)}">＋ 加入購物清單</button>`}${p?`<button class="action" data-place="${esc(p.id)}">店舖資料</button>`:''}<button class="smallbtn" data-gift-edit="${esc(g.id)}">編輯</button>${del('gifts',g)}</div></article>`}).join(''):'<p class="note">還沒有手信推介，按「＋ 新增手信」加入。</p>';
+  return gifts.length?gifts.map(g=>{const p=giftPlace(g),price=g.price!=null?S.format(S.toMinor(g.price,'JPY'),'JPY'):'';return `<article class="tg-item shop-item"><div><div class="tg-expense"><h3>${esc(g.name)}${g.qty?` <small>· ${esc(g.qty)}</small>`:''}</h3>${price?`<b class="shop-price">${esc(price)}</b>`:''}</div>${g.priceText?`<p class="note">💴 ${esc(g.priceText)}</p>`:''}${g.detail?`<p class="tg-text">${esc(g.detail)}</p>`:''}${g.place?`<p class="shop-place">📍 ${esc(g.place)} <a class="action" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(g.place)}" target="_blank" rel="noopener noreferrer">地圖 ↗</a></p>`:''}<div class="links">${listed.has(norm(g.name))?'<span class="badge">已在清單</span>':`<button class="action primary" data-gift-add="${esc(g.id)}">＋ 加入購物清單</button>`}${p?`<button class="action" data-place="${esc(p.id)}">店舖資料</button>`:''}<button class="smallbtn" data-gift-edit="${esc(g.id)}">編輯</button>${del('gifts',g)}</div></div></article>`}).join(''):'<p class="note">還沒有手信推介，按「＋ 新增手信」加入。</p>';
  }
  function openGiftForm(g){
   const f=$('#giftForm');if(!f)return;giftEdit=g?.id||null;f.hidden=false;f.reset();
-  if(g){const el=f.elements;el.name.value=g.name;el.shop.value=g.shop||giftPlace(g)?.v[1]||'';el.price.value=g.price??'';el.priceText.value=g.priceText||'';el.note.value=g.note||''}
+  if(g){const el=f.elements;for(const k of ['name','qty','detail','place','priceText'])el[k].value=g[k]||'';el.price.value=g.price??''}
   $('#giftSubmit').textContent=g?'儲存修改':'加入手信推介';f.elements.name.focus();
  }
  function saveGift(f){
   const v=new FormData(f),str=k=>String(v.get(k)||'').trim(),price=v.get('price')===''?null:Number(v.get('price'));
   if(!str('name'))return;if(price!=null&&!(price>=0&&price<=1e7))return toast('價錢不正確。');
-  const place=T().places.find(p=>norm(p.v[1])===norm(str('shop')));
-  const data={name:str('name').slice(0,80),shop:str('shop').slice(0,120),placeId:place?place.id:null,price:price==null?null:Math.round(price),priceText:str('priceText').slice(0,120),note:str('note').slice(0,300)};
+  const place=str('place').slice(0,200);
+  const data={name:str('name').slice(0,80),qty:str('qty').slice(0,30),detail:str('detail').slice(0,500),place,placeId:placeFor(place)?.id||null,price:price==null?null:Math.round(price),priceText:str('priceText').slice(0,120)};
   if(giftEdit){update('gifts',giftEdit,data);toast('已儲存')}else add('gifts',data);
   giftEdit=null;f.reset();f.hidden=true;
  }
+ function addGift(id){const g=state.gifts.find(x=>x.id===id);if(!g)return;add('shopping',{name:g.name.slice(0,80),qty:(g.qty||'').slice(0,30),detail:[g.detail,g.price==null&&g.priceText?`價錢：${g.priceText}`:''].filter(Boolean).join('；').slice(0,500),place:(g.place||'').slice(0,200),price:g.price??null,currency:'JPY',photo:null,bought:false,boughtBy:null,boughtAt:null})}
  // For 附近 › 購物: place id → things to buy there (手信推介 by shop, unbought list items whose 購買地點 names the shop).
  function buyables(){
   const out={},put=(id,name)=>{(out[id]??=[]).includes(name)||out[id].push(name)};
@@ -339,7 +341,7 @@ window.Together=(()=>{
  const MAPS_LINK=/^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i;
  async function placeFromMaps(input){
   const url=input.value.trim().match(/https:\/\/\S+/)?.[0];if(!url||!MAPS_LINK.test(url)||input.dataset.looking)return;
-  const hint=$('#shopPlaceInfo');input.disabled=true;input.dataset.looking='1';if(hint)hint.textContent='正在查詢 Google 地圖…';
+  const hint=input.closest('#giftForm')?$('#giftPlaceInfo'):$('#shopPlaceInfo');input.disabled=true;input.dataset.looking='1';if(hint)hint.textContent='正在查詢 Google 地圖…';
   try{const r=await lookupPlace(url);input.value=[r.name,r.address].filter(Boolean).join(' ').slice(0,200);if(hint)hint.textContent='已由 Google 地圖填入。'}
   catch(e){if(hint)hint.textContent='未能讀取地圖連結，請手動輸入店名或地址。';console.error(e)}
   finally{input.disabled=false;delete input.dataset.looking}
@@ -436,8 +438,9 @@ window.Together=(()=>{
  });
  document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files.length){if(state.status==='ready')queueReceipts([...e.target.files]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}if((e.target.id==='shopAiInput'||e.target.id==='shopAiCam')&&e.target.files.length){if(state.status==='ready')queueProducts([...e.target.files]);e.target.value=''}});
  document.addEventListener('click',e=>{const img=e.target.closest('[data-shop-zoom]');if(img)img.classList.toggle('zoom')});
- document.addEventListener('change',e=>{if(e.target.name==='place'&&e.target.closest('[data-tg-form="shop"]'))placeFromMaps(e.target)});
- document.addEventListener('paste',e=>{if(e.target.name==='place'&&e.target.closest('[data-tg-form="shop"]'))setTimeout(()=>placeFromMaps(e.target))});
+ const placeField=t=>t.name==='place'&&(t.closest('[data-tg-form="shop"]')||t.closest('#giftForm'));
+ document.addEventListener('change',e=>{if(placeField(e.target))placeFromMaps(e.target)});
+ document.addEventListener('paste',e=>{if(placeField(e.target))setTimeout(()=>placeFromMaps(e.target))});
  document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset?.df!==undefined)e.preventDefault()});
  // Draft edits are kept locally while typing and saved to the job when a field is left, so they survive reloads.
  document.addEventListener('change',e=>{const k=e.target.dataset?.draftPick;if(!k)return;e.target.checked?picked.add(k):picked.delete(k);renderDrafts()});

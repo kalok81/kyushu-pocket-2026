@@ -74,11 +74,11 @@ service cloud.firestore {
     }
     // 手信推介: souvenir products and the shop that sells them; any companion can add, edit or delete.
     function giftValid(d) {
-      return d.keys().hasOnly(['name', 'shop', 'placeId', 'price', 'priceText', 'note', 'by', 'byName', 'at', 'createdAt'])
-        && text(d.name, 80) && d.name.size() > 0 && text(d.shop, 120)
+      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'placeId', 'price', 'priceText', 'by', 'byName', 'at', 'createdAt'])
+        && text(d.name, 80) && d.name.size() > 0 && text(d.qty, 30) && text(d.detail, 500) && text(d.place, 200)
         && (d.placeId == null || text(d.placeId, 40))
         && (d.price == null || (d.price is number && d.price >= 0 && d.price <= 10000000))
-        && text(d.priceText, 120) && text(d.note, 300);
+        && text(d.priceText, 120);
     }
     match /gifts/{id} {
       allow read, delete: if isMember();
