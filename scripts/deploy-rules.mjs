@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 
 const P = 'kyushu-2e307';
 const token = execFileSync('gcloud', ['auth', 'print-access-token'], { encoding: 'utf8' }).trim();
-const H = { Authorization: `Bearer ${token}`, 'x-goog-user-project': P, 'Content-Type': 'application/json' };
+// A personal gcloud login needs the project named for quota; the deploy service account belongs to it already.
+const H = { Authorization: `Bearer ${token}`, ...(process.env.CI ? {} : { 'x-goog-user-project': P }), 'Content-Type': 'application/json' };
 const api = `https://firebaserules.googleapis.com/v1/projects/${P}`;
 
 async function call(url, method, body) {
