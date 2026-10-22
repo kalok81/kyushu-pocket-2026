@@ -158,3 +158,14 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
  dialog#detail[open]{animation:sheet-up .22s ease-out}
 }
 @keyframes sheet-up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+
+/* ---- Same-time alternatives: one timeline line and dot for the whole row ----
+   (the cards sit in a horizontal scroller, which would clip each card's own line and draw extra ones between cards) */
+.stop-group .stopcontent:before,.stop-group .stopcontent:after{content:none}
+.stop-group:before{position:absolute;content:"";left:133px;top:0;bottom:-1px;width:1px;background:var(--line)}
+.stop-group:after{position:absolute;content:"";left:129px;top:23px;width:9px;height:9px;border-radius:50%;background:var(--orange)}
+.stop-group:last-child:before{bottom:24px}
+@media(max-width:760px){
+ .stop-group:before{left:0}
+ .stop-group:after{left:-4px;top:0}
+}
