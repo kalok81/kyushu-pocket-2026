@@ -244,3 +244,5 @@ body{overflow-wrap:anywhere}
 .buy-item{display:inline;min-height:0;padding:0;border:0;background:none;box-shadow:none;color:inherit;font:inherit;text-decoration:underline;text-decoration-color:var(--input);text-underline-offset:3px;cursor:pointer}
 .buy-item:hover{background:none;text-decoration-color:var(--primary)}
 .action.bought{color:var(--muted-foreground);text-decoration:line-through}
+.ai-sure{font-size:11px!important;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--muted-bg)}
+.ai-sure.high{background:#e3ece4;color:#2f6b52!important}.ai-sure.medium{background:#f6efd9;color:#7a5d12!important}.ai-sure.low{background:var(--destructive-soft);color:var(--destructive)!important}

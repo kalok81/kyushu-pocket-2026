@@ -411,10 +411,11 @@ Suggest the practical ways to get from A to B${when ? ` leaving around ${when} l
 A: ${from}
 B: ${to}
 Reply with JSON only:
-{"options": [{"title": string, "minutes": number, "fare": number or null, "steps": [{"mode": "WALK" | "TRANSIT" | "TAXI" | "DRIVE", "vehicle": "SUBWAY" | "HEAVY_RAIL" | "HIGH_SPEED_TRAIN" | "BUS" | "TRAM" | "MONORAIL" | "FERRY" | "" , "line": string, "from": string, "to": string, "minutes": number}], "note": string}], "advice": string}
+{"options": [{"title": string, "minutes": number, "fare": number or null, "confidence": "high" | "medium" | "low", "steps": [{"mode": "WALK" | "TRANSIT" | "TAXI" | "DRIVE", "vehicle": "SUBWAY" | "HEAVY_RAIL" | "HIGH_SPEED_TRAIN" | "BUS" | "TRAM" | "MONORAIL" | "FERRY" | "" , "line": string, "from": string, "to": string, "minutes": number}], "note": string}], "advice": string}
 - Up to 4 options, best first: e.g. fastest, cheapest, fewest transfers, taxi if sensible. Only one option if there is clearly one sensible way (e.g. a short walk).
 - Use real line, station and stop names as written on local signs (Japanese in Japan, Korean in Korea); do not invent lines or stations. If unsure of a detail, say so in note.
 - minutes: door-to-door total including walking and typical waiting; steps' minutes add up roughly to it. Walking steps have empty line/from/to.
+- confidence: high only if you know these exact lines and stations run between A and B; low if the route, times or fare are guesses.
 - fare: per adult in ${cur} (IC card fare where it applies), null if unknown.
 - title, note and advice in Traditional Chinese as used in Hong Kong, short. note: what to watch out for (exit to use, transfer, last train, crowding). advice: one or two sentences comparing the options.`;
  let r;
@@ -423,6 +424,7 @@ Reply with JSON only:
  const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
  const options = (Array.isArray(r?.options) ? r.options : []).slice(0, 4).map(o => ({
   title: text(o.title, 40), minutes: num(o.minutes, 1440), note: text(o.note, 200),
+  confidence: ['high', 'medium', 'low'].includes(o.confidence) ? o.confidence : 'low',
   fare: typeof o.fare === 'number' && o.fare > 0 && o.fare < 1e6 ? { currency: cur, amount: Math.round(o.fare * 100) / 100 } : null,
   steps: (Array.isArray(o.steps) ? o.steps : []).slice(0, 10).map(s => ({ mode: ['WALK', 'TRANSIT', 'TAXI', 'DRIVE'].includes(s.mode) ? s.mode : 'TRANSIT', vehicle: text(s.vehicle, 30), line: text(s.line, 60), from: text(s.from, 60), to: text(s.to, 60), minutes: num(s.minutes, 1440) })),
  })).filter(o => o.steps.length);

@@ -180,7 +180,7 @@
       });
       c.aiOptions = r.options;
       box.innerHTML = r.options.length
-        ? `<div class="route-ai-head"><b>✨ AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}<button type="button" class="action primary" data-route-ai-pick="${k}">選用這個</button></div>`).join("")}`
+        ? `<div class="route-ai-head"><b>✨ AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}<button type="button" class="action primary" data-route-ai-pick="${k}">選用這個</button></div>`).join("")}`
         : '<p class="note">AI 未能提供路線建議。</p>';
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(String(e?.code || "").startsWith("functions/") && e.message ? e.message.replace(/\s*\[\d+\]$/, "") : "未能進行 AI 分析，請檢查網絡後再試。")}</p>`;

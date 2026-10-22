@@ -47,6 +47,15 @@
             : r.confidence === "low"
               ? "⚠️ 相片不太清楚，請仔細檢查。"
               : "",
+      // Not blocking: totals often differ from the item lines because of tax, discounts or a missed line.
+      hint: (() => {
+        const lines = (r.items || []).filter((i) => i.amount > 0),
+          sum = lines.reduce((t, i) => t + i.amount, 0),
+          total = Number(r.total);
+        return lines.length >= 2 && total > 0 && !r.totalFromItems && Math.abs(sum - total) > Math.max(1, total * 0.05)
+          ? `物品合計 ${sum.toLocaleString("en-US")} 與總額 ${total.toLocaleString("en-US")} 不同（可能有稅項、折扣或漏讀），請對照收據。`
+          : "";
+      })(),
     };
   }
   const drafts = () => jobs.filter((j) => !j.kind || j.kind === "receipt").map(draftOf);
@@ -149,7 +158,7 @@
     if (d.status === "fail")
       return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error || "未能讀取。")}</p><div class="links">${retry}${drop}</div></article>`;
     const warn = draftDup(d, all) || d.warn;
-    return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
+    return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
   }
   function renderDrafts() {
     const box = $("#tgDrafts");

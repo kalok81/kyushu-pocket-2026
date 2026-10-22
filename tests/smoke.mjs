@@ -103,6 +103,7 @@ try {
   assert.match(await page.locator('#routeResults a').getAttribute('href'), /travelmode=transit/);
   await page.click('[data-route-ai]'); await page.waitForSelector('[data-route-ai-pick]');
   assert.deepEqual(await page.locator('#routeAi .route-option .route-head b').allInnerTexts(), ['最快', '的士']);
+  assert.deepEqual(await page.locator('#routeAi .ai-sure').allInnerTexts(), ['把握：高', '把握：低，請核對']);
   const req = await page.evaluate(() => window.aiRequest); assert.equal(req.origin.name, '上野酒店'); assert.equal(req.destination.name, '淺草寺'); assert.equal(req.currency, 'JPY');
   await page.locator('[data-route-ai-pick]').first().click();
   await page.waitForFunction(() => /最快：.*銀座線 上野 → 淺草.*（AI 估算）/.test(document.querySelector('#routeManual textarea').value));
