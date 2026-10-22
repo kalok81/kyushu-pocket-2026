@@ -111,6 +111,27 @@ try {
   await page.selectOption('#routeTo', { label: '上野酒店' }); assert.equal(await page.inputValue('#routeManual textarea'), '');
   await page.keyboard.press('Escape');
  });
+ await step('shopping list shows on explore and plan', async () => {
+  await page.goto(base + '/#explore'); await page.click('[data-place-new]');
+  await page.fill('#placeForm [name=f0]', '淺草'); await page.fill('#placeForm [name=f1]', '仲見世通り'); await page.locator('#placeForm [name=cats]').first().check(); await page.click('#placeForm button[type=submit]');
+  await page.goto(base + '/#shopping'); await page.waitForSelector('[data-tg-form=shop]');
+  await page.fill('[data-tg-form=shop] [name=name]', '人形燒'); await page.fill('[data-tg-form=shop] [name=place]', '仲見世通り 淺草'); await page.click('[data-tg-form=shop] button[type=submit]');
+  await page.fill('[data-tg-form=shop] [name=name]', '御守'); await page.fill('[data-tg-form=shop] [name=place]', '淺草寺 本堂'); await page.click('[data-tg-form=shop] button[type=submit]');
+  await page.waitForTimeout(300);
+  await page.goto(base + '/#explore'); await page.waitForSelector('#results .buy-here');
+  assert.match(await page.locator('#results .buy-here').innerText(), /要買：人形燒/);
+  await page.click('[data-cat=購物清單]'); assert.equal(await page.locator('#results .card.place').count(), 1);
+  await page.click('#results [data-place]'); await page.waitForSelector('#detail .detail-section >> text=購物清單（1）');
+  await page.click('#detail [data-shop-open]'); await page.waitForFunction(() => /人形燒/.test(document.querySelector('#detailBody').textContent)); await page.keyboard.press('Escape');
+  await page.click('[data-cat=全部]');
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
+  assert.match(await page.locator('.stopcontent', { hasText: '淺草寺' }).first().innerText(), /要買：御守/);
+  await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=購物清單]'); await page.waitForSelector('[data-pp-spot]');
+  assert.match(await page.locator('#ppList').innerText(), /仲見世通り[\s\S]*人形燒/);
+  await page.locator('#ppList .pp-row', { hasText: '仲見世通り' }).locator('[data-pp-spot]').click(); await page.keyboard.press('Escape');
+  await page.waitForFunction(() => [...document.querySelectorAll('.timeline h3')].some(h => h.textContent === '仲見世通り'));
+  assert.match(await page.locator('.stopcontent', { hasText: '仲見世通り' }).first().innerText(), /要買：人形燒/);
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

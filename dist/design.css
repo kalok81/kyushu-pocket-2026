@@ -239,3 +239,8 @@ body{overflow-wrap:anywhere}
 .ticket-bottom>span:first-child{flex:1 1 160px}
 .ticket-bottom>span:last-child{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
 .shop-tile-name{max-height:calc(1.35em * 2)}
+/* Shopping list items at a place (explore cards, plan stops) */
+.buy-here{margin:8px 0;font-size:13px;color:var(--foreground)}
+.buy-item{display:inline;min-height:0;padding:0;border:0;background:none;box-shadow:none;color:inherit;font:inherit;text-decoration:underline;text-decoration-color:var(--input);text-underline-offset:3px;cursor:pointer}
+.buy-item:hover{background:none;text-decoration-color:var(--primary)}
+.action.bought{color:var(--muted-foreground);text-decoration:line-through}

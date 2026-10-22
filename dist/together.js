@@ -83,7 +83,7 @@ window.Together=(()=>{
   const watch=name=>fs.onSnapshot(tcol(name),{includeMetadataChanges:true},snap=>{
    state[name]=snap.docs.map(d=>({...d.data(),id:d.id,pending:d.metadata.hasPendingWrites})).sort((a,b)=>(b.at||0)-(a.at||0));
    if(state.status!=='ready'){state.status='ready';saveProfile()}
-   if(name==='shopping'&&started)setTimeout(geocodeShopping,1000);
+   if(name==='shopping'&&started){setTimeout(geocodeShopping,1000);T().shoppingChanged?.()}
    if(name==='places'){state.placesLoaded=true;if(started)T().applyPlaceEdits(state.places);else start()}
    if(name==='planDays'&&started)T().applyPlanEdits(planMap());
    if((name==='hotels'||name==='flights')&&started){T().refreshLists();const box=$('#detailBody [data-docs-for]');if(box&&$('#detail').open){const [k,i]=box.dataset.docsFor.split(':');if(k===name)openDocs(k,i)}}
@@ -468,7 +468,7 @@ window.Together=(()=>{
  }
  // Photo grid: one tile per item; tapping opens the item with a large photo in the detail dialog.
  function shopTile(x){const price=x.price!=null?esc(S.format(S.toMinor(x.price,x.currency),x.currency)):'';return `<button type="button" class="shop-tile${x.bought?' bought':''}" data-shop-open="${esc(x.id)}">${x.photo?`<img src="${photoSrc(x.photo)}" alt="" loading="lazy">`:'<span class="shop-tile-ph" aria-hidden="true">🛍</span>'}<span class="shop-tile-name">${x.bought?'✓ ':''}${esc(x.name)}</span>${price?`<span class="shop-tile-price">${price}</span>`:''}</button>`}
- function openShopItem(id){const x=state.shopping.find(i=>i.id===id);if(!x)return;$('#detailBody').innerHTML=`${x.photo?`<img class="shop-detail-photo" src="${photoSrc(x.photo)}" alt="${esc(x.name)}">`:''}${shopItem(x).replace(/<img class="shop-thumb"[^>]*>/,'')}`;$('#detail').showModal()}
+ function openShopItem(id){const x=state.shopping.find(i=>i.id===id);if(!x)return;$('#detailBody').innerHTML=`${x.photo?`<img class="shop-detail-photo" src="${photoSrc(x.photo)}" alt="${esc(x.name)}">`:''}${shopItem(x).replace(/<img class="shop-thumb"[^>]*>/,'')}`;if(!$('#detail').open)$('#detail').showModal()}
  function shopPage(){
   if(state.status!=='ready')return {sig:'wait',shell:'<div class="empty"><h2>正在連接…</h2></div>'};
   const edit=state.shopping.find(x=>x.id===state.shopEdit);if(state.shopEdit&&!edit){state.shopEdit=null;shopPhoto=null}
@@ -488,6 +488,27 @@ window.Together=(()=>{
  // 附近 › 購物: spots where unbought list items can be bought. An explore shop named in 購買地點 uses its pin;
  // otherwise the item's own coordinates (geocoded from 購買地點). Items at the same spot share one card.
  const shopLabel=t=>String(t).split(/\s*(?:日本、|日本,|〒)/)[0].trim().slice(0,40)||String(t).slice(0,40);
+ // Shopping list items at a place: by its explore place (購買地點 naming that place), or by a stop's own name.
+ let buyMemo=null;
+ function shoppingFor(){
+  const ps=T().places;if(buyMemo&&buyMemo.list===state.shopping&&buyMemo.n===ps.length)return buyMemo.map;
+  const map=new Map();for(const x of state.shopping){if(!x.place)continue;const p=placeFor(x.place);if(p)(map.get(p.id)||map.set(p.id,[]).get(p.id)).push({id:x.id,name:x.name,bought:!!x.bought})}
+  buyMemo={list:state.shopping,n:ps.length,map};return map;
+ }
+ function shoppingAt({placeId,title}){
+  if(placeId){const m=shoppingFor().get(placeId);if(m)return m}
+  const t=norm(title||'');if(t.length<2)return [];
+  return state.shopping.filter(x=>x.place&&norm(x.place).includes(t)).map(x=>({id:x.id,name:x.name,bought:!!x.bought}));
+ }
+ // Places to buy unbought items, for adding to the plan (coordinates not needed): explore place, else the 購買地點 text.
+ function shoppingPlaces(){
+  const spots={};
+  for(const x of state.shopping.filter(x=>!x.bought&&x.place)){
+   const p=placeFor(x.place),key=p?'p:'+p.id:'t:'+norm(shopLabel(x.place));
+   (spots[key]??={name:p?p.v[1]:shopLabel(x.place),placeId:p?p.id:null,address:p?p.v[3]:x.place,...(Number.isFinite(x.lat)&&Number.isFinite(x.lng)?{lat:x.lat,lng:x.lng}:{}),items:[]}).items.push(x.name);
+  }
+  return Object.values(spots);
+ }
  function shoppingSpots(){
   const spots={},geo=window.TRIP_GEO?.places||{};
   for(const x of state.shopping.filter(x=>!x.bought&&x.place)){
@@ -690,5 +711,5 @@ window.Together=(()=>{
  addEventListener('online',()=>{refresh();renderDrafts()});addEventListener('offline',()=>{refresh();renderDrafts()});
  setInterval(()=>{if(jobs.some(j=>!['done','failed'].includes(j.status)))renderDrafts()},30000);
  load().catch(()=>{});
- return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,lists:tripLists,saveItem,removeItem,setDayLabel,lookupPlace,suggestRoutes,aiRoutes,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
+ return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,shoppingPlaces,shoppingFor,shoppingAt,lists:tripLists,saveItem,removeItem,setDayLabel,lookupPlace,suggestRoutes,aiRoutes,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
 })();
