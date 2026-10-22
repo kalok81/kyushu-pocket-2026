@@ -19,5 +19,20 @@ window.MapPicker=(()=>{
    document.querySelector('#confirmPin').onclick=()=>{onConfirm({...selected});dialog.close()};map.invalidateSize();select(pin.getLatLng());
   }catch{const status=document.querySelector('#mapLoad');if(status)status.textContent='地圖未能載入，請檢查網絡後關閉再試；你仍可使用手機定位。'}
  }
- return Object.freeze({open});
+ // The day's route: numbered stops in order, joined by a dashed line, with a Google Maps link for directions.
+ async function route({title,stops,openDialog,esc}){
+  const dialog=document.querySelector('#detail'),pts=stops.slice(0,10);
+  const gmaps=pts.length>1?`https://www.google.com/maps/dir/${pts.map(s=>`${s.lat},${s.lng}`).join('/')}`:`https://www.google.com/maps/search/?api=1&query=${pts[0].lat},${pts[0].lng}`;
+  openDialog(`<div class="eyebrow">DAY ROUTE</div><h2 class="detailtitle">${esc(title)}</h2><div id="mapLoad" role="status">正在載入地圖…</div><div id="routeMap" class="pin-map route-map" role="region" aria-label="當天路線地圖"></div><ol class="route-list">${stops.map(s=>`<li><b>${s.n}</b><span>${esc(s.time)}</span>${esc(s.title)}</li>`).join('')}</ol><a class="locate-button route-go" href="${gmaps}" target="_blank" rel="noopener">在 Google 地圖查看路線 ↗</a><p class="note">${stops.length>10?'Google 地圖連結最多包括頭 10 個站點。':''}同一時間有多個選擇時，只顯示第一個；沒有座標的站點不會顯示。地圖由 OpenStreetMap 提供。</p>`);
+  dialog.classList.add('map-picker-dialog');let map;dialog.addEventListener('close',()=>{if(map)map.remove();dialog.classList.remove('map-picker-dialog')},{once:true});
+  try{await load();const el=document.querySelector('#routeMap');if(!dialog.open||!el)return;document.querySelector('#mapLoad').remove();
+   const L=window.L;map=L.map(el,{scrollWheelZoom:false});
+   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'}).addTo(map);
+   const ll=stops.map(s=>[s.lat,s.lng]);if(ll.length>1)L.polyline(ll,{color:'#183e39',weight:3,opacity:.7,dashArray:'6 8'}).addTo(map);
+   for(const s of stops)L.marker([s.lat,s.lng],{icon:L.divIcon({className:'route-pin',html:`<span>${s.n}</span>`,iconSize:[28,28],iconAnchor:[14,14]}),title:s.title,alt:`${s.n} ${s.title}`}).addTo(map).bindTooltip(esc(`${s.n}. ${s.title}`));
+   if(ll.length>1)map.fitBounds(ll,{padding:[30,30],maxZoom:16});else map.setView(ll[0],15);
+   map.invalidateSize();
+  }catch{const status=document.querySelector('#mapLoad');if(status)status.textContent='地圖未能載入，請檢查網絡；仍可按下面的 Google 地圖連結。'}
+ }
+ return Object.freeze({open,route});
 })();

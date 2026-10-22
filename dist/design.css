@@ -106,3 +106,12 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
 /* ---- Weather ---- */
 .dayintro .weather{margin:4px 0 2px;font-size:13px;color:var(--muted-foreground)}
 .weather-tab{display:block;font-size:12px;line-height:1.4;min-height:17px;color:var(--muted-foreground)}.daytab.active .weather-tab{color:#d1ddcb}
+
+/* ---- Day route map ---- */
+.route-map{height:min(52vh,420px)}
+.route-pin span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--primary);color:var(--primary-foreground);font:700 13px/1 system-ui,sans-serif;border:2px solid #fff;box-shadow:var(--shadow)}
+.route-list{list-style:none;margin:14px 0;padding:0;display:grid;gap:6px}
+.route-list li{display:grid;grid-template-columns:26px auto 1fr;gap:8px;align-items:baseline;font-size:14px}
+.route-list b{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--secondary);font-size:12px}
+.route-list span{color:var(--muted-foreground);font-size:12px;font-variant-numeric:tabular-nums}
+.route-go{display:flex;align-items:center;justify-content:center;text-decoration:none}
