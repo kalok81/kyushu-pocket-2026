@@ -132,3 +132,17 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
 .doc-thumb{width:48px;height:48px;border-radius:8px;background:var(--muted-bg);display:grid;place-items:center;font-size:11px;font-weight:700;color:var(--muted-foreground);overflow:hidden}
 .doc-thumb img{width:100%;height:100%;object-fit:cover}
 .doc-row .action{min-height:34px;padding:6px 10px;text-decoration:none}
+
+/* ---- Printed itinerary ---- */
+#printArea{display:none}
+@media print{
+ body.printing>*:not(#printArea){display:none!important}
+ body.printing{background:#fff;color:#000;padding:0}
+ #printArea{display:block;font-size:11pt;line-height:1.45}
+ #printArea h1{font-size:20pt;margin:0 0 4px}#printArea h2{font-size:13pt;margin:16px 0 6px;border-bottom:1px solid #999;padding-bottom:3px}
+ #printArea table{width:100%;border-collapse:collapse}#printArea td{vertical-align:top;padding:4px 6px;border-bottom:1px solid #ddd}
+ #printArea .print-time{white-space:nowrap;width:1%;font-variant-numeric:tabular-nums}
+ #printArea .print-sub{color:#555;font-size:9.5pt;margin:2px 0}
+ #printArea .print-day{break-inside:avoid-page}
+ @page{margin:14mm}
+}
