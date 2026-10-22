@@ -76,9 +76,11 @@ try {
   await page.goto(base + '/#plan?day=2'); await page.waitForSelector('[data-plan-pick]'); await page.click('[data-plan-pick]');
   await page.click('[data-pp-cat=住宿]'); await page.waitForSelector('[data-pp-hotel]');
   await page.fill('#ppTime', '21:00'); await page.click('[data-pp-hotel]'); await page.waitForSelector('#ppList .badge');
+  await page.fill('#ppTime', '09:00'); await page.click('[data-pp-hotel]'); await page.waitForFunction(() => /2 次/.test(document.querySelector('#ppList .badge')?.textContent || ''));
   await page.keyboard.press('Escape'); await page.waitForSelector('.timeline h3');
-  assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), ['上野酒店']);
-  assert.equal(await page.locator('.timeline .stop a[href="#hotels"]').count(), 1);
+  assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), ['上野酒店', '上野酒店']);
+  assert.deepEqual(await page.locator('.timeline .time').allInnerTexts(), ['09:00', '21:00']);
+  assert.equal(await page.locator('.timeline .stop a[href="#hotels"]').count(), 2);
   if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/plan-hotel.png' });
  });
  assert.deepEqual(errors, [], 'page errors');
