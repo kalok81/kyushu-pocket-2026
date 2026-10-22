@@ -84,6 +84,7 @@ window.Together=(()=>{
    state[name]=snap.docs.map(d=>({...d.data(),id:d.id,pending:d.metadata.hasPendingWrites})).sort((a,b)=>(b.at||0)-(a.at||0));
    if(state.status!=='ready'){state.status='ready';saveProfile()}
    if(name==='shopping'&&started){setTimeout(geocodeShopping,1000);T().shoppingChanged?.()}
+   if(name==='notes'&&started)T().shoppingChanged?.();
    if(name==='places'){state.placesLoaded=true;if(started)T().applyPlaceEdits(state.places);else start()}
    if(name==='planDays'&&started)T().applyPlanEdits(planMap());
    if((name==='hotels'||name==='flights')&&started){T().refreshLists();const box=$('#detailBody [data-docs-for]');if(box&&$('#detail').open){const [k,i]=box.dataset.docsFor.split(':');if(k===name)openDocs(k,i)}}
@@ -309,7 +310,7 @@ window.Together=(()=>{
  function savePlanDay(day,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,by:state.user.uid,byName:me().name,at:Date.now()},{merge:true}).catch(()=>toast('未能儲存行程，請再試。'))}
  function setDayLabel(day,label,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,label,by:state.user.uid,byName:me().name,at:Date.now()},{merge:true}).catch(()=>toast('未能儲存，請再試。'))}
  // Hotels and flights (trips created on the site).
- const tripLists=()=>({hotels:state.hotels,flights:state.flights});
+ const tripLists=()=>({hotels:state.hotels,flights:state.flights,shopping:state.shopping,notes:state.notes});
  function saveItem(name,id,data){if(id){update(name,id,data);toast('已儲存')}else add(name,data)}
  function removeItem(name,id){const docs=(state[name]||[]).find(x=>x.id===id)?.docs;fb.fs.deleteDoc(tdoc(name,id)).then(()=>dropPhotos(docs?.map(d=>d.path)),()=>toast('未能刪除，請再試。'))}
  // Booking documents for a hotel or flight (e-tickets, confirmations, screenshots): Storage trips/{t}/docs/, readable only by
@@ -715,5 +716,5 @@ window.Together=(()=>{
  addEventListener('online',()=>{refresh();renderDrafts()});addEventListener('offline',()=>{refresh();renderDrafts()});
  setInterval(()=>{if(jobs.some(j=>!['done','failed'].includes(j.status)))renderDrafts()},30000);
  load().catch(()=>{});
- return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,shoppingPlaces,shoppingFor,shoppingAt,lists:tripLists,saveItem,removeItem,setDayLabel,lookupPlace,suggestRoutes,aiRoutes,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
+ return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,shoppingPlaces,shoppingFor,shoppingAt,lists:tripLists,openShopItem,saveItem,removeItem,setDayLabel,lookupPlace,suggestRoutes,aiRoutes,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
 })();

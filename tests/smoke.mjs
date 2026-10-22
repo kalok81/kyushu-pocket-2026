@@ -146,6 +146,17 @@ try {
   await page.waitForFunction(() => [...document.querySelectorAll('.timeline h3')].some(h => h.textContent === '仲見世通り'));
   assert.match(await page.locator('.stopcontent', { hasText: '仲見世通り' }).first().innerText(), /要買：人形燒/);
  });
+ await step('notebook gathers what companions entered', async () => {
+  await page.goto(base + '/#notebook'); await page.waitForSelector('#notebookResults .notebook-card');
+  const text = await page.locator('#notebookResults').innerText();
+  for (const want of ['淺草寺', '上野酒店', '蘋果批']) assert.match(text, new RegExp(want), `notebook should list ${want}`);
+  assert.equal(await page.locator('#moreNotebook').count(), 0);
+  assert.doesNotMatch(await page.locator('.sourcefooter').first().innerText(), /資料快照/);
+  await page.click('[data-notebook-type=行程]'); assert.match(await page.locator('#notebookResults').innerText(), /D1 1\/4\/2030 · 10:00/);
+  await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detail a[href^="#plan?day="]'); await page.keyboard.press('Escape');
+  await page.click('[data-notebook-type=購物]'); await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detailBody .shop-item');
+  await page.keyboard.press('Escape');
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }
