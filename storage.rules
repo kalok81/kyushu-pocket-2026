@@ -1,0 +1,16 @@
+rules_version = '2';
+// Receipt photos: receipts/{uid}/{file}. Only companions on the member list (config/members in Firestore) can
+// read them; each companion uploads only under their own uid; any companion may delete (e.g. deleting an expense).
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isMember() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in firestore.get(/databases/(default)/documents/config/members).data.emails;
+    }
+    match /receipts/{uid}/{file} {
+      allow read, delete: if isMember();
+      allow create: if isMember() && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType == 'image/jpeg';
+    }
+  }
+}

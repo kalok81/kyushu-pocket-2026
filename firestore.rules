@@ -51,7 +51,9 @@ service cloud.firestore {
     match /expenses/{id} {
       allow read, delete: if isMember();
       allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'items', 'by', 'byName', 'at', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'items', 'receipts', 'receiptHashes', 'by', 'byName', 'at', 'createdAt'])
+        && (!('receipts' in request.resource.data) || (request.resource.data.receipts is list && request.resource.data.receipts.size() <= 4))
+        && (!('receiptHashes' in request.resource.data) || (request.resource.data.receiptHashes is list && request.resource.data.receiptHashes.size() <= 4))
         && (!('items' in request.resource.data) || (request.resource.data.items is list && request.resource.data.items.size() <= 30))
         && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
         && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 10000000
@@ -85,14 +87,15 @@ service cloud.firestore {
     match /receiptJobs/{id} {
       allow read, delete: if isMember() && resource.data.by == request.auth.uid;
       allow create: if isMember() && owned()
-        && request.resource.data.keys().hasOnly(['image', 'images', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+        && request.resource.data.keys().hasOnly(['image', 'images', 'hashes', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+        && (!('hashes' in request.resource.data) || (request.resource.data.hashes is list && request.resource.data.hashes.size() <= 4))
         && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
         && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill'])
         && (('images' in request.resource.data && request.resource.data.images is list
               && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
             || text(request.resource.data.image, 900000));
       allow update: if isMember() && resource.data.by == request.auth.uid
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries', 'photos'])
         && (request.resource.data.status == resource.data.status || request.resource.data.status == 'pending');
     }
     // Edited day plans: the whole stop list for one day (1-7); deleting the document restores the original plan.

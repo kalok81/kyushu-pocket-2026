@@ -142,8 +142,9 @@ window.Together=(()=>{
   if(images.length>4)return toast('同一張收據最多 4 張相片，請少揀幾張。');
   keys.forEach(k=>picked.delete(k));
   const {fs,db}=fb;
-  fs.addDoc(fs.collection(db,'receiptJobs'),{images,file:group.map(d=>d.file).join(' + ').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()})
-   .then(()=>group.forEach(d=>{fs.deleteDoc(jobRef(d.key)).catch(()=>{});delete localEdits[d.key]}),()=>toast('未能合併，請再試。'));
+  const src=group.map(d=>jobs.find(j=>j.id===d.key)||{}),hashes=src.flatMap(j=>j.hashes||[]).slice(0,4),stored=src.flatMap(j=>j.photos||[]);
+  fs.addDoc(fs.collection(db,'receiptJobs'),{images,hashes,file:group.map(d=>d.file).join(' + ').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()})
+   .then(ref=>{group.forEach(d=>{fs.deleteDoc(jobRef(d.key)).catch(()=>{});delete localEdits[d.key]});if(stored.length&&stored.length<=4)fs.updateDoc(ref,{photos:stored}).catch(()=>{})},()=>toast('未能合併，請再試。'));
   toast('已合併，正在重新分析');
  }
  const STATUS={upload:'上載中',queued:'等候分析',busy:'分析中…',done:'已讀取',fail:'未能讀取'};
@@ -166,15 +167,37 @@ window.Together=(()=>{
   box.innerHTML=`${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready?`<button type="button" class="action primary" data-tg="draftsAddAll">全部加入（${ready}）</button>`:''}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading?`${uploading} 張正在上載${navigator.onLine?'':'（離線中，有網絡時會繼續）'}。`:''}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」使用下面表格的設定；有 ⚠️ 的不會在「全部加入」時加入。</p>${all.map(d=>draftHtml(d,all)).join('')}`;
   if(card&&field){const el=box.querySelector(`[data-draft="${card.dataset.draft}"] [data-df="${field}"]`);if(el)el.focus()}
  }
+ // Receipt photos are also kept in Firebase Storage (receipts/{uid}/{job}-{n}.jpg, members only): a 2400px copy
+ // uploaded in the background, or the job's own photos when the expense is added if that upload never finished.
+ let storageMod;
+ const storage=async()=>{storageMod??=await import('./vendor/firebase/firebase-storage.js');return {m:storageMod,st:storageMod.getStorage(fb.app)}};
+ const b64Blob=b64=>new Blob([Uint8Array.from(atob(b64),c=>c.charCodeAt(0))],{type:'image/jpeg'});
+ async function putPhotos(jobId,blobs){const {m,st}=await storage();return Promise.all(blobs.map(async(b,i)=>{const path=`receipts/${state.user.uid}/${jobId}-${i}.jpg`;await m.uploadBytes(m.ref(st,path),b,{contentType:'image/jpeg'});return path}))}
+ async function dropPhotos(paths){if(!paths?.length)return;try{const {m,st}=await storage();await Promise.all(paths.map(p=>m.deleteObject(m.ref(st,p)).catch(()=>{})))}catch{}}
+ async function bigCopy(file){const b64=await shrink(file,2400,.9);return b64Blob(b64)}
+ // Same photo file uploaded again: a SHA-256 fingerprint of the file, checked against waiting receipts and expenses.
+ async function fileHash(file){const h=await crypto.subtle.digest('SHA-256',await file.arrayBuffer());return [...new Uint8Array(h)].slice(0,16).map(b=>b.toString(16).padStart(2,'0')).join('')}
+ function knownHashes(){
+  const known=new Map();
+  for(const e of state.expenses)for(const h of e.receiptHashes||[])known.set(h,`已記錄為開支：${dupText(e)}`);
+  for(const j of jobs.filter(j=>!j.kind||j.kind==='receipt'))for(const h of j.hashes||[])known.set(h,`已在待確認收據：「${j.file}」`);
+  return known;
+ }
  async function queueReceipts(files){
   const {fs,db}=fb;
-  const send=(images,file)=>fs.addDoc(fs.collection(db,'receiptJobs'),{images,file:String(file).slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{toast('未能上載收據，請確認你仍在旅伴名單。');console.error(e)});
   if(files.length>10){toast('一次最多 10 張，已取頭 10 張。');files=files.slice(0,10)}
+  const hashes=await Promise.all(files.map(f=>fileHash(f).catch(()=>null))),known=knownHashes(),seen=new Map(),dups=[];
+  files.forEach((f,i)=>{const h=hashes[i];if(!h)return;const why=known.get(h)||(seen.has(h)?`與這批的「${seen.get(h)}」是同一張相片`:'');if(why)dups.push({i,text:`「${f.name||'相片'}」${why}`});else seen.set(h,f.name||'相片')});
+  if(dups.length&&!confirm(`以下相片已經上載過：\n${dups.map(d=>'• '+d.text).join('\n')}\n\n按「確定」仍然上載，按「取消」跳過這些相片。`)){const skip=new Set(dups.map(d=>d.i));files=files.filter((_,i)=>!skip.has(i));hashes.splice(0,hashes.length,...hashes.filter((_,i)=>!skip.has(i)))}
   let n=0;
-  for(const f of files){
-   try{let images=await receiptImages(f);if(images.join('').length>850000)images=[await shrink(f,1400,.7)];
-    send(images,f.name||'相片');n++}
-   catch(e){toast(`${f.name||'相片'}：${scanError(e)}`);console.error(e)}
+  for(const [i,f] of files.entries()){
+   try{
+    let images=await receiptImages(f);if(images.join('').length>850000)images=[await shrink(f,1400,.7)];
+    const ref=fs.doc(fs.collection(db,'receiptJobs'));
+    fs.setDoc(ref,{images,hashes:hashes[i]?[hashes[i]]:[],file:String(f.name||'相片').slice(0,120),status:'pending',by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(e=>{toast('未能上載收據，請確認你仍在旅伴名單。');console.error(e)});
+    n++;
+    bigCopy(f).then(b=>putPhotos(ref.id,[b])).then(photos=>fs.updateDoc(ref,{photos})).catch(e=>console.warn('receipt photo upload',e));
+   }catch(e){toast(`${f.name||'相片'}：${scanError(e)}`);console.error(e)}
   }
   if(n)toast(`已加入 ${n} 張收據，會在背景分析`);
  }
@@ -195,13 +218,16 @@ window.Together=(()=>{
   return `<div class="tg-drafts"><div class="tg-drafts-head"><b>${busy?`AI 辨識中 ${busy} 張`:'未能辨識的相片'}</b></div>${pj.map(j=>{const st=jobState(j),fail=st==='fail',retry=canRetry(j);return `<article class="tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta"><span class="badge">${fail?'未能辨識':STATUS[st]}</span><span>${esc(j.file)}</span></div>${fail?`<p class="note">${esc(j.error||'未能辨識。')}</p>`:'<div class="tg-progress tg-progress-busy"><div></div></div>'}${fail||retry?`<div class="links">${retry?`<button type="button" class="smallbtn" data-draft-retry="${esc(j.id)}">重試</button>`:''}<button type="button" class="smallbtn" data-draft-drop="${esc(j.id)}">捨棄</button></div>`:''}</article>`}).join('')}</div>`;
  }
  const jobRef=id=>fb.fs.doc(fb.db,'receiptJobs',id);
- function addDraft(d,ask){
+
+ async function addDraft(d,ask){
   const f=$('[data-tg-form="expense"]'),v=new FormData(f),split=v.getAll('split').map(String),amount=Number(d.amount);
   if(!String(d.title).trim()||!(amount>0)||amount>1e7){toast('請檢查項目和金額。');return false}
   if(!split.length){toast('請在下面表格最少選一位分帳旅伴。');return false}
   const exp={title:String(d.title).trim().slice(0,80),amount:Math.round(amount*100)/100,currency:d.currency,paidBy:String(v.get('paidBy')),split,day:Number(d.day),items:d.items.slice(0,30)},dup=duplicateOf(exp);
   if(dup&&ask&&!confirm(`似乎已經記錄過：\n${dupText(dup)}\n\n仍然要加入嗎？`))return false;
-  add('expenses',exp);fb.fs.deleteDoc(jobRef(d.key)).catch(()=>{});jobs=jobs.filter(j=>j.id!==d.key);delete localEdits[d.key];return true;
+  const job=jobs.find(j=>j.id===d.key)||{};let receipts=job.photos||[];
+  if(!receipts.length&&d.photos.length){try{toast('正在保存收據相片…');receipts=await putPhotos(d.key,d.photos.map(b64Blob))}catch(e){console.warn('receipt photo upload',e);toast('收據相片未能保存（可能離線），開支照樣加入。')}}
+  add('expenses',{...exp,...(receipts.length?{receipts:receipts.slice(0,4)}:{}),...(job.hashes?.length?{receiptHashes:job.hashes.slice(0,4)}:{})});fb.fs.deleteDoc(jobRef(d.key)).catch(()=>{});jobs=jobs.filter(j=>j.id!==d.key);delete localEdits[d.key];return true;
  }
  // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.
  async function lookupPlace(url){if(!navigator.onLine)throw new Error('offline');return (await (await callable('lookupPlace',45000))({url})).data}
@@ -230,7 +256,14 @@ window.Together=(()=>{
  function saveFavorites(ids){fb.fs.setDoc(fb.fs.doc(fb.db,'members',state.user.uid),{saved:ids.slice(0,500)},{merge:true}).catch(()=>toast('未能同步收藏。'))}
  function restorePlace(id){fb.fs.deleteDoc(fb.fs.doc(fb.db,'places',id)).catch(()=>toast('未能還原，請再試。'))}
  function update(name,id,data){fb.fs.updateDoc(fb.fs.doc(fb.db,name,id),data).catch(()=>toast('未能儲存，請再試。'))}
- function remove(name,id){if(confirm('確定刪除？所有旅伴都會看不到這項。'))fb.fs.deleteDoc(fb.fs.doc(fb.db,name,id)).catch(()=>toast('未能刪除，請再試。'))}
+ function remove(name,id){if(!confirm(name==='expenses'?'確定刪除？所有旅伴都會看不到這項，收據相片亦會一併刪除。':'確定刪除？所有旅伴都會看不到這項。'))return;const paths=name==='expenses'?state.expenses.find(e=>e.id===id)?.receipts:null;fb.fs.deleteDoc(fb.fs.doc(fb.db,name,id)).then(()=>dropPhotos(paths),()=>toast('未能刪除，請再試。'))}
+ // Receipt viewer: photos are read with the companion's login (getBlob), never through public links.
+ async function showReceipts(id){
+  const e=state.expenses.find(x=>x.id===id);if(!e?.receipts?.length)return;
+  $('#detailBody').innerHTML=`<div class="eyebrow">RECEIPT</div><h2 class="detailtitle">${esc(e.title)}</h2><p class="note">${esc(dupText(e))}</p><div class="receipt-photos">載入中…</div>`;$('#detail').showModal();
+  try{const {m,st}=await storage(),urls=await Promise.all(e.receipts.map(async p=>URL.createObjectURL(await m.getBlob(m.ref(st,p)))));const box=$('.receipt-photos');if(box)box.innerHTML=urls.map((u,i)=>`<a href="${u}" target="_blank" rel="noopener"><img src="${u}" alt="收據相片 ${i+1}"></a>`).join('');$('#detail').addEventListener('close',()=>urls.forEach(URL.revokeObjectURL),{once:true})}
+  catch(err){const box=$('.receipt-photos');if(box)box.textContent=navigator.onLine?'未能載入收據相片。':'離線中，有網絡時才可查看收據相片。';console.error(err)}
+ }
 
  const me=()=>{const u=state.user;return {id:u.uid,name:state.members.find(m=>m.id===u.uid)?.name||u.displayName||u.email.split('@')[0]}};
  const people=()=>{const list=state.members.map(m=>({id:m.id,name:m.name||'旅伴'}));if(state.user&&!list.some(m=>m.id===state.user.uid))list.push(me());return list.sort((a,b)=>a.name.localeCompare(b.name))};
@@ -248,7 +281,7 @@ window.Together=(()=>{
  const sameName=(a,b)=>String(a).replace(/\s+/g,'').toLowerCase()===String(b).replace(/\s+/g,'').toLowerCase();
  const duplicateOf=({title,amount,currency,day})=>state.expenses.find(e=>e.currency===currency&&Math.abs(e.amount-amount)<.005&&(e.day===day||sameName(e.title,title)));
  const dupText=e=>`${dayLabel(e.day)}「${e.title}」${S.format(S.toMinor(e.amount,e.currency),e.currency)}（${e.byName||'旅伴'} 記錄）`;
- function expenseItem(e){return `<article class="tg-item">${meta(e,`<span class="badge">${esc(dayLabel(e.day))}</span>`)}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount,e.currency),e.currency))}</b></div>${e.items?.length?`<ul class="tg-lines">${e.items.map(i=>`<li><span>${esc(i.name)}</span>${i.amount!=null?`<span>${esc(S.format(S.toMinor(i.amount,e.currency),e.currency))}</span>`:''}</li>`).join('')}</ul>`:''}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split||[]).map(nameOf).join('、'))}</p>${del('expenses',e)}</article>`}
+ function expenseItem(e){return `<article class="tg-item">${meta(e,`<span class="badge">${esc(dayLabel(e.day))}</span>`)}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount,e.currency),e.currency))}</b></div>${e.items?.length?`<ul class="tg-lines">${e.items.map(i=>`<li><span>${esc(i.name)}</span>${i.amount!=null?`<span>${esc(S.format(S.toMinor(i.amount,e.currency),e.currency))}</span>`:''}</li>`).join('')}</ul>`:''}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split||[]).map(nameOf).join('、'))}</p><div class="links">${e.receipts?.length?`<button class="action" data-receipts="${esc(e.id)}">🧾 收據（${e.receipts.length}）</button>`:''}${del('expenses',e)}</div></article>`}
  function summary(){
   const bal=S.balances(state.expenses),cs=Object.keys(bal);
   if(!cs.length)return '';
@@ -415,11 +448,12 @@ window.Together=(()=>{
   if(d.tg==='login')login();
   if(d.tg==='logout'&&fb)logout();
   if(d.tg==='scan')$('#tgReceipt')?.click();
-  if(d.draftDrop&&confirm('確定捨棄？')){fb.fs.deleteDoc(jobRef(d.draftDrop)).catch(()=>toast('未能刪除，請再試。'));delete localEdits[d.draftDrop]}
+  if(d.draftDrop&&confirm('確定捨棄？')){const j=jobs.find(x=>x.id===d.draftDrop);fb.fs.deleteDoc(jobRef(d.draftDrop)).then(()=>dropPhotos(j?.photos),()=>toast('未能刪除，請再試。'));delete localEdits[d.draftDrop]}
   if(d.tg==='mergeDrafts')mergeDrafts(d.keys.split(','));
   if(d.draftRetry)fb.fs.updateDoc(jobRef(d.draftRetry),{status:'pending',retries:fb.fs.increment(1)}).catch(()=>toast('未能重試，請再試。'));
-  if(d.draftAdd){const x=drafts().find(i=>i.key===d.draftAdd);if(x&&addDraft(x,true))renderDrafts()}
-  if(d.tg==='draftsAddAll'){const all=drafts(),ok=all.filter(x=>x.status==='done'&&!draftDup(x,all));let n=0;for(const x of ok)if(addDraft(x,false))n++;else break;renderDrafts();const left=drafts().filter(x=>x.status==='done').length;if(n)toast(`已加入 ${n} 筆${left?`，尚有 ${left} 筆待確認`:''}`)}
+  if(d.draftAdd){const x=drafts().find(i=>i.key===d.draftAdd);if(x)addDraft(x,true).then(ok=>{if(ok)renderDrafts()})}
+  if(d.tg==='draftsAddAll')(async()=>{const all=drafts(),ok=all.filter(x=>x.status==='done'&&!draftDup(x,all));let n=0;for(const x of ok)if(await addDraft(x,false))n++;else break;renderDrafts();const left=drafts().filter(x=>x.status==='done').length;if(n)toast(`已加入 ${n} 筆${left?`，尚有 ${left} 筆待確認`:''}`)})();
+  if(d.receipts)showReceipts(d.receipts);
   if(d.tg==='itemAdd'){$('#tgItemRows').insertAdjacentHTML('beforeend',itemRow());$('#tgItemRows').lastElementChild.querySelector('input').focus()}
   if(d.tg==='itemDel'){const rows=$('#tgItemRows');el.closest('.tg-line-row').remove();if(!rows.children.length)rows.innerHTML=itemRow()}
   if(d.tg==='retry'){if(fb&&state.user){state.status='checking';refresh();listen()}else load().catch(()=>{})}
