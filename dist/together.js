@@ -303,9 +303,12 @@ window.Together=(()=>{
   const list=shown.length?[...shown].sort((a,b)=>a.bought-b.bought||(b.at||0)-(a.at||0)).map(shopItem).join(''):`<div class="empty"><h2>${state.shopFilter==='done'?'還沒有已買的東西':'清單是空的'}</h2><p>${state.shopFilter==='done'?'買了之後按「✓ 已買」。':'把想買的東西加進來，旅伴都看得到。'}</p></div>`;
   return {sig:['shop',state.shopEdit||'',state.user.uid].join('|'),shell:`<div class="tg-status" data-tg-live="status"></div>${edit?'':'<div class="panel shop-ai"><b>✨ AI 認物品，自動加入清單</b><div class="links"><button type="button" class="locate-button" data-tg="shopAiCam">📷 影相</button><button type="button" class="locate-button" data-tg="shopAi">🖼 上載相片（可多張）</button></div><input type="file" accept="image/*" capture="environment" id="shopAiCam" hidden><input type="file" accept="image/*" id="shopAiInput" multiple hidden><p class="note">AI 會認出物品、規格，以及價錢牌上的價錢，自動加入清單，之後可以修改。可以關閉網頁，AI 會在背景完成。</p></div>'}<div data-tg-live="jobs"></div>${shopForm(edit)}<div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="tg-list" data-tg-live="list"></div>`,live:{status:statusBar(),jobs:productJobsHtml(),filters,list}};
  }
- // Shop names are compared without spaces, brackets or punctuation (治一郎（JR博多シティ店） ≈ 治一郎 JR博多シティ店).
- const norm=t=>String(t).toLowerCase().replace(/[\s（）()【】「」『』・･,，、.。:：\-－−]/g,'');
- const placeFor=text=>{const t=norm(text);return t?T().places.filter(p=>norm(p.v[1]).length>=2).find(p=>t.includes(norm(p.v[1]))):null};
+ // Match a 購買地點 to an explore shop: the whole name, or one distinctive word of it (島本, 唐十), compared without
+ // spaces/brackets/punctuation and with 雞/鶏 treated alike; generic words (博多, 本店…) never match on their own.
+ const norm=t=>String(t).toLowerCase().replace(/[雞鷄]/g,'鶏').replace(/[\s（）()【】「」『』・･,，、.。:：\-－−&＆’']/g,'');
+ const GENERIC=new Set(['博多','天神','福岡','本店','博多店','天神店','jr','博多駅','博多站','由布院','湯布院','別府','佐賀','太宰府','中洲','大名','店','分店','cafe','coffee','shop']);
+ const nameWords=n=>String(n).split(/[\s（）()【】「」『』・･,，、]+/).map(norm).filter(x=>x.length>=2&&!GENERIC.has(x));
+ const placeFor=text=>{const t=norm(text);if(!t)return null;const ps=T().places;return ps.find(p=>norm(p.v[1]).length>=2&&t.includes(norm(p.v[1])))||ps.find(p=>nameWords(p.v[1]).some(k=>t.includes(k)))};
  // For 附近 › 購物: place id → unbought list items whose 購買地點 names that shop.
  function buyables(){
   const out={};
