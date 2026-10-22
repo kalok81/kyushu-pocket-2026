@@ -70,20 +70,16 @@ try {
   await page.click('[data-hotel-del]'); await page.waitForSelector('.ui-pop'); await page.click('.ui-pop .locate-button');
   await page.waitForFunction(() => !document.querySelector('.card.hotel'));
  });
- await step('plan: pick the hotel for a night', async () => {
-  await page.goto(base + '/#hotels'); await page.click('[data-hotel-new]'); await page.fill('#hotelForm [name=name]', '上野酒店');
-  await page.fill('#hotelForm [name=checkIn]', '2030-04-01'); await page.fill('#hotelForm [name=checkOut]', '2030-04-02'); await page.click('#hotelForm button[type=submit]'); await page.waitForSelector('.card.hotel');
-  await page.click('[data-hotel-new]'); await page.fill('#hotelForm [name=name]', '新宿酒店'); await page.fill('#hotelForm [name=checkIn]', ''); await page.fill('#hotelForm [name=checkOut]', ''); await page.click('#hotelForm button[type=submit]');
-  await page.waitForFunction(() => document.querySelectorAll('.card.hotel').length === 2);
-  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('[data-day-hotel]');
-  assert.match(await page.locator('[data-day-hotel] option:checked').innerText(), /按入住日期（上野酒店）/);
-  await page.goto(base + '/#plan?day=2'); await page.waitForSelector('[data-day-hotel]');
-  const shinjuku = await page.locator('[data-day-hotel] option', { hasText: '新宿酒店' }).getAttribute('value');
-  await page.selectOption('[data-day-hotel]', shinjuku);
-  await page.waitForFunction(v => document.querySelector('[data-day-hotel]')?.value === v && document.querySelector('.daytab.active')?.textContent.includes('DAY 2'), shinjuku);
+ await step('plan: add a hotel from 住宿 as a stop', async () => {
+  await page.goto(base + '/#hotels'); await page.click('[data-hotel-new]'); await page.fill('#hotelForm [name=name]', '上野酒店'); await page.fill('#hotelForm [name=address]', '東京都台東區上野1-1');
+  await page.click('#hotelForm button[type=submit]'); await page.waitForSelector('.card.hotel');
+  await page.goto(base + '/#plan?day=2'); await page.waitForSelector('[data-plan-pick]'); await page.click('[data-plan-pick]');
+  await page.click('[data-pp-cat=住宿]'); await page.waitForSelector('[data-pp-hotel]');
+  await page.fill('#ppTime', '21:00'); await page.click('[data-pp-hotel]'); await page.waitForSelector('#ppList .badge');
+  await page.keyboard.press('Escape'); await page.waitForSelector('.timeline h3');
+  assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), ['上野酒店']);
+  assert.equal(await page.locator('.timeline .stop a[href="#hotels"]').count(), 1);
   if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/plan-hotel.png' });
-  await page.evaluate(() => { window.print = () => {}; }); await page.click('[data-plan-print]');
-  assert.match(await page.locator('#printArea').innerText(), /DAY 2[^D]*住宿：新宿酒店/);
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');

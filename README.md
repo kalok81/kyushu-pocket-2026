@@ -66,7 +66,7 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 
 住宿及機票可按「📎 文件」上載訂單確認、電子機票或截圖（相片轉為 JPEG，PDF 保持原檔，上限 15 MB，每項最多 6 個），存放於 Firebase Storage `trips/{t}/docs/`，`storage.rules` 只限該旅程旅伴讀取；刪除住宿／航班時一併刪除。
 
-行程頁每天可選「這晚住宿」（預設按住宿的入住／退房日期，選了就以選擇為準，存於 `planDays/{day}.hotel`）。
+行程頁「⌕ 從探索加入地點」亦列出「住宿」頁的酒店（「住宿」分類），可加入為站點（例如入住、回酒店），導航用酒店名稱及地址。
 
 自動測試：`tests/smoke.mjs` 用虛構的測試旅程及假 Firebase（`tests/fake/`）在 Chromium 測試登入、各頁、行程、開支、清單及住宿；GitHub Actions 每次 push 先執行 `scripts/validate.mjs` 及這個測試，通過才發佈網站。本機執行：`cd tests && npm ci && npx playwright install chromium && npm test`。
 
