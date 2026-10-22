@@ -44,8 +44,14 @@ try {
  });
  await step('plan: add a stop, weather, print', async () => {
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('[data-stop-new]');
-  await page.click('[data-stop-new]'); await page.fill('#detail form [name=time]', '10:00'); await page.fill('#detail form [name=title]', '淺草寺'); await page.click('#detail form button[type=submit]');
+  // 新增站點 is the explore place form plus a time: the place is kept in 探索 and the stop points at it
+  await page.click('[data-stop-new]'); await page.fill('#placeForm [name=time]', '10:00'); await page.fill('#placeForm [name=f1]', '淺草寺');
+  await page.fill('#placeForm [name=f0]', '淺草'); await page.locator('#placeForm [name=cats]').nth(1).check(); await page.fill('#placeForm [name=f3]', '東京都台東区浅草2-3-1'); await page.click('#placeForm button[type=submit]');
   await page.waitForSelector('.timeline h3'); assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), ['淺草寺']);
+  await page.waitForSelector('.timeline [data-place]'); await page.click('.timeline [data-place]'); await page.waitForSelector('#detail .detailtitle');
+  assert.equal(await page.locator('#detail .detailtitle').innerText(), '淺草寺'); await page.keyboard.press('Escape');
+  await page.goto(base + '/#explore'); await page.waitForSelector('#results .card.place'); assert.match(await page.locator('#results').innerText(), /淺草寺/);
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
   await page.waitForSelector('.dayintro .weather:not([hidden])'); assert.match(await page.locator('.dayintro .weather').innerText(), /18°C · 降雨機會 80%/);
   await page.evaluate(() => { window.print = () => { window.printed = true; }; }); await page.click('[data-plan-print]');
   assert(await page.evaluate(() => window.printed)); assert.match(await page.locator('#printArea').innerText(), /DAY 1[\s\S]*淺草寺/);
@@ -119,15 +125,16 @@ try {
   await page.fill('[data-tg-form=shop] [name=name]', '御守'); await page.fill('[data-tg-form=shop] [name=place]', '淺草寺 本堂'); await page.click('[data-tg-form=shop] button[type=submit]');
   await page.waitForTimeout(300);
   await page.goto(base + '/#explore'); await page.waitForSelector('#results .buy-here');
-  assert.match(await page.locator('#results .buy-here').innerText(), /要買：人形燒/);
-  await page.click('[data-cat=購物清單]'); assert.equal(await page.locator('#results .card.place').count(), 1);
-  await page.click('#results [data-place]'); await page.waitForSelector('#detail .detail-section >> text=購物清單（1）');
+  assert.match(await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('.buy-here').innerText(), /要買：人形燒/);
+  assert.match(await page.locator('#results .card.place', { hasText: '淺草寺' }).locator('.buy-here').innerText(), /要買：御守/);
+  await page.click('[data-cat=購物清單]'); assert.equal(await page.locator('#results .card.place').count(), 2);
+  await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('[data-place]').click(); await page.waitForSelector('#detail .detail-section >> text=購物清單（1）');
   await page.click('#detail [data-shop-open]'); await page.waitForFunction(() => /人形燒/.test(document.querySelector('#detailBody').textContent)); await page.keyboard.press('Escape');
   await page.click('[data-cat=全部]');
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
   assert.match(await page.locator('.stopcontent', { hasText: '淺草寺' }).first().innerText(), /要買：御守/);
   await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=購物清單]'); await page.waitForSelector('[data-pp-spot]');
-  assert.match(await page.locator('#ppList').innerText(), /仲見世通り[\s\S]*人形燒/);
+  assert.match(await page.locator('#ppList').innerText(), /仲見世通り\s*要買：人形燒/);
   await page.locator('#ppList .pp-row', { hasText: '仲見世通り' }).locator('[data-pp-spot]').click(); await page.keyboard.press('Escape');
   await page.waitForFunction(() => [...document.querySelectorAll('.timeline h3')].some(h => h.textContent === '仲見世通り'));
   assert.match(await page.locator('.stopcontent', { hasText: '仲見世通り' }).first().innerText(), /要買：人形燒/);

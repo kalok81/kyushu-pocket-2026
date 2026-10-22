@@ -293,7 +293,11 @@ window.Together=(()=>{
   const {fs,db}=fb,data={fields,cats,lat,lng,points,mapsUrl,deleted:false};
   if(place?.custom){update('places',place.overlayId,data);toast('已儲存')}
   else if(place){fs.setDoc(tdoc('places',place.id),{...data,base:place.id,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請再試。'));toast('已儲存')}
-  else add('places',{...data,base:null});
+  else{
+   // New place: the id is made here so a plan stop can point at it straight away.
+   const ref=fs.doc(tcol('places'));fs.setDoc(ref,{...data,base:null,by:state.user.uid,byName:me().name,at:Date.now(),createdAt:fs.serverTimestamp()}).catch(()=>toast('未能儲存，請確認你仍在旅伴名單。'));
+   toast(navigator.onLine?'已加入':'已加入，有網絡時會自動同步');return 'u_'+ref.id;
+  }
  }
  function deletePlace(place){
   const {fs,db}=fb;
