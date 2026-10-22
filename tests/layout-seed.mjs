@@ -46,7 +46,7 @@ const shopping = {
  s3: { name: '白い恋人', qty: '12 枚', detail: '', place: '新千歳空港', price: 1188, currency: 'JPY', photo: null, bought: true, boughtBy: 'Bob', boughtAt: 1, ...by, at: 1 },
 };
 const checklist = { c1: { text: '護照（有效期最少 6 個月，請檢查簽證要求及入境登記 Visit Japan Web）', group: 'pre', doneBy: ['u2'], ...by }, c2: { text: '尿袋', group: 'pack', doneBy: [], ...by } };
-const notes = { n1: { text: '別府那天記得帶毛巾。\n第二行：AVeryLongWordWithoutSpacesToCheckWrappingInsideNotesCards_ABCDEFGHIJKLMNOPQRSTUVWXYZ', day: 1, placeId: null, placeName: null, ...by } };
+const notes = { c1: { kind: 'coupon', title: 'Bic Camera ビックカメラ 免稅 10% + 5%（Supercalifragilisticexpialidocious 長名稱測試）', text: '滿 ¥5,000 用 https://www.biccamera.com/bc/c/info/coupon/very/long/link/for/testing', code: 'BICCAMERA2030SPRINGLONGCODE', until: '2030-04-03', used: false, url: 'https://www.biccamera.com', day: null, placeId: null, placeName: null, ...by }, n1: { text: '別府那天記得帶毛巾。\n第二行：AVeryLongWordWithoutSpacesToCheckWrappingInsideNotesCards_ABCDEFGHIJKLMNOPQRSTUVWXYZ', day: 1, placeId: null, placeName: null, ...by } };
 const members = { u1: { name: 'Amy', email: 'amy@kyushu-trip.invalid', at: 1 }, u2: { name: 'Bob Chan Tai Man', email: 'bob@example.com', at: 1 }, u3: { name: '陳大文（Cathy）', email: 'c@example.com', at: 1 } };
 const seed = { places, planDays, hotels, flights, expenses, shopping, checklist, notes, members };
 let out = src.replace("const store={},ls=[];", `const store=${JSON.stringify(seed)},ls=[];`);

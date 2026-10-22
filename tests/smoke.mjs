@@ -178,6 +178,28 @@ try {
   await page.goto(base + '/#explore'); await page.waitForSelector('#results .card.place');
   assert.match(await page.locator('#results .card.place', { hasText: '淺草寺（雷門）' }).locator('.buy-here').innerText(), /雷門煎餅/);
  });
+ await step('notes with photos and links; coupons', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC', 'base64');
+  await page.goto(base + '/#together?tab=notes'); await page.waitForSelector('[data-tg-form=note]');
+  await page.fill('[data-tg-form=note] [name=text]', '集合地點 https://example.com/meet');
+  await page.locator('#notePhotoInput').setInputFiles({ name: 'a.png', mimeType: 'image/png', buffer: png }); await page.waitForSelector('#notePhotoPreview img');
+  await page.click('[data-tg-form=note] button[type=submit]');
+  await page.waitForSelector('.tg-item .note-photo'); const note = page.locator('.tg-item', { hasText: '集合地點' });
+  assert.equal(await note.locator('.tg-text a').getAttribute('href'), 'https://example.com/meet');
+  await page.click('[data-note-kind=coupon]'); await page.waitForSelector('[data-tg-form=note][data-kind=coupon]');
+  await page.fill('[data-tg-form=note] [name=title]', 'Bic Camera 免稅 10%'); await page.fill('[data-tg-form=note] [name=code]', 'BIC2030');
+  await page.fill('[data-tg-form=note] [name=until]', '2099-12-31'); await page.selectOption('[data-tg-form=note] [name=placeId]', { label: '淺草寺（雷門）' });
+  await page.locator('#notePhotoInput').setInputFiles({ name: 'qr.png', mimeType: 'image/png', buffer: png }); await page.waitForSelector('#notePhotoPreview img');
+  await page.click('[data-tg-form=note] button[type=submit]');
+  await page.waitForSelector('.tg-item.coupon'); const c = page.locator('.tg-item.coupon');
+  assert.match(await c.innerText(), /Bic Camera 免稅 10%[\s\S]*BIC2030[\s\S]*還有 \d+ 天/);
+  await page.click('[data-note-filter=coupon]'); assert.equal(await page.locator('.tg-list .tg-item').count(), 1);
+  await c.locator('[data-coupon-used]').click(); await page.waitForSelector('.tg-item.coupon.used');
+  await c.locator('[data-note-photo]').click(); await page.waitForSelector('#detail .note-photo-full'); assert.match(await page.locator('#detail').innerText(), /BIC2030/);
+  await page.keyboard.press('Escape');
+  await page.goto(base + '/#explore'); await page.locator('#results .card.place', { hasText: '淺草寺（雷門）' }).locator('[data-place]').click();
+  await page.waitForSelector('#detail .tg-item.coupon'); await page.keyboard.press('Escape');
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

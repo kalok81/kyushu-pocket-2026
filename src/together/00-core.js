@@ -14,6 +14,8 @@
     error: "",
     user: null,
     tab: "notes",
+    noteKind: "note",
+    noteFilter: "all",
     day: 1,
     notes: [],
     expenses: [],

@@ -72,14 +72,26 @@ service cloud.firestore {
           && (!('saved' in request.resource.data) || (request.resource.data.saved is list && request.resource.data.saved.size() <= 500))
           && text(request.resource.data.name, 40) && request.resource.data.email == request.auth.token.email;
       }
+      // Notes and coupons (kind "coupon": title, code, until, used). Photos are small JPEGs kept in the note (at most 3).
+      function noteValid(d) {
+        return d.keys().hasOnly(['text', 'day', 'placeId', 'placeName', 'url', 'photos', 'kind', 'title', 'code', 'until', 'used', 'usedBy', 'usedAt', 'by', 'byName', 'at', 'createdAt'])
+          && text(d.text, 1000)
+          && (d.get('kind', 'note') == 'coupon' ? text(d.get('title', ''), 80) && d.title.size() > 0
+                && text(d.get('code', ''), 60) && text(d.get('until', ''), 10) && d.get('used', false) is bool
+              : !('kind' in d) && d.text.size() > 0)
+          && (d.day == null || day(d.day))
+          && (d.placeId == null || text(d.placeId, 40))
+          && (d.placeName == null || text(d.placeName, 120))
+          && (!('url' in d) || (text(d.url, 500) && d.url.matches('^https?://.*')))
+          && (!('photos' in d) || (d.photos is list && d.photos.size() <= 3));
+      }
       match /notes/{id} {
         allow read, delete: if tripMember();
-        allow create: if tripMember() && owned()
-          && request.resource.data.keys().hasOnly(['text', 'day', 'placeId', 'placeName', 'by', 'byName', 'at', 'createdAt'])
-          && text(request.resource.data.text, 1000) && request.resource.data.text.size() > 0
-          && (request.resource.data.day == null || day(request.resource.data.day))
-          && (request.resource.data.placeId == null || text(request.resource.data.placeId, 10))
-          && (request.resource.data.placeName == null || text(request.resource.data.placeName, 120));
+        allow create: if tripMember() && owned() && noteValid(request.resource.data);
+        // Only marking a coupon used / unused afterwards.
+        allow update: if tripMember() && resource.data.get('kind', 'note') == 'coupon'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedBy', 'usedAt'])
+          && request.resource.data.used is bool;
       }
       match /expenses/{id} {
         allow read, delete: if tripMember();

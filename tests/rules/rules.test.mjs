@@ -98,3 +98,16 @@ test('storage: booking documents for the trip only, receipts under your own id',
  await assertSucceeds(uploadBytes(ref(st(amy), 'receipts/amy/j1-0.jpg'), jpg, { contentType: 'image/jpeg' }));
  await assertFails(uploadBytes(ref(st(amy), 'receipts/bob/j1-0.jpg'), jpg, { contentType: 'image/jpeg' }));
 });
+
+test('notes with photos and links; coupons can only be marked used afterwards', async () => {
+ const note = { text: '集合', day: 1, placeId: 'u_' + 'x'.repeat(20), placeName: '淺草寺', url: 'https://example.com', photos: ['abc'] };
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/notes/n1`), { ...note, ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/notes/n2`), { ...note, url: 'javascript:alert(1)', ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/notes/n3`), { ...note, photos: ['a', 'b', 'c', 'd'], ...owned('amy', 'Amy') }));
+ await assertFails(updateDoc(doc(db(bob), `${T}/notes/n1`), { text: 'changed' }));
+ const coupon = { kind: 'coupon', title: 'Bic Camera', text: '', code: 'BIC', until: '2099-12-31', used: false, day: null, placeId: null, placeName: null };
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/notes/c1`), { ...coupon, ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/notes/c2`), { ...coupon, title: '', ...owned('amy', 'Amy') }));
+ await assertSucceeds(updateDoc(doc(db(bob), `${T}/notes/c1`), { used: true, usedBy: 'Bob', usedAt: 1 }));
+ await assertFails(updateDoc(doc(db(bob), `${T}/notes/c1`), { code: 'FREE' }));
+});

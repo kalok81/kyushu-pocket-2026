@@ -85,15 +85,29 @@
       str = (k) => String(v.get(k) || "").trim(),
       day = Number(v.get("day")) || null;
     if (f.dataset.tgForm === "note") {
-      const placeId = f.dataset.placeId || null,
-        place = placeId && T().places.find((p) => p.id === placeId);
-      if (!str("text")) return;
+      // From a place's detail (data-place-id) or the 共用 page (optional day and place).
+      const placeId = f.dataset.placeId || str("placeId") || null,
+        place = placeId && T().places.find((p) => p.id === placeId),
+        coupon = f.dataset.kind === "coupon",
+        url = str("url");
+      if (coupon ? !str("title") : !str("text")) return;
+      if (url && !/^https?:\/\//i.test(url)) return toast("連結要以 http:// 或 https:// 開頭。");
       add("notes", {
         text: str("text").slice(0, 1000),
-        day: placeId ? null : day,
+        day: f.dataset.placeId ? null : day,
         placeId,
         placeName: place ? place.v[1] : null,
+        ...(url ? { url: url.slice(0, 500) } : {}),
+        ...(notePhotoDraft.length && !f.dataset.placeId ? { photos: notePhotoDraft.slice(0, NOTE_PHOTO_MAX) } : {}),
+        ...(coupon ? { kind: "coupon", title: str("title").slice(0, 80), code: str("code").slice(0, 60), until: str("until").slice(0, 10), used: false } : {}),
       });
+      if (!f.dataset.placeId) {
+        notePhotoDraft = [];
+        f.reset();
+        const box = $("#notePhotoPreview");
+        if (box) box.innerHTML = "";
+        return;
+      }
     }
     if (f.dataset.tgForm === "check") {
       if (!str("text")) return;
@@ -252,6 +266,32 @@
         chooseTrip();
       } else load().catch(() => {});
     }
+    if (d.noteKind) {
+      state.noteKind = d.noteKind;
+      refresh();
+    }
+    if (d.noteFilter) {
+      state.noteFilter = d.noteFilter;
+      refresh();
+    }
+    if (d.tg === "notePhoto") $("#notePhotoInput")?.click();
+    if (d.notePhotoDel) {
+      notePhotoDraft.splice(Number(d.notePhotoDel), 1);
+      $("#notePhotoPreview").innerHTML = notePhotoPreview();
+    }
+    if (d.notePhoto) {
+      const [id, i] = d.notePhoto.split(":");
+      showNotePhoto(id, Number(i));
+    }
+    if (d.couponUsed) {
+      const c = state.notes.find((n) => n.id === d.couponUsed);
+      if (c) update("notes", c.id, c.used ? { used: false, usedBy: null, usedAt: null } : { used: true, usedBy: me().name, usedAt: Date.now() });
+    }
+    if (d.copyCode)
+      navigator.clipboard?.writeText(d.copyCode).then(
+        () => toast("已複製優惠碼"),
+        () => toast("請長按優惠碼複製"),
+      );
     if (d.tgTab) {
       state.tab = d.tgTab;
       refresh();
@@ -433,3 +473,8 @@
   setInterval(() => {
     if (jobs.some((j) => !["done", "failed"].includes(j.status))) renderDrafts();
   }, 30000);
+  document.addEventListener("change", (e) => {
+    if (e.target.id !== "notePhotoInput" || !e.target.files.length) return;
+    addNotePhotos([...e.target.files]);
+    e.target.value = "";
+  });

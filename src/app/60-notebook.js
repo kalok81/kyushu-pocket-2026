@@ -105,11 +105,14 @@
     (L.notes || []).forEach((n) =>
       out.push({
         id: "no" + n.id,
-        type: "筆記",
-        types: ["筆記"],
-        title: String(n.text || "")
-          .split("\n")[0]
-          .slice(0, 60),
+        type: n.kind === "coupon" ? "優惠券" : "筆記",
+        types: n.kind === "coupon" ? ["筆記", "優惠券"] : ["筆記"],
+        title:
+          n.kind === "coupon"
+            ? `🎟 ${n.title}`
+            : String(n.text || "")
+                .split("\n")[0]
+                .slice(0, 60),
         region: "旅伴筆記",
         summary: n.text || "",
         sub: [n.placeName, n.day ? `D${n.day} ${days[n.day - 1]?.date || ""}` : "整個旅程", n.byName].filter(Boolean).join(" · "),

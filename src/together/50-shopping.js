@@ -48,6 +48,36 @@
   // Shopping list: item photos are stored inline (small JPEG) so they stay readable offline.
   let shopPhoto = null;
   const photoSrc = (b64) => `data:image/jpeg;base64,${b64}`;
+  // Photos picked for the note or coupon being written (shrunk JPEG, base64), shown under the form until it is sent.
+  const NOTE_PHOTO_MAX = 3;
+  let notePhotoDraft = [];
+  const notePhotoPreview = () =>
+    notePhotoDraft.map((p, i) => `<span class="note-photo-thumb"><img src="${photoSrc(p)}" alt=""><button type="button" class="smallbtn" data-note-photo-del="${i}" aria-label="移除相片">×</button></span>`).join("");
+  async function addNotePhotos(files) {
+    for (const file of files.slice(0, NOTE_PHOTO_MAX - notePhotoDraft.length)) {
+      try {
+        let b64 = await shrink(file, 1280, 0.8);
+        if (b64.length > 300000) b64 = await shrink(file, 1000, 0.7);
+        if (b64.length > 300000) {
+          toast("相片太大，請截圖細一點。");
+          continue;
+        }
+        notePhotoDraft.push(b64);
+      } catch (e) {
+        toast(scanError(e));
+      }
+    }
+    if (files.length > NOTE_PHOTO_MAX) toast(`每則最多 ${NOTE_PHOTO_MAX} 張相片。`);
+    const box = $("#notePhotoPreview");
+    if (box) box.innerHTML = notePhotoPreview();
+  }
+  function showNotePhoto(id, i) {
+    const n = state.notes.find((x) => x.id === id),
+      p = n?.photos?.[i];
+    if (!p) return;
+    $("#detailBody").innerHTML = `<div class="eyebrow">${n.kind === "coupon" ? "COUPON" : "NOTE"}</div><h2 class="detailtitle">${esc(n.title || String(n.text || "").split("\n")[0].slice(0, 40))}</h2>${n.code ? `<p class="coupon-code big"><b>${esc(n.code)}</b></p>` : ""}<img class="note-photo-full" src="${photoSrc(p)}" alt="">`;
+    if (!$("#detail").open) $("#detail").showModal();
+  }
   const shopPreview = () =>
     shopPhoto
       ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片"><button type="button" class="smallbtn" data-tg="shopPhotoClear">移除相片</button>`
