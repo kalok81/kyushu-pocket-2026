@@ -102,3 +102,7 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
 .tg-conv{display:block;font-size:12px;font-weight:500;color:var(--muted-foreground);text-align:right}
 .tg-cat{cursor:pointer;background:var(--secondary);color:var(--secondary-foreground);min-height:0;box-shadow:none}.tg-cat.none{background:transparent;border:1px dashed var(--input);color:var(--muted-foreground)}
 .tg-settle-mode{margin:0 0 10px}
+
+/* ---- Weather ---- */
+.dayintro .weather{margin:4px 0 2px;font-size:13px;color:var(--muted-foreground)}
+.weather-tab{display:block;font-size:12px;line-height:1.4;min-height:17px;color:var(--muted-foreground)}.daytab.active .weather-tab{color:#d1ddcb}
