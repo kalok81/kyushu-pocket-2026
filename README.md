@@ -64,6 +64,8 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 - `dist/ui.js`：確認、輸入及提示視窗（SweetAlert2，`dist/vendor/sweetalert2/`）。
 - `functions/`：`processReceipt` 在背景讀取收據（DeepSeek `deepseek-flash`）：網頁把縮細的相片存入 Firestore `receiptJobs`，就算關閉網頁或離線，下次打開時會繼續上載；旅伴在開支頁確認後才加入。收據相片另存一份 2400px 版本於 Firebase Storage（`receipts/{uid}/`，`storage.rules` 只限旅伴讀取），加入後在開支按「🧾 收據」查看；捨棄或刪除開支時一併刪除。上載時以相片檔案指紋（SHA-256）檢查是否重覆上載。同一張收據分開影的相片，AI 會標示為上／下半部，頁面按上載次序配對並提示「合併並重新分析」；也可以在待確認收據剔選「選擇」後按「合併所選」。`lookupPlace` 負責 Google 地圖自動填寫。API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`）。
 
+住宿及機票可按「📎 文件」上載訂單確認、電子機票或截圖（相片轉為 JPEG，PDF 保持原檔，上限 15 MB，每項最多 6 個），存放於 Firebase Storage `trips/{t}/docs/`，`storage.rules` 只限該旅程旅伴讀取；刪除住宿／航班時一併刪除。
+
 費用保護：`lookupPlace`、`manageTrip` 要求 Firebase App Check（reCAPTCHA Enterprise，網站金鑰在 `together.js` 的 `APP_CHECK_KEY`，只限 kalok81.github.io 及 localhost）；每位旅伴每日最多 80 次 AI 分析、300 次 Google 地圖查詢（`usage/{uid}_{日期}`，網頁不可讀寫）；Google Cloud 預算「口袋旅伴 每月預算」HK$80，用量達 50%、90%、100% 時電郵通知。自動測試在 headless 瀏覽器用 App Check debug token（不在 repo 內）。
 
 部署 Cloud Functions（需要 Blaze 方案）：

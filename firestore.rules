@@ -17,14 +17,16 @@ service cloud.firestore {
     function expenseCat(v) { return v in ['food', 'transport', 'shopping', 'stay', 'fun', 'other']; }
     function day(v) { return v is int && v >= 1 && v <= 60; }
     function text(v, max) { return v is string && v.size() <= max; }
+    // Booking documents uploaded to Storage (trips/{t}/docs/), listed on the hotel or flight.
+    function docsValid(d) { return !('docs' in d) || (d.docs is list && d.docs.size() <= 6); }
     function hotelValid(d) {
-      return d.keys().hasOnly(['name', 'address', 'checkIn', 'checkOut', 'mapsUrl', 'lat', 'lng', 'note', 'by', 'byName', 'at', 'createdAt'])
+      return d.keys().hasOnly(['name', 'address', 'checkIn', 'checkOut', 'mapsUrl', 'lat', 'lng', 'note', 'docs', 'by', 'byName', 'at', 'createdAt']) && docsValid(d)
         && text(d.name, 100) && d.name.size() > 0 && text(d.address, 200) && text(d.checkIn, 10) && text(d.checkOut, 10)
         && text(d.mapsUrl, 500) && text(d.note, 500)
         && (d.lat == null || d.lat is number) && (d.lng == null || d.lng is number);
     }
     function flightValid(d) {
-      return d.keys().hasOnly(['flightNo', 'airline', 'from', 'to', 'depart', 'arrive', 'note', 'by', 'byName', 'at', 'createdAt'])
+      return d.keys().hasOnly(['flightNo', 'airline', 'from', 'to', 'depart', 'arrive', 'note', 'docs', 'by', 'byName', 'at', 'createdAt']) && docsValid(d)
         && text(d.flightNo, 20) && d.flightNo.size() > 0 && text(d.airline, 60) && text(d.from, 80) && text(d.to, 80)
         && text(d.depart, 20) && text(d.arrive, 20) && text(d.note, 500);
     }
