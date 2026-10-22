@@ -1,0 +1,431 @@
+  // ---- Event handlers for everything above ----
+  document.addEventListener("submit", (e) => {
+    const tf = e.target.closest("[data-trip-form]");
+    if (tf) {
+      e.preventDefault();
+      const v = Object.fromEntries(new FormData(tf));
+      const create = tf.dataset.tripForm === "create";
+      tripAction(tf, { ...v, action: create ? "create" : "update", trip: tripId }, (r) => {
+        if (create) {
+          lastTrip.set(r.id);
+          location.hash = "home";
+        }
+        location.reload();
+      });
+      return;
+    }
+    const cp = e.target.closest("[data-trip-copy]");
+    if (cp) {
+      e.preventDefault();
+      const v = new FormData(cp),
+        t = state.meta,
+        what = v.getAll("copy").map(String),
+        start = String(v.get("startDate")),
+        end = String(v.get("endDate"));
+      if (end < start) return toast("結束日期要在開始日期之後。");
+      const days = Math.round((Date.parse(end) - Date.parse(start)) / 864e5) + 1;
+      tripAction(
+        cp,
+        {
+          action: "create",
+          name: String(v.get("name")).trim(),
+          destination: t.destination || "",
+          startDate: start,
+          endDate: end,
+          currency: t.currency || "JPY",
+          homeCurrency: t.homeCurrency || "HKD",
+        },
+        async (r) => {
+          cp.querySelector("[data-trip-msg]").textContent = "正在複製資料…";
+          const failed = await copyTrip(r.id, what, days);
+          if (failed)
+            (await UI.confirm("部分資料未能複製", {
+              text: `有 ${failed} 項未能複製，其餘已完成。`,
+              ok: "開啟新旅程",
+              cancel: "留在這裡",
+            })) && switchTrip(r.id);
+          else switchTrip(r.id);
+        },
+      );
+      return;
+    }
+    const inv = e.target.closest("[data-trip-invite]");
+    if (inv) {
+      e.preventDefault();
+      const v = new FormData(inv),
+        who = String(v.get("who") || "").trim(),
+        google = v.get("kind") === "google";
+      tripAction(
+        inv,
+        google
+          ? { action: "addMember", trip: tripId, kind: "google", email: who }
+          : { action: "addMember", trip: tripId, kind: "account", id: who, name: String(v.get("name") || "").trim() },
+        (r) => {
+          if (!state.meta.members.includes(r.email)) state.meta.members.push(r.email);
+          inv.reset();
+          inv.querySelector("[data-trip-msg]").textContent = r.password
+            ? `已建立帳號 ${r.email.split("@")[0]}，密碼：${r.password}（只會顯示一次，請私下交給對方）`
+            : `已加入 ${r.email.endsWith("@" + ACCOUNT_DOMAIN) ? r.email.split("@")[0] : r.email}`;
+          refresh();
+        },
+      );
+      return;
+    }
+    const f = e.target.closest("[data-tg-form]");
+    if (!f) return;
+    if (f.dataset.tgForm === "login") {
+      e.preventDefault();
+      const v = new FormData(f);
+      loginWithAccount(String(v.get("id")).trim(), String(v.get("password")));
+      return;
+    }
+    if (state.status !== "ready") return;
+    e.preventDefault();
+    const v = new FormData(f),
+      str = (k) => String(v.get(k) || "").trim(),
+      day = Number(v.get("day")) || null;
+    if (f.dataset.tgForm === "note") {
+      const placeId = f.dataset.placeId || null,
+        place = placeId && T().places.find((p) => p.id === placeId);
+      if (!str("text")) return;
+      add("notes", {
+        text: str("text").slice(0, 1000),
+        day: placeId ? null : day,
+        placeId,
+        placeName: place ? place.v[1] : null,
+      });
+    }
+    if (f.dataset.tgForm === "check") {
+      if (!str("text")) return;
+      add("checklist", {
+        text: str("text").slice(0, 60),
+        group: CHECK_GROUPS[str("group")] ? str("group") : "other",
+        doneBy: [],
+      });
+      f.elements.text.value = "";
+      f.elements.text.focus();
+      return;
+    }
+    if (f.dataset.tgForm === "expense") {
+      const prices = v.getAll("itemAmount"),
+        items = v
+          .getAll("itemName")
+          .map((n, i) => ({
+            name: String(n).trim().slice(0, 40),
+            amount: prices[i] === "" ? null : Math.round(Number(prices[i]) * 100) / 100,
+          }))
+          .filter((i) => i.name && (i.amount == null || (i.amount >= 0 && i.amount <= 1e7)))
+          .slice(0, 30);
+      const sum = items.reduce((t, i) => t + (i.amount || 0), 0),
+        amount = v.get("amount") === "" ? sum : Number(v.get("amount")),
+        split = v.getAll("split").map(String);
+      if (!str("title") || !(amount > 0) || amount > 1e7) return toast("請輸入項目和金額（或物品金額）。");
+      if (!split.length) return toast("請最少選一位分帳旅伴。");
+      const exp = {
+          title: str("title").slice(0, 80),
+          amount: Math.round(amount * 100) / 100,
+          currency: pickCur(String(v.get("currency"))),
+          paidBy: str("paidBy"),
+          split,
+          day: day || today(),
+          items,
+          ...(CATS[str("category")] ? { category: str("category") } : {}),
+        },
+        dup = duplicateOf(exp);
+      const go = () => {
+        add("expenses", exp);
+        f.reset();
+        $("#tgItemRows").innerHTML = itemRow();
+      };
+      if (dup) UI.confirm("似乎已經記錄過", { text: dupText(dup), ok: "仍然加入" }).then((ok) => ok && go());
+      else go();
+      return;
+    }
+    if (f.dataset.tgForm === "shop") {
+      const price = v.get("price") === "" ? null : Number(v.get("price"));
+      if (!str("name")) return;
+      if (price != null && !(price >= 0 && price <= 1e7)) return toast("價錢不正確。");
+      const item = {
+        name: str("name").slice(0, 80),
+        qty: str("qty").slice(0, 30),
+        detail: str("detail").slice(0, 500),
+        place: str("place").slice(0, 200),
+        price: price == null ? null : Math.round(price * 100) / 100,
+        currency: pickCur(String(v.get("currency"))),
+        photo: shopPhoto,
+      };
+      if (state.shopEdit) {
+        update("shopping", state.shopEdit, { ...item, ai: false });
+        toast("已儲存");
+      } else add("shopping", { ...item, bought: false, boughtBy: null, boughtAt: null });
+      state.shopEdit = null;
+      shopPhoto = null;
+      $("#shopPage").dataset.sig = "";
+      refresh();
+      return;
+    }
+    f.reset();
+  });
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("button");
+    if (!el) return;
+    const d = el.dataset;
+    if (d.tg === "login") login();
+    if (d.tg === "logout" && fb) logout();
+    if (d.tg === "scan") $("#tgReceipt")?.click();
+    if (d.draftDrop) {
+      const id = d.draftDrop;
+      UI.confirm("捨棄這張收據？", { danger: true, ok: "捨棄" }).then((ok) => {
+        if (!ok) return;
+        const j = jobs.find((x) => x.id === id);
+        fb.fs.deleteDoc(jobRef(id)).then(
+          () => dropPhotos(j?.photos),
+          () => toast("未能刪除，請再試。"),
+        );
+        delete localEdits[id];
+      });
+    }
+    if (d.tg === "mergeDrafts") mergeDrafts(d.keys.split(","));
+    if (d.draftRetry)
+      fb.fs
+        .updateDoc(jobRef(d.draftRetry), { status: "pending", retries: fb.fs.increment(1) })
+        .catch(() => toast("未能重試，請再試。"));
+    if (d.draftAdd) {
+      const x = drafts().find((i) => i.key === d.draftAdd);
+      if (x)
+        addDraft(x, true).then((ok) => {
+          if (ok) renderDrafts();
+        });
+    }
+    if (d.tg === "draftsAddAll")
+      (async () => {
+        const all = drafts(),
+          ok = all.filter((x) => x.status === "done" && !draftDup(x, all));
+        let n = 0;
+        for (const x of ok)
+          if (await addDraft(x, false)) n++;
+          else break;
+        renderDrafts();
+        const left = drafts().filter((x) => x.status === "done").length;
+        if (n) toast(`已加入 ${n} 筆${left ? `，尚有 ${left} 筆待確認` : ""}`);
+      })();
+    if (d.receipts) showReceipts(d.receipts);
+    if (d.fxSet) setRate(d.fxSet);
+    if (d.tg === "checkSuggest") addSuggestions();
+    if (d.docs) {
+      const [k, i] = d.docs.split(":");
+      openDocs(k, i);
+    }
+    if (d.docAdd) $("#docInput")?.click();
+    if (d.docDel) {
+      const [k, i, ...rest] = d.docDel.split(":");
+      deleteDocFile(k, i, rest.join(":"));
+    }
+    if (d.settle) {
+      state.settleMode = d.settle;
+      refresh();
+    }
+    if (d.expCat) {
+      const x = state.expenses.find((i) => i.id === d.expCat);
+      if (x)
+        UI.choose("開支分類", CATS, x.category || "food").then((v) => {
+          if (v && CATS[v] && v !== x.category) update("expenses", x.id, { category: v });
+        });
+    }
+    if (d.tg === "itemAdd") {
+      $("#tgItemRows").insertAdjacentHTML("beforeend", itemRow());
+      $("#tgItemRows").lastElementChild.querySelector("input").focus();
+    }
+    if (d.tg === "itemDel") {
+      const rows = $("#tgItemRows");
+      el.closest(".tg-line-row").remove();
+      if (!rows.children.length) rows.innerHTML = itemRow();
+    }
+    if (d.tg === "retry") {
+      if (fb && state.user) {
+        state.status = "checking";
+        refresh();
+        chooseTrip();
+      } else load().catch(() => {});
+    }
+    if (d.tgTab) {
+      state.tab = d.tgTab;
+      refresh();
+    }
+    if (d.tripOpen) switchTrip(d.tripOpen);
+    if (d.tripRemove) {
+      const em = d.tripRemove;
+      UI.confirm(`把 ${em} 移出這個旅程？`, { danger: true, ok: "移出" }).then(
+        (ok) =>
+          ok &&
+          callable("manageTrip", 45000)
+            .then((f) => f({ action: "removeMember", trip: tripId, email: em }))
+            .then(
+              () => {
+                state.meta.members = state.meta.members.filter((x) => x !== em);
+                refresh();
+                toast("已移除");
+              },
+              (e) => toast(e?.message?.replace(/\s*\[\d+\]$/, "") || "未能移除。"),
+            ),
+      );
+    }
+    if (d.tgDel) {
+      const [name, id] = d.tgDel.split(":");
+      remove(name, id);
+    }
+    if (d.tg === "shopPhoto") $("#shopPhotoInput")?.click();
+    if (d.tg === "shopAi") $("#shopAiInput")?.click();
+    if (d.tg === "shopAiCam") $("#shopAiCam")?.click();
+    if (d.tg === "shopPhotoClear") {
+      shopPhoto = null;
+      $("#shopPreview").innerHTML = "";
+    }
+    if (d.tg === "shopCancel") {
+      state.shopEdit = null;
+      shopPhoto = null;
+      refresh();
+    }
+    if (d.shopFilter) {
+      state.shopFilter = d.shopFilter;
+      refresh();
+    }
+    if (d.shopView) {
+      state.shopView = d.shopView;
+      const sp = $("#shopPage");
+      if (sp) sp.dataset.sig = "";
+      refresh();
+    }
+    if (d.shopOpen) openShopItem(d.shopOpen);
+    if (d.shopEdit) {
+      if ($("#detail").open) $("#detail").close();
+      const x = state.shopping.find((i) => i.id === d.shopEdit);
+      if (x) {
+        state.shopEdit = x.id;
+        shopPhoto = x.photo || null;
+        refresh();
+        $("#shopPage")?.scrollIntoView({ behavior: "smooth" });
+      }
+    }
+    if (d.shopToggle) {
+      const x = state.shopping.find((i) => i.id === d.shopToggle);
+      if (x)
+        update(
+          "shopping",
+          x.id,
+          x.bought
+            ? { bought: false, boughtBy: null, boughtAt: null }
+            : { bought: true, boughtBy: me().name, boughtAt: Date.now() },
+        );
+    }
+    if (
+      (d.shopToggle || d.tgDel?.startsWith("shopping:")) &&
+      $("#detail").open &&
+      $("#detailBody .shop-detail-photo, #detailBody .shop-item")
+    )
+      $("#detail").close();
+  });
+  document.addEventListener("change", (e) => {
+    if (e.target.id === "tgReceipt" && e.target.files.length) {
+      if (state.status === "ready") queueReceipts([...e.target.files]);
+      e.target.value = "";
+    }
+    if (e.target.id === "shopPhotoInput" && e.target.files[0]) {
+      pickShopPhoto(e.target.files[0]);
+      e.target.value = "";
+    }
+    if ((e.target.id === "shopAiInput" || e.target.id === "shopAiCam") && e.target.files.length) {
+      if (state.status === "ready") queueProducts([...e.target.files]);
+      e.target.value = "";
+    }
+  });
+  document.addEventListener("change", (e) => {
+    const id = e.target.dataset?.check;
+    if (!id) return;
+    const x = state.checklist.find((i) => i.id === id),
+      me = state.user.uid;
+    if (!x) return;
+    const fs = fb.fs,
+      done = new Set(x.doneBy || []);
+    e.target.checked ? done.add(me) : done.delete(me);
+    update("checklist", id, { doneBy: fs.arrayUnion ? (e.target.checked ? fs.arrayUnion(me) : fs.arrayRemove(me)) : [...done] });
+  });
+  document.addEventListener("change", (e) => {
+    if (e.target.id !== "docInput" || !e.target.files.length) return;
+    const [k, i] = e.target.dataset.target.split(":");
+    uploadDocs(k, i, [...e.target.files]);
+    e.target.value = "";
+  });
+  document.addEventListener(
+    "toggle",
+    (e) => {
+      if (e.target.classList?.contains("tg-fx")) state.fxOpen = e.target.open;
+    },
+    true,
+  );
+  document.addEventListener("click", (e) => {
+    const img = e.target.closest("[data-shop-zoom]");
+    if (img) img.classList.toggle("zoom");
+  });
+  const placeField = (t) => t.name === "place" && t.closest('[data-tg-form="shop"]');
+  document.addEventListener("change", (e) => {
+    if (placeField(e.target)) placeFromMaps(e.target);
+  });
+  document.addEventListener("paste", (e) => {
+    if (placeField(e.target)) setTimeout(() => placeFromMaps(e.target));
+  });
+  document.addEventListener("change", (e) => {
+    if (e.target.dataset?.tripSwitch !== undefined) switchTrip(e.target.value);
+  });
+  document.addEventListener("input", (e) => {
+    if (e.target.id === "shopSearch") {
+      state.shopSearch = e.target.value;
+      const sp = $("#shopPage");
+      if (sp) paint(sp, shopPage());
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.dataset?.df !== undefined) e.preventDefault();
+  });
+  // Draft edits are kept locally while typing and saved to the job when a field is left, so they survive reloads.
+  document.addEventListener("change", (e) => {
+    const k = e.target.dataset?.draftPick;
+    if (!k) return;
+    e.target.checked ? picked.add(k) : picked.delete(k);
+    renderDrafts();
+  });
+  document.addEventListener("input", (e) => {
+    const k = e.target.dataset?.df,
+      card = e.target.closest?.("[data-draft]");
+    if (!k || !card) return;
+    (localEdits[card.dataset.draft] ??= {})[k] = e.target.value;
+  });
+  document.addEventListener("change", (e) => {
+    const k = e.target.dataset?.df,
+      card = e.target.closest?.("[data-draft]");
+    if (!k || !card || !fb) return;
+    const v =
+      k === "day"
+        ? Number(e.target.value)
+        : k === "amount"
+          ? e.target.value === ""
+            ? ""
+            : Number(e.target.value)
+          : e.target.value;
+    fb.fs.updateDoc(jobRef(card.dataset.draft), { ["edit." + k]: v }).catch(() => {});
+    if (k !== "title") renderDrafts();
+  });
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("#tripsBtn")) location.hash = "trips";
+  });
+  addEventListener("online", () => {
+    refresh();
+    renderDrafts();
+  });
+  addEventListener("offline", () => {
+    refresh();
+    renderDrafts();
+  });
+  setInterval(() => {
+    if (jobs.some((j) => !["done", "failed"].includes(j.status))) renderDrafts();
+  }, 30000);

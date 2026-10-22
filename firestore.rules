@@ -66,8 +66,6 @@ service cloud.firestore {
         allow create: if tripMember() && owned() && flightValid(request.resource.data);
         allow update: if tripMember() && flightValid(request.resource.data) && request.resource.data.by == resource.data.by;
       }
-      match /trip/{id} { allow read: if tripMember(); allow write: if false; }
-
       match /members/{uid} {
         allow read: if tripMember();
         allow write: if tripMember() && request.auth.uid == uid
@@ -169,14 +167,6 @@ service cloud.firestore {
           && request.resource.data.stops is list && request.resource.data.stops.size() <= 40
           && (!('label' in request.resource.data) || text(request.resource.data.label, 40))
           && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
-      }
-      match /stops/{id} {
-        allow read, delete: if tripMember();
-        allow create: if tripMember() && owned()
-          && request.resource.data.keys().hasOnly(['day', 'time', 'title', 'detail', 'by', 'byName', 'at', 'createdAt'])
-          && day(request.resource.data.day) && text(request.resource.data.time, 20)
-          && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
-          && text(request.resource.data.detail, 500);
       }
     }
   }

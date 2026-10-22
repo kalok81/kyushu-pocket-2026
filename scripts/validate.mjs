@@ -15,6 +15,7 @@ for (const f of ['auth','firestore','app-check']) {
  const js = readFileSync(`dist/vendor/firebase/firebase-${f}.js`, 'utf8');
  assert(js.includes('from"./firebase-app.js"') && !js.includes('gstatic.com/firebasejs'), 'Firebase modules must import the local copy');
 }
+execFileSync(process.execPath, ['scripts/build.mjs', '--check'], { stdio: 'inherit' });
 execFileSync(process.execPath, ['scripts/test-nearby.mjs'], { stdio: 'inherit' });
 execFileSync(process.execPath, ['scripts/test-split.mjs'], { stdio: 'inherit' });
 console.log('Website shell, privacy and syntax checks passed.');

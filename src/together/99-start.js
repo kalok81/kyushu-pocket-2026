@@ -1,0 +1,25 @@
+  // ---- Start ----
+  load().catch(() => {});
+  return Object.freeze({
+    render,
+    renderShopping,
+    renderTrips,
+    refresh,
+    shoppingSpots,
+    shoppingPlaces,
+    shoppingFor,
+    shoppingAt,
+    lists: tripLists,
+    openShopItem,
+    saveItem,
+    removeItem,
+    setDayLabel,
+    lookupPlace,
+    suggestRoutes,
+    aiRoutes,
+    savePlace,
+    deletePlace,
+    savePlanDay,
+    resetPlanDay,
+    saveFavorites,
+  });
