@@ -98,7 +98,7 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
 .tg-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tg-bar div{height:10px;border-radius:999px;background:var(--muted-bg);overflow:hidden}
 .tg-bar i{display:block;height:100%;border-radius:999px;background:var(--primary)}.tg-bar b{font-variant-numeric:tabular-nums;font-size:12px}
 .tg-fx{margin-top:16px;border-top:1px solid var(--border);padding-top:12px}.tg-fx ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
-.tg-fx li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}.tg-fx li .note{margin:0;flex:1;font-size:12px}
+.tg-fx li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}.tg-fx li .note{margin:0;flex:1 1 140px;font-size:12px}
 .tg-conv{display:block;font-size:12px;font-weight:500;color:var(--muted-foreground);text-align:right}
 .tg-cat{cursor:pointer;background:var(--secondary);color:var(--secondary-foreground);min-height:0;box-shadow:none}.tg-cat.none{background:transparent;border:1px dashed var(--input);color:var(--muted-foreground)}
 .tg-settle-mode{margin:0 0 10px}
@@ -196,3 +196,46 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
 .route-option.ai{border-style:dashed}
 .route-ai-head{padding:10px 12px;border-radius:var(--radius);background:var(--muted-bg)}.route-ai-head p{margin:4px 0 0;font-size:13px}
 .route-ai-wait{padding:12px;border:1px dashed var(--input);border-radius:var(--radius)}.route-ai-wait .note{margin:4px 0 0}
+
+/* ---- Long text and narrow screens ----
+   Long names (trip titles, product names, URLs) wrap instead of widening cards or the page. */
+body{overflow-wrap:anywhere}
+.tg-list,.twocol,.homegrid{grid-template-columns:minmax(0,1fr)}
+@media(min-width:761px){.twocol{grid-template-columns:repeat(2,minmax(0,1fr))}.homegrid{grid-template-columns:minmax(0,1.25fr) minmax(0,1fr)}}
+.dayrow{grid-template-columns:42px minmax(0,1fr) auto}
+.hero>div{min-width:0}
+.tg-meta .badge{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-row>div{min-width:0}.pp-row .badge{flex:none;white-space:nowrap}
+.badge,.chip,.action,.smallbtn,.locate-button,.topactions button{overflow-wrap:normal}
+/* Top bar: the trip name shrinks with an ellipsis so the three buttons keep their size */
+.brand{min-width:0;flex:1 1 auto}.brand>span:last-child{min-width:0}
+.brand small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topactions{flex:none}.topactions button{white-space:nowrap}
+@media(max-width:760px){.hero h1{white-space:normal}}
+@media(max-width:380px){
+ .topbar{padding-left:12px;padding-right:12px;gap:8px}
+ .brand{gap:7px;font-size:14px}.brandmark{width:32px;height:32px;font-size:18px}
+ .topactions{gap:4px}.topactions button{padding:6px 8px;font-size:12px;min-height:36px}
+}
+/* Long trip titles on the home banner, day titles and day tabs */
+.hero h1{overflow-wrap:normal;word-break:normal}
+@media(max-width:760px){.hero{grid-template-columns:minmax(0,1fr) 40px}.hero h1{font-size:clamp(24px,7.5vw,34px)}.hero-art{margin-left:-150px}}
+.daytab{max-width:150px}
+.daytab>:last-child,.daytab{overflow-wrap:anywhere}
+.daytab .day-region{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dayintro>div:first-child{min-width:0}
+.dayintro .links{flex:none}
+.dayintro .action,.nearby-entry .locate-button{white-space:nowrap}
+@media(max-width:560px){.dayintro{flex-direction:column;align-items:stretch}.dayintro .links{justify-content:flex-start}}
+.daytab .day-region{font-style:normal}
+/* Shopping: full-width search on phones, submit button as wide as the other forms' */
+@media(max-width:760px){.shop-tools{align-items:stretch}.shop-tools .chips{align-self:flex-start}}
+.tg-form .links>.locate-button[type=submit]{flex:1 1 auto}
+/* Flights: airport text sized to fit, wrapping footer */
+.flightpath{grid-template-columns:minmax(0,1fr) 40px minmax(0,1fr)}
+.flightpath strong{font-size:clamp(17px,5.2vw,31px);overflow-wrap:normal;word-break:normal}
+.ticket-top{gap:12px;align-items:baseline}.ticket-top b{white-space:nowrap}.ticket-top span{text-align:right}
+.ticket-bottom{flex-wrap:wrap;align-items:center}
+.ticket-bottom>span:first-child{flex:1 1 160px}
+.ticket-bottom>span:last-child{display:flex;flex-wrap:wrap;gap:6px;margin-left:auto}
+.shop-tile-name{max-height:calc(1.35em * 2)}
