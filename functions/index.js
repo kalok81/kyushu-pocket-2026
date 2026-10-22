@@ -210,7 +210,12 @@ async function placesApi(path, fields, body) {
 // Local script where travellers need it to match signs and show drivers (Japan, Korea); Chinese elsewhere.
 const langFor = country => ({ JP: 'ja', KR: 'ko' })[country] || 'zh-TW';
 const search = async (kind, body, country) => (await placesApi(`places:${kind}`, SEARCH_FIELDS, { languageCode: langFor(country), maxResultCount: 1, ...(country && kind === 'searchText' ? { regionCode: country } : {}), ...body })).places?.[0];
-const district = p => { const c = p?.addressComponents || [], pick = t => c.find(x => x.types?.includes(t))?.longText; return pick('sublocality_level_1') || pick('sublocality') || pick('locality') || pick('administrative_area_level_2') || ''; };
+// The neighbourhood name: in Japan the town (浅草) is sublocality_level_2 and the deeper levels are block numbers (２丁目, ３).
+const district = p => {
+ const c = p?.addressComponents || [], named = t => t && !/^[\d０-９\-−－]+(丁目|番地?|号)?$/.test(t) && !/丁目$/.test(t);
+ const pick = t => c.find(x => x.types?.includes(t) && named(x.longText))?.longText;
+ return pick('sublocality_level_1') || pick('sublocality_level_2') || pick('neighborhood') || pick('locality') || pick('administrative_area_level_2') || '';
+};
 
 function category(types = []) {
  const t = types.join(' ');
