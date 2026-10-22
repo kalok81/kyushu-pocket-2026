@@ -86,6 +86,12 @@ test('checklist ticks, exchange rates, day plans', async () => {
  await assertFails(setDoc(doc(db(eve), `${T}/planDays/4`), { stops: [], by: 'eve', byName: 'Eve', at: 1 }));
 });
 
+test('product links can be sent as jobs', async () => {
+ const job = { kind: 'product', file: 'shop.example.jp', status: 'pending', ...owned('amy', 'Amy') };
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/l1`), { ...job, url: 'https://shop.example.jp/item' }));
+ await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/l2`), { ...job, url: 'file:///etc/passwd' }));
+ await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/l3`), { ...job, kind: 'receipt', url: 'https://shop.example.jp' }));
+});
 test('receipt jobs are private to whoever sent them', async () => {
  await assertSucceeds(getDoc(doc(db(amy), `${T}/receiptJobs/j1`)));
  await assertFails(getDoc(doc(db(bob), `${T}/receiptJobs/j1`)));

@@ -210,6 +210,17 @@ try {
   assert.deepEqual(await page.locator('.shop-item h3').allInnerTexts(), ['化妝水']);
   await page.click('[data-shop-cat=all]');
  });
+ await step('shopping: product link and pasted picture go to the AI', async () => {
+  await page.goto(base + '/#shopping'); await page.waitForSelector('[data-tg-form=shopLink]');
+  await page.fill('[data-tg-form=shopLink] [name=url]', 'https://shop.example.jp/item/123'); await page.click('[data-tg-form=shopLink] button[type=submit]');
+  await page.waitForFunction(() => /shop\.example\.jp/.test(document.querySelector('[data-tg-live=jobs]')?.textContent || ''));
+  await page.evaluate(async () => {
+   const c = Object.assign(document.createElement('canvas'), { width: 8, height: 8 }), blob = await new Promise((r) => c.toBlob(r, 'image/png'));
+   const dt = new DataTransfer(); dt.items.add(new File([blob], 'screenshot.png', { type: 'image/png' }));
+   document.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }));
+  });
+  await page.waitForFunction(() => /screenshot\.png/.test(document.querySelector('[data-tg-live=jobs]')?.textContent || ''));
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

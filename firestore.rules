@@ -31,8 +31,9 @@ service cloud.firestore {
         && text(d.depart, 20) && text(d.arrive, 20) && text(d.note, 500);
     }
     function shopValid(d) {
-      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'placeId', 'cat', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'by', 'byName', 'at', 'createdAt'])
+      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'placeId', 'cat', 'url', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'by', 'byName', 'at', 'createdAt'])
         && (!('ai' in d) || d.ai is bool) && (!('placeId' in d) || text(d.placeId, 40))
+        && (!('url' in d) || (text(d.url, 500) && d.url.matches('^https?://.*')))
         && (!('cat' in d) || d.cat in ['drug', 'food', 'fashion', 'home', 'stationery', 'toys', 'electronics', 'other'])
         && (!('lat' in d) || d.lat == null || d.lat is number) && (!('lng' in d) || d.lng == null || d.lng is number)
         && (!('geoFor' in d) || text(d.geoFor, 200))
@@ -159,13 +160,16 @@ service cloud.firestore {
       match /receiptJobs/{id} {
         allow read, delete: if tripMember() && resource.data.by == request.auth.uid;
         allow create: if tripMember() && owned()
-          && request.resource.data.keys().hasOnly(['image', 'images', 'hashes', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['image', 'images', 'url', 'hashes', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
           && (!('hashes' in request.resource.data) || (request.resource.data.hashes is list && request.resource.data.hashes.size() <= 4))
           && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
           && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill'])
           && (('images' in request.resource.data && request.resource.data.images is list
                 && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
-              || text(request.resource.data.image, 900000));
+              || text(request.resource.data.get('image', null), 900000)
+              // a product page or picture link read by the function
+              || (request.resource.data.get('kind', '') == 'product' && text(request.resource.data.get('url', null), 500)
+                  && request.resource.data.url.matches('^https?://.+')));
         allow update: if tripMember() && resource.data.by == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries', 'photos'])
           && (request.resource.data.status == resource.data.status || request.resource.data.status == 'pending');

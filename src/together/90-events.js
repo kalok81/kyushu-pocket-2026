@@ -155,6 +155,11 @@
       else go();
       return;
     }
+    if (f.dataset.tgForm === "shopLink") {
+      queueProductLink(str("url"));
+      f.reset();
+      return;
+    }
     if (f.dataset.tgForm === "shop") {
       const price = v.get("price") === "" ? null : Number(v.get("price"));
       if (!str("name")) return;
@@ -482,4 +487,15 @@
     if (e.target.id !== "notePhotoInput" || !e.target.files.length) return;
     addNotePhotos([...e.target.files]);
     e.target.value = "";
+  });
+  // A picture pasted anywhere on the shopping list, the notes or the expenses page goes where photos go there.
+  document.addEventListener("paste", (e) => {
+    const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
+    if (!files.length || state.status !== "ready") return;
+    const view = location.hash.slice(1).split("?")[0];
+    if (view === "shopping") queueProducts(files);
+    else if (view === "together" && state.tab === "notes") addNotePhotos(files);
+    else if (view === "together" && state.tab === "expenses") queueReceipts(files);
+    else return;
+    e.preventDefault();
   });

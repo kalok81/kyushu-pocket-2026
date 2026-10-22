@@ -5,6 +5,9 @@ import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { cloudEvent } from '@google-cloud/functions-framework';
 import { defineSecret } from 'firebase-functions/params';
 import { randomInt } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
+import sharp from 'sharp';
 
 initializeApp();
 const DEEPSEEK_API_KEY = defineSecret('DEEPSEEK_API_KEY');
@@ -110,6 +113,84 @@ function cleanProduct(r, t) {
  return { name: text(r.name, 80), qty: text(r.spec, 30), detail: text(r.detail, 500), cat: cats.includes(r.category) ? r.category : 'other', place: text(r.place, 200), price, currency: r.currency === home ? home : cur, confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
 }
 
+// ---- Products from a web link: a product page (title, description, price, main picture) or a picture itself ----
+// Only public http(s) addresses on ports 80/443 are fetched (no private or local networks), at most 4 redirects,
+// 3 MB, 15 s; pictures are shrunk to an 800px JPEG for the AI and the shopping list.
+const privateIp = ip => {
+ if (isIP(ip) === 6) {
+  const l = ip.toLowerCase();
+  if (l.startsWith('::ffff:')) return privateIp(l.slice(7));
+  return l === '::' || l === '::1' || /^f[cd]/.test(l) || l.startsWith('fe80');
+ }
+ const [a, b] = ip.split('.').map(Number);
+ return a === 0 || a === 10 || a === 127 || a >= 224 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+};
+async function safeFetch(link, maxBytes = 3e6) {
+ let url = new URL(link);
+ for (let hop = 0; hop < 5; hop++) {
+  if (!['http:', 'https:'].includes(url.protocol) || (url.port && !['80', '443'].includes(url.port))) throw new HttpsError('invalid-argument', '只支援一般 http／https 網址。');
+  const addrs = await lookup(url.hostname, { all: true }).catch(() => []);
+  if (!addrs.length || addrs.some(a => privateIp(a.address))) throw new HttpsError('invalid-argument', '未能開啟這個網址。');
+  const res = await fetch(url, {
+   redirect: 'manual',
+   headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PocketTravel/1.0)', Accept: 'text/html,image/*;q=0.9,*/*;q=0.5', 'Accept-Language': 'ja,zh-TW;q=0.9,en;q=0.7' },
+   signal: AbortSignal.timeout(15_000),
+  });
+  const next = res.status >= 300 && res.status < 400 && res.headers.get('location');
+  if (next) { url = new URL(next, url); continue; }
+  if (!res.ok) throw new HttpsError('not-found', `網頁未能開啟（${res.status}）。`);
+  const chunks = []; let size = 0;
+  for await (const c of res.body) { size += c.length; if (size > maxBytes) throw new HttpsError('invalid-argument', '網頁或圖片太大。'); chunks.push(c); }
+  return { url, type: res.headers.get('content-type') || '', buf: Buffer.concat(chunks) };
+ }
+ throw new HttpsError('invalid-argument', '網址轉址太多次。');
+}
+const smallJpeg = async buf => (await sharp(buf, { failOn: 'none' }).rotate().resize(800, 800, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 75 }).toBuffer()).toString('base64');
+const decodeEntities = s => s.replace(/&(#x?[0-9a-f]+|amp|lt|gt|quot|apos|#39);/gi, (m, e) => ({ amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", '#39': "'" })[e.toLowerCase()] ?? String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)));
+// The page's product facts: Open Graph / product meta tags, JSON-LD Product, <title>, and the start of its text.
+function pageFacts(html, base) {
+ const meta = k => { const m = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${k}["'][^>]*>`, 'i'))?.[0]; return m ? decodeEntities(m.match(/content=["']([^"']*)/i)?.[1] || '') : ''; };
+ let product = null;
+ for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+  try {
+   const walk = v => (Array.isArray(v) ? v.flatMap(walk) : v && typeof v === 'object' ? [v, ...walk(v['@graph'] || [])] : []);
+   product ??= walk(JSON.parse(m[1])).find(x => [].concat(x['@type']).includes('Product'));
+  } catch {}
+ }
+ const offer = [].concat(product?.offers || [])[0] || {};
+ const image = [].concat(product?.image || [])[0];
+ const picture = meta('og:image') || meta('twitter:image') || (typeof image === 'string' ? image : image?.url) || '';
+ const text = html.replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+ return {
+  site: meta('og:site_name') || base.hostname,
+  title: (product?.name || meta('og:title') || decodeEntities(html.match(/<title[^>]*>([^<]*)/i)?.[1] || '')).trim().slice(0, 200),
+  description: String(product?.description || meta('og:description') || meta('description')).trim().slice(0, 600),
+  brand: String(product?.brand?.name || product?.brand || '').slice(0, 80),
+  price: String(offer.price || meta('product:price:amount') || '').slice(0, 30),
+  currency: String(offer.priceCurrency || meta('product:price:currency') || '').slice(0, 10),
+  picture: picture ? new URL(decodeEntities(picture), base).href : '',
+  text: decodeEntities(text).trim().slice(0, 3000),
+ };
+}
+const decodeHtml = ({ buf, type }) => {
+ const cs = (type.match(/charset=([\w-]+)/i)?.[1] || buf.subarray(0, 4000).toString('latin1').match(/<meta[^>]+charset=["']?([\w-]+)/i)?.[1] || 'utf-8').toLowerCase();
+ try { return new TextDecoder(cs).decode(buf); } catch { return buf.toString('utf8'); }
+};
+// Returns { image (base64 JPEG or null), facts (page facts or null) } for a product page or picture link.
+async function readProductLink(link) {
+ const got = await safeFetch(link);
+ if (got.type.startsWith('image/')) return { image: await smallJpeg(got.buf), facts: null, link: got.url.href };
+ if (!/html|xml/.test(got.type)) throw new HttpsError('invalid-argument', '這個連結不是網頁或圖片。');
+ const facts = pageFacts(decodeHtml(got), got.url);
+ let image = null;
+ if (facts.picture) image = await safeFetch(facts.picture).then(p => (p.type.startsWith('image/') ? smallJpeg(p.buf) : null)).catch(() => null);
+ return { image, facts, link: got.url.href };
+}
+const pagePrompt = (t, f) => `${productPrompt(t)}
+The traveller pasted a link to this web page instead of a photo; the picture (if any) is the page's main image.
+Use the page for the name, spec and detail; the price only if it is in ${tripInfo(t).cur} or ${tripInfo(t).home}; place: the shop or brand selling it if clear.
+Page: ${JSON.stringify({ site: f.site, title: f.title, brand: f.brand, description: f.description, price: f.price, currency: f.currency, text: f.text.slice(0, 2000) })}`;
+
 const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.test(image) && image.length * 0.75 <= MAX_IMAGE_BYTES;
 
 // Background receipts and product photos (kind: 'product'): the page stores shrunk photos in receiptJobs (Firestore keeps unsent writes on the
@@ -127,12 +208,26 @@ cloudEvent('processReceipt', async event => {
   const snap = await tx.get(ref);
   if (!snap.exists || snap.get('status') !== 'pending') return null;
   tx.update(ref, { status: 'processing', startedAt: Date.now() });
-  return { images: snap.get('images') ?? [snap.get('image')], kind: snap.get('kind') || 'receipt', by: snap.get('by'), byName: snap.get('byName') };
+  return { images: snap.get('images') ?? (snap.get('image') != null ? [snap.get('image')] : []), url: snap.get('url') || '', kind: snap.get('kind') || 'receipt', by: snap.get('by'), byName: snap.get('byName') };
  });
  if (job === null) return;
  const { images } = job;
  const tripDoc = (await getFirestore().doc(`trips/${trip}`).get()).data();
  try {
+  if (job.url && job.kind === 'product') {
+   // Web link instead of a photo: a product page or a picture.
+   await useQuota(job.by, 'ai');
+   const got = await readProductLink(job.url).catch(e => {
+    if (e instanceof HttpsError) throw e;
+    throw new HttpsError('unavailable', '未能開啟這個網址（網站可能不允許讀取），可以改為截圖上載。');
+   });
+   const pics = got.image ? [got.image] : [];
+   const { confidence: _c, ...item } = cleanProduct(await askDeepSeek(got.facts ? pagePrompt(tripDoc, got.facts) : productPrompt(tripDoc), pics), tripDoc);
+   if (!item.name) throw new HttpsError('not-found', '未能從這個連結認出物品，可以手動輸入。');
+   await getFirestore().collection(`trips/${trip}/shopping`).add({ ...item, url: got.link.slice(0, 500), photo: got.image && got.image.length <= 400000 ? got.image : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
+   await ref.delete();
+   return;
+  }
   if (!Array.isArray(images) || !images.length || images.length > 4 || !images.every(validImage)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
   await useQuota(job.by, 'ai');
   if (job.kind === 'productFill') {
