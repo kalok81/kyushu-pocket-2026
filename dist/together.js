@@ -295,6 +295,7 @@ window.Together = (() => {
           .sort((a, b) => (a.at || 0) - (b.at || 0));
         renderDrafts();
         handleFillJobs();
+        handleNoteFillJobs();
         const sp = $("#shopPage");
         if (sp) paint(sp, shopPage());
       },
@@ -1149,7 +1150,7 @@ window.Together = (() => {
     if (state.tab === "notes") {
       const coupon = state.noteKind === "coupon",
         kinds = `<div class="chips note-kind" role="group" aria-label="類型">${[["note", "📝 筆記"], ["coupon", "🎟 優惠券"]].map(([k, v]) => `<button type="button" class="chip${state.noteKind === k ? " active" : ""}" data-note-kind="${k}">${v}</button>`).join("")}</div>`,
-        photos = `<div class="note-photo-edit"><div id="notePhotoPreview">${notePhotoPreview()}</div><button type="button" class="action" data-tg="notePhoto">📷 ${coupon ? "影優惠券／上載截圖" : "加相片"}（最多 ${NOTE_PHOTO_MAX} 張）</button><input type="file" accept="image/*" id="notePhotoInput" multiple hidden></div>`,
+        photos = `<div class="note-photo-edit"><div id="notePhotoPreview">${notePhotoPreview()}</div><button type="button" class="action" data-tg="notePhoto">📷 ${coupon ? "影優惠券／上載截圖" : "加相片"}（最多 ${NOTE_PHOTO_MAX} 張）</button><input type="file" accept="image/*" id="notePhotoInput" multiple hidden><div class="tg-progress tg-progress-busy" id="noteFillBar" hidden><div></div></div><p class="note" id="noteFillInfo">${coupon ? "加入優惠券相片或連結後，AI 會讀出店名、優惠、優惠碼及有效期，填入空白欄位。" : "加入相片或連結後，AI 會讀出重點，填入筆記。"}</p></div>`,
         about = `<div class="tg-row"><label>日子<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><label>地點<select name="placeId"><option value="">（不指定）</option>${[...T().places]
           .sort((a, b) => a.v[1].localeCompare(b.v[1]))
           .map((p) => `<option value="${esc(p.id)}">${esc(p.v[1])}</option>`)
@@ -1496,6 +1497,7 @@ window.Together = (() => {
           continue;
         }
         notePhotoDraft.push(b64);
+        if (notePhotoDraft.length === 1) requestNoteFill({ images: [b64] });
       } catch (e) {
         toast(scanError(e));
       }
@@ -1503,6 +1505,65 @@ window.Together = (() => {
     if (files.length > NOTE_PHOTO_MAX) toast(`每則最多 ${NOTE_PHOTO_MAX} 張相片。`);
     const box = $("#notePhotoPreview");
     if (box) box.innerHTML = notePhotoPreview();
+  }
+  // AI fill for the note / coupon form: the first photo added, or a link typed in 連結, becomes a noteFill job;
+  // the answer fills only the fields that are still empty.
+  let noteFillJob = null;
+  function noteFillStatus(text, busy) {
+    const i = $("#noteFillInfo"),
+      b = $("#noteFillBar");
+    if (i) i.textContent = text;
+    if (b) b.hidden = !busy;
+  }
+  function requestNoteFill({ images, url }) {
+    if (!navigator.onLine) return noteFillStatus("離線中，AI 未能分析，請自行填寫。", false);
+    const { fs } = fb,
+      ref = fs.doc(tcol("receiptJobs"));
+    noteFillJob = ref.id;
+    fs.setDoc(ref, {
+      ...(images ? { images } : { url: url.slice(0, 500) }),
+      kind: "noteFill",
+      mode: state.noteKind === "coupon" ? "coupon" : "note",
+      file: images ? "筆記相片" : (() => { try { return new URL(url).hostname.slice(0, 120); } catch { return "網頁"; } })(),
+      status: "pending",
+      by: state.user.uid,
+      byName: me().name,
+      at: Date.now(),
+      createdAt: fs.serverTimestamp(),
+    }).catch(() => {
+      noteFillJob = null;
+      noteFillStatus("未能送出給 AI，請自行填寫。", false);
+    });
+    noteFillStatus(images ? "AI 正在讀取相片…" : "AI 正在讀取網頁…", true);
+  }
+  function handleNoteFillJobs() {
+    for (const j of jobs.filter((j) => j.kind === "noteFill" && (j.status === "done" || j.status === "failed"))) {
+      if (j.id === noteFillJob) {
+        noteFillJob = null;
+        const f = $('[data-tg-form="note"]:not([data-place-id])');
+        if (j.status === "failed" || !f) noteFillStatus(j.error || "AI 未能分析，請自行填寫。", false);
+        else {
+          const el = f.elements,
+            r = j.result || {},
+            put = (n, v) => {
+              if (el[n] && v && !String(el[n].value).trim()) el[n].value = v;
+            };
+          if (f.dataset.kind === "coupon") {
+            put("title", r.title);
+            put("text", r.text);
+            put("code", r.code);
+            put("until", r.until);
+          } else put("text", [r.title, r.text].filter(Boolean).join("\n"));
+          const p = r.place && placeFor(r.place);
+          if (p && el.placeId && !el.placeId.value) el.placeId.value = p.id;
+          noteFillStatus(
+            r.kind === "coupon" && f.dataset.kind !== "coupon" ? "AI 已填入內容；看來是優惠券，可以按上面「🎟 優惠券」改為優惠券。" : "AI 已填入空白欄位，請檢查。",
+            false,
+          );
+        }
+      }
+      fb.fs.deleteDoc(jobRef(j.id)).catch(() => {});
+    }
   }
   function showNotePhoto(id, i) {
     const n = state.notes.find((x) => x.id === id),
@@ -2465,6 +2526,17 @@ window.Together = (() => {
     else if (view === "together" && state.tab === "expenses") queueReceipts(files);
     else return;
     e.preventDefault();
+  });
+  // A link typed into the note / coupon form's 連結 is read by the AI (once per address).
+  let noteFillUrl = "";
+  document.addEventListener("change", (e) => {
+    const f = e.target.closest?.('[data-tg-form="note"]:not([data-place-id])');
+    if (!f || e.target.name !== "url") return;
+    const url = e.target.value.trim();
+    if (/^https?:\/\/\S+$/i.test(url) && url !== noteFillUrl) {
+      noteFillUrl = url;
+      requestNoteFill({ url });
+    }
   });
   // ---- Start ----
   load().catch(() => {});

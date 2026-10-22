@@ -92,6 +92,12 @@ test('product links can be sent as jobs', async () => {
  await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/l2`), { ...job, url: 'file:///etc/passwd' }));
  await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/l3`), { ...job, kind: 'receipt', url: 'https://shop.example.jp' }));
 });
+test('note and coupon AI jobs', async () => {
+ const job = { kind: 'noteFill', file: '筆記相片', status: 'pending', ...owned('amy', 'Amy') };
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/nf1`), { ...job, mode: 'coupon', images: ['abc'] }));
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/nf2`), { ...job, mode: 'note', url: 'https://example.com' }));
+ await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/nf3`), { ...job, mode: 'other', url: 'https://example.com' }));
+});
 test('receipt jobs are private to whoever sent them', async () => {
  await assertSucceeds(getDoc(doc(db(amy), `${T}/receiptJobs/j1`)));
  await assertFails(getDoc(doc(db(bob), `${T}/receiptJobs/j1`)));

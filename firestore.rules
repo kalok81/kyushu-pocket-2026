@@ -160,15 +160,16 @@ service cloud.firestore {
       match /receiptJobs/{id} {
         allow read, delete: if tripMember() && resource.data.by == request.auth.uid;
         allow create: if tripMember() && owned()
-          && request.resource.data.keys().hasOnly(['image', 'images', 'url', 'hashes', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['image', 'images', 'url', 'mode', 'hashes', 'kind', 'file', 'status', 'by', 'byName', 'at', 'createdAt'])
+          && (!('mode' in request.resource.data) || request.resource.data.mode in ['note', 'coupon'])
           && (!('hashes' in request.resource.data) || (request.resource.data.hashes is list && request.resource.data.hashes.size() <= 4))
           && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
-          && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill'])
+          && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill', 'noteFill'])
           && (('images' in request.resource.data && request.resource.data.images is list
                 && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
               || text(request.resource.data.get('image', null), 900000)
               // a product page or picture link read by the function
-              || (request.resource.data.get('kind', '') == 'product' && text(request.resource.data.get('url', null), 500)
+              || (request.resource.data.get('kind', '') in ['product', 'noteFill'] && text(request.resource.data.get('url', null), 500)
                   && request.resource.data.url.matches('^https?://.+')));
         allow update: if tripMember() && resource.data.by == request.auth.uid
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['edit', 'status', 'retries', 'photos'])

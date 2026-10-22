@@ -499,3 +499,14 @@
     else return;
     e.preventDefault();
   });
+  // A link typed into the note / coupon form's 連結 is read by the AI (once per address).
+  let noteFillUrl = "";
+  document.addEventListener("change", (e) => {
+    const f = e.target.closest?.('[data-tg-form="note"]:not([data-place-id])');
+    if (!f || e.target.name !== "url") return;
+    const url = e.target.value.trim();
+    if (/^https?:\/\/\S+$/i.test(url) && url !== noteFillUrl) {
+      noteFillUrl = url;
+      requestNoteFill({ url });
+    }
+  });

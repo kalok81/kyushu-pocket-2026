@@ -121,7 +121,7 @@
     if (state.tab === "notes") {
       const coupon = state.noteKind === "coupon",
         kinds = `<div class="chips note-kind" role="group" aria-label="類型">${[["note", "📝 筆記"], ["coupon", "🎟 優惠券"]].map(([k, v]) => `<button type="button" class="chip${state.noteKind === k ? " active" : ""}" data-note-kind="${k}">${v}</button>`).join("")}</div>`,
-        photos = `<div class="note-photo-edit"><div id="notePhotoPreview">${notePhotoPreview()}</div><button type="button" class="action" data-tg="notePhoto">📷 ${coupon ? "影優惠券／上載截圖" : "加相片"}（最多 ${NOTE_PHOTO_MAX} 張）</button><input type="file" accept="image/*" id="notePhotoInput" multiple hidden></div>`,
+        photos = `<div class="note-photo-edit"><div id="notePhotoPreview">${notePhotoPreview()}</div><button type="button" class="action" data-tg="notePhoto">📷 ${coupon ? "影優惠券／上載截圖" : "加相片"}（最多 ${NOTE_PHOTO_MAX} 張）</button><input type="file" accept="image/*" id="notePhotoInput" multiple hidden><div class="tg-progress tg-progress-busy" id="noteFillBar" hidden><div></div></div><p class="note" id="noteFillInfo">${coupon ? "加入優惠券相片或連結後，AI 會讀出店名、優惠、優惠碼及有效期，填入空白欄位。" : "加入相片或連結後，AI 會讀出重點，填入筆記。"}</p></div>`,
         about = `<div class="tg-row"><label>日子<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><label>地點<select name="placeId"><option value="">（不指定）</option>${[...T().places]
           .sort((a, b) => a.v[1].localeCompare(b.v[1]))
           .map((p) => `<option value="${esc(p.id)}">${esc(p.v[1])}</option>`)

@@ -192,6 +192,29 @@ If the page is not about one specific product (a home, category, search or shop 
 Use the page for the name, spec and detail; the price only if it is in ${tripInfo(t).cur} or ${tripInfo(t).home}; place: the shop or brand selling it if clear.
 Page: ${JSON.stringify({ site: f.site, title: f.title, brand: f.brand, description: f.description, price: f.price, currency: f.currency, text: f.text.slice(0, 2000) })}`;
 
+// ---- Notes and coupons: fill the 共用 form from a photo (coupon, sign, menu, timetable) or a web page ----
+const noteFillPrompt = (t, mode, f) => { const { place } = tripInfo(t); return `Travellers in ${place} keep notes and coupons in a shared trip app. ${f ? 'They pasted a link to the web page below' : 'They added the photo'} to a ${mode === 'coupon' ? 'coupon' : 'note'}.
+Reply with JSON only, in this shape:
+{"kind": "coupon" | "note", "title": string, "text": string, "code": string, "until": "YYYY-MM-DD" or null, "place": string}
+- kind: coupon if it is a discount, voucher, coupon or special offer; otherwise note.
+- title: for a coupon, the shop and the offer in short (e.g. "Bic Camera 免稅 10% + 5%"); for a note, a short heading. Traditional Chinese (Hong Kong usage), keeping shop and product names as written, at most 60 characters.
+- text: for a coupon, the discount and its conditions (minimum spend, items, passport, how to use); for a note, the useful points in short lines (what, where, when, prices, opening hours, booking). Traditional Chinese, at most 400 characters; keep names, numbers, times and addresses exactly.
+- code: a coupon or promo code exactly as printed (letters and digits); empty if none.
+- until: the last day it is valid; if the year is not shown, use the next such date; null if not shown.
+- place: the shop, venue or branch it is for, as written; empty if unclear.${f ? `
+Page: ${JSON.stringify({ site: f.site, title: f.title, description: f.description, text: f.text.slice(0, 2500) })}` : ''}`; };
+function cleanNoteFill(r) {
+ const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ return {
+  kind: r.kind === 'coupon' ? 'coupon' : 'note',
+  title: text(r.title, 80),
+  text: text(r.text, 1000),
+  code: text(r.code, 60),
+  until: typeof r.until === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.until) ? r.until : '',
+  place: text(r.place, 120),
+ };
+}
+
 const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.test(image) && image.length * 0.75 <= MAX_IMAGE_BYTES;
 
 // Background receipts and product photos (kind: 'product'): the page stores shrunk photos in receiptJobs (Firestore keeps unsent writes on the
@@ -209,12 +232,30 @@ cloudEvent('processReceipt', async event => {
   const snap = await tx.get(ref);
   if (!snap.exists || snap.get('status') !== 'pending') return null;
   tx.update(ref, { status: 'processing', startedAt: Date.now() });
-  return { images: snap.get('images') ?? (snap.get('image') != null ? [snap.get('image')] : []), url: snap.get('url') || '', kind: snap.get('kind') || 'receipt', by: snap.get('by'), byName: snap.get('byName') };
+  return { images: snap.get('images') ?? (snap.get('image') != null ? [snap.get('image')] : []), url: snap.get('url') || '', mode: snap.get('mode') || 'note', kind: snap.get('kind') || 'receipt', by: snap.get('by'), byName: snap.get('byName') };
  });
  if (job === null) return;
  const { images } = job;
  const tripDoc = (await getFirestore().doc(`trips/${trip}`).get()).data();
  try {
+  if (job.kind === 'noteFill') {
+   // 共用 form: a photo or a web page link; the page fills the empty fields of the note or coupon being written.
+   await useQuota(job.by, 'ai');
+   let facts = null, pics = images.filter(validImage).slice(0, 1);
+   if (job.url) {
+    const got = await readProductLink(job.url).catch(e => {
+     if (e instanceof HttpsError) throw e;
+     throw new HttpsError('unavailable', '未能開啟這個網址（網站可能不允許讀取），可以改為截圖。');
+    });
+    facts = got.facts;
+    if (got.image && !pics.length) pics = [got.image];
+   }
+   if (!pics.length && !facts) throw new HttpsError('invalid-argument', '沒有相片或網頁可以分析。');
+   const result = cleanNoteFill(await askDeepSeek(noteFillPrompt(tripDoc, job.mode, facts), pics));
+   if (!result.title && !result.text) throw new HttpsError('not-found', 'AI 未能讀出內容，請自行填寫。');
+   await ref.update({ status: 'done', result, images: FieldValue.delete(), doneAt: Date.now() });
+   return;
+  }
   if (job.url && job.kind === 'product') {
    // Web link instead of a photo: a product page or a picture.
    await useQuota(job.by, 'ai');

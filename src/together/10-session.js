@@ -155,6 +155,7 @@
           .sort((a, b) => (a.at || 0) - (b.at || 0));
         renderDrafts();
         handleFillJobs();
+        handleNoteFillJobs();
         const sp = $("#shopPage");
         if (sp) paint(sp, shopPage());
       },

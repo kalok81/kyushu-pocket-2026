@@ -221,6 +221,32 @@ try {
   });
   await page.waitForFunction(() => /screenshot\.png/.test(document.querySelector('[data-tg-live=jobs]')?.textContent || ''));
  });
+ await step('AI fills the coupon and note forms from a photo or link', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC', 'base64');
+  // stands in for processReceipt: answer the pending noteFill job
+  const answer = (result) => page.evaluate(async (result) => {
+   const fs = await import('./vendor/firebase/firebase-firestore.js'), jobs = globalThis.__fakeStore.receiptJobs || {};
+   const id = Object.keys(jobs).filter((k) => jobs[k].kind === 'noteFill' && jobs[k].status === 'pending').sort((a, b) => jobs[b].at - jobs[a].at)[0];
+   await fs.updateDoc({ c: 'receiptJobs', id }, { status: 'done', result });
+   return jobs[id];
+  }, result);
+  await page.goto(base + '/#together?tab=notes'); await page.waitForSelector('[data-tg-form=note]');
+  await page.click('[data-note-kind=coupon]'); await page.waitForSelector('[data-tg-form=note][data-kind=coupon]');
+  await page.locator('#notePhotoInput').setInputFiles({ name: 'coupon.png', mimeType: 'image/png', buffer: png });
+  await page.waitForFunction(() => /AI 正在讀取相片/.test(document.querySelector('#noteFillInfo').textContent));
+  const job = await answer({ kind: 'coupon', title: 'Bic Camera 免稅 10% + 5%', text: '滿 ¥5,000，出示護照', code: 'BIC555', until: '2099-01-31', place: '淺草寺 本堂' });
+  assert.equal(job.mode, 'coupon'); assert.equal(job.images.length, 1);
+  await page.waitForFunction(() => document.querySelector('[data-tg-form=note] [name=code]').value === 'BIC555');
+  assert.equal(await page.inputValue('[data-tg-form=note] [name=title]'), 'Bic Camera 免稅 10% + 5%');
+  assert.equal(await page.inputValue('[data-tg-form=note] [name=until]'), '2099-01-31');
+  assert.equal(await page.locator('[data-tg-form=note] [name=placeId] option:checked').innerText(), '淺草寺（雷門）');
+  await page.click('[data-note-kind=note]'); await page.waitForSelector('[data-tg-form=note]:not([data-kind])');
+  await page.fill('[data-tg-form=note] [name=url]', 'https://example.com/ramen'); await page.locator('[data-tg-form=note] [name=url]').blur();
+  await page.waitForFunction(() => /AI 正在讀取網頁/.test(document.querySelector('#noteFillInfo').textContent));
+  const job2 = await answer({ kind: 'note', title: '一蘭 上野店', text: '24 小時營業\n天然豚骨拉麵 ¥980', code: '', until: '', place: '' });
+  assert.equal(job2.url, 'https://example.com/ramen'); assert.equal(job2.mode, 'note');
+  await page.waitForFunction(() => document.querySelector('[data-tg-form=note] [name=text]').value.startsWith('一蘭 上野店\n24 小時營業'));
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

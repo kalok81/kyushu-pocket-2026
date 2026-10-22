@@ -1,6 +1,7 @@
 // In-memory Firestore: one fictional trip created on the site (generic), everything else starts empty.
 const TRIP={name:'測試旅程',destination:'日本東京',startDate:'2030-04-01',endDate:'2030-04-03',currency:'JPY',homeCurrency:'HKD',country:'JP',generic:true,center:{lat:35.681,lng:139.767},members:['amy@kyushu-trip.invalid']};
 const store={},ls=[];let n=0;
+globalThis.__fakeStore=store; // lets tests play the part of the Cloud Functions
 const col=c=>store[c]??={};
 const snapOf=r=>r.id?{exists:()=>!!col(r.c)[r.id],data:()=>col(r.c)[r.id],get:k=>col(r.c)[r.id]?.[k],metadata:{fromCache:false,hasPendingWrites:false}}:{docs:Object.entries(col(r.c)).map(([id,d])=>({id,data:()=>d,metadata:{hasPendingWrites:false}}))};
 // Like Firestore, listeners hear about writes asynchronously.
