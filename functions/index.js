@@ -207,7 +207,8 @@ async function placesApi(path, fields, body) {
  return res.json();
 }
 // Names and addresses in Japanese for trips in Japan (as on signs); elsewhere in Traditional Chinese.
-const langFor = country => (country === 'JP' ? 'ja' : 'zh-TW');
+// Local script where travellers need it to match signs and show drivers (Japan, Korea); Chinese elsewhere.
+const langFor = country => ({ JP: 'ja', KR: 'ko' })[country] || 'zh-TW';
 const search = async (kind, body, country) => (await placesApi(`places:${kind}`, SEARCH_FIELDS, { languageCode: langFor(country), maxResultCount: 1, ...(country && kind === 'searchText' ? { regionCode: country } : {}), ...body })).places?.[0];
 const district = p => { const c = p?.addressComponents || [], pick = t => c.find(x => x.types?.includes(t))?.longText; return pick('sublocality_level_1') || pick('sublocality') || pick('locality') || pick('administrative_area_level_2') || ''; };
 
