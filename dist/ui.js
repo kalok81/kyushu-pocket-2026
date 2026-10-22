@@ -8,7 +8,8 @@ window.UI=(()=>{
  return Object.freeze({
   // Resolves true only when the confirm button is pressed (cancel, Esc or tapping outside give false).
   async confirm(title,{text='',list=null,ok='確定',cancel='取消',danger=false}={}){
-   const r=await window.Swal.fire({...base(),title,icon:danger?'warning':'question',...(list?{html:`${text?`<p>${esc(text)}</p>`:''}<ul class="ui-list">${list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`}:{text}),showCancelButton:true,confirmButtonText:ok,cancelButtonText:cancel});
+   const b=base();if(danger)b.customClass.confirmButton='locate-button danger';
+   const r=await window.Swal.fire({...b,title,icon:danger?'warning':'question',...(list?{html:`${text?`<p>${esc(text)}</p>`:''}<ul class="ui-list">${list.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`}:{text}),showCancelButton:true,confirmButtonText:ok,cancelButtonText:cancel});
    return r.isConfirmed;
   },
   // Resolves the entered text, or null when cancelled.

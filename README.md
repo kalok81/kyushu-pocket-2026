@@ -6,6 +6,7 @@
 
 - `dist/app.js`：畫面互動；登入並取得 Firestore 資料後才會啟動。
 - `dist/style.css`：手機及電腦版面、顏色及字體。
+- `dist/design.css`：統一設計規範（參考 shadcn/ui：顏色變數、按鈕種類、輸入框、卡片、視窗、焦點框），在 style.css 之後載入；改顏色或圓角只需改這個檔案頂部的變數。
 - `dist/index.html`：網站標題與入口。
 
 可在 GitHub 開啟檔案，按 Edit 修改，再 Commit 到 `main`。GitHub Actions 成功執行後，GitHub Pages 網頁會自動更新。
