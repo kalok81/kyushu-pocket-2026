@@ -28,6 +28,7 @@
     flights: [],
     placesLoaded: false,
     shopFilter: "todo",
+    shopCat: "all",
     shopSearch: "",
     shopView: "list",
     shopEdit: null,

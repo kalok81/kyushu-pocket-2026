@@ -1314,7 +1314,7 @@ window.startTrip = (meta = {}) => {
         type: "購物",
         types: ["購物"],
         title: x.name,
-        region: "購物清單",
+        region: window.Together?.shopCats?.[x.cat] || "購物清單",
         summary: [x.qty, x.detail, x.place].filter(Boolean).join(" · "),
         sub: x.bought
           ? `✓ 已買${x.boughtBy ? `（${x.boughtBy}）` : ""}`

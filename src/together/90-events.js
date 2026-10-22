@@ -165,6 +165,7 @@
         detail: str("detail").slice(0, 500),
         place: str("place").slice(0, 200),
         placeId: str("placeId").slice(0, 40),
+        cat: SHOP_CATS[str("cat")] ? str("cat") : "other",
         price: price == null ? null : Math.round(price * 100) / 100,
         currency: pickCur(String(v.get("currency"))),
         photo: shopPhoto,
@@ -332,6 +333,10 @@
     }
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
+      refresh();
+    }
+    if (d.shopCat) {
+      state.shopCat = d.shopCat;
       refresh();
     }
     if (d.shopView) {

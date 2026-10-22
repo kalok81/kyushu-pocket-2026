@@ -10,6 +10,7 @@
     shoppingFor,
     shoppingAt,
     linkShopping,
+    shopCats: SHOP_CATS,
     lists: tripLists,
     openShopItem,
     saveItem,

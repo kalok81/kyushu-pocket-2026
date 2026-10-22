@@ -263,3 +263,7 @@ body{overflow-wrap:anywhere}
 .coupon-code span{font-size:12px;color:var(--muted-foreground)}.coupon-code b{font:700 18px/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:1px;overflow-wrap:anywhere}
 .coupon-code.big{justify-content:center}.coupon-code.big b{font-size:26px}
 .coupon-due{margin:4px 0}.coupon-expired{background:var(--destructive-soft);color:var(--destructive)}.coupon-soon{background:#f6efd9;color:#7a5d12}
+/* Shopping categories */
+.shop-cats{margin-top:-4px}
+.shop-cat-head{margin:18px 0 8px;font-size:15px;display:flex;align-items:baseline;gap:6px}.shop-cat-head small{color:var(--muted-foreground);font-weight:500}
+.shop-cat{background:var(--secondary);color:var(--secondary-foreground)}

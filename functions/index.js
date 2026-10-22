@@ -92,10 +92,11 @@ async function askDeepSeek(prompt, images) {
 }
 const productPrompt = t => { const { place, cur, home } = tripInfo(t); return `You identify products that travellers in ${place} photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
 Reply with JSON only, in this shape:
-{"name": string, "spec": string, "detail": string, "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
+{"name": string, "spec": string, "detail": string, "category": "drug" | "food" | "fashion" | "home" | "stationery" | "toys" | "electronics" | "other", "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
 - name: the product in Traditional Chinese (Hong Kong usage), with the brand and the original-language product name in brackets when different, at most 80 characters.
 - spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, mint), at most 30 characters; empty if unknown.
 - detail: one short Traditional Chinese line on what it is or what it is for, at most 60 characters.
+- category: drug for cosmetics, skincare, hair care, beauty tools, medicine, patches and supplements (drugstore goods); food for snacks, sweets, drinks, instant food and condiments; fashion for clothes, shoes, bags, wallets and accessories; home for kitchen and household goods; stationery for pens, notebooks and office goods; toys for toys, games, figures, character and idol goods; electronics for gadgets and appliances; other otherwise.
 - price: only if a price tag or label with this product's price is visible (tax-included price if both are shown); otherwise null.
 - currency: ${cur} unless the price is clearly in ${home}.
 - place: a shop name only if it is visible in the photo (price tag, shelf sign, bag); otherwise empty.
@@ -105,7 +106,8 @@ function cleanProduct(r, t) {
  const { cur, home } = tripInfo(t);
  const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
  const price = typeof r.price === 'number' && Number.isFinite(r.price) && r.price > 0 && r.price <= 1e7 ? Math.round(r.price * 100) / 100 : null;
- return { name: text(r.name, 80), qty: text(r.spec, 30), detail: text(r.detail, 500), place: text(r.place, 200), price, currency: r.currency === home ? home : cur, confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
+ const cats = ['drug', 'food', 'fashion', 'home', 'stationery', 'toys', 'electronics', 'other'];
+ return { name: text(r.name, 80), qty: text(r.spec, 30), detail: text(r.detail, 500), cat: cats.includes(r.category) ? r.category : 'other', place: text(r.place, 200), price, currency: r.currency === home ? home : cur, confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
 }
 
 const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.test(image) && image.length * 0.75 <= MAX_IMAGE_BYTES;
