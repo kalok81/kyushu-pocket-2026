@@ -44,8 +44,8 @@ service cloud.firestore {
 
     match /config/{id} { allow read, write: if false; }
 
-    // Trips: trips/{t}.members holds the lower-case emails of that trip's companions. Trip documents are
-    // created and changed by the owner's tools for now; companions read their own trips (array-contains query).
+    // Trips: trips/{t}.members holds the lower-case emails of that trip's companions. Trip documents are written only by
+    // the manageTrip function; companions read their own trips (array-contains query).
     match /trips/{t} {
       function tripMember() {
         return signedIn() && request.auth.token.email.lower() in get(/databases/$(database)/documents/trips/$(t)).data.members;
@@ -54,8 +54,7 @@ service cloud.firestore {
       allow write: if false;
 
 
-      // Trip data is uploaded with scripts/trip-data.mjs using the project owner's Google login.
-      // Hotels and flights entered on the site (trips created on the site have no Sheet).
+      // Hotels and flights entered on the site.
       match /hotels/{id} {
         allow read, delete: if tripMember();
         allow create: if tripMember() && owned() && hotelValid(request.resource.data);

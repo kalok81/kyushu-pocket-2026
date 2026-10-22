@@ -63,6 +63,14 @@ window.startTrip = (meta = {}) => {
     region = "全部區域",
     search = "",
     onlySaved = false;
+  // Message for a failed Cloud Function call: the function's own (Chinese) message, a clear one when the App Check
+  // security check failed (the SDK then waits a day before retrying), else the fallback.
+  const fnError = (e, fallback) =>
+    e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
+      ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
+      : String(e?.code || "").startsWith("functions/") && e.message
+        ? e.message.replace(/\s*\[\d+\]$/, "")
+        : fallback;
   function toast(s) {
     window.UI.toast(s);
   }
@@ -430,7 +438,7 @@ window.startTrip = (meta = {}) => {
       at.textContent = "📍 " + (r.address || "已定位");
     } catch (e) {
       at.textContent =
-        String(e?.code || "").startsWith("functions/") && e.message ? e.message.replace(/\s*\[\d+\]$/, "") : "未能定位";
+        fnError(e, "未能定位");
     }
   }
   async function lookupPlaceForm() {
@@ -469,9 +477,7 @@ window.startTrip = (meta = {}) => {
       info.textContent = "已填入，請檢查後按儲存。";
     } catch (e) {
       info.textContent =
-        String(e?.code || "").startsWith("functions/") && e.message
-          ? e.message.replace(/\s*\[\d+\]$/, "")
-          : "未能自動填寫，請手動輸入。";
+        fnError(e, "未能自動填寫，請手動輸入。");
       console.error(e);
     } finally {
       btn.disabled = false;
@@ -675,9 +681,7 @@ window.startTrip = (meta = {}) => {
       info.textContent = "已填入，請檢查後按儲存。";
     } catch (e) {
       info.textContent =
-        String(e?.code || "").startsWith("functions/") && e.message
-          ? e.message.replace(/\s*\[\d+\]$/, "")
-          : "未能自動填寫，請手動輸入。";
+        fnError(e, "未能自動填寫，請手動輸入。");
       console.error(e);
     } finally {
       btn.disabled = false;
@@ -1122,7 +1126,7 @@ window.startTrip = (meta = {}) => {
         ? `${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol><button type="button" class="action primary" data-route-pick="${k}">選用這個</button></div>`).join("")}<div class="links">${gmLink}</div>`
         : `<p class="note">Google 地圖找不到${ROUTE_MODES[mode][0]}路線。</p><div class="links">${gmLink}</div>`;
     } catch (e) {
-      box.innerHTML = `<p class="note">${esc(String(e?.code || "").startsWith("functions/") && e.message ? e.message.replace(/\s*\[\d+\]$/, "") : "未能查詢路線，請檢查網絡後再試。")}</p><div class="links">${gmLink}</div>`;
+      box.innerHTML = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p><div class="links">${gmLink}</div>`;
     }
   }
   // AI route advice (aiRoutes function): several ways with lines and stations, times and fares are estimates.
@@ -1161,7 +1165,7 @@ window.startTrip = (meta = {}) => {
         ? `<div class="route-ai-head"><b>✨ AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}<button type="button" class="action primary" data-route-ai-pick="${k}">選用這個</button></div>`).join("")}`
         : '<p class="note">AI 未能提供路線建議。</p>';
     } catch (e) {
-      box.innerHTML = `<p class="note">${esc(String(e?.code || "").startsWith("functions/") && e.message ? e.message.replace(/\s*\[\d+\]$/, "") : "未能進行 AI 分析，請檢查網絡後再試。")}</p>`;
+      box.innerHTML = `<p class="note">${esc(fnError(e, "未能進行 AI 分析，請檢查網絡後再試。"))}</p>`;
     }
   }
   function saveTransport(text) {
@@ -1425,9 +1429,7 @@ window.startTrip = (meta = {}) => {
       info.textContent = "已填入，請檢查入住及退房日期。";
     } catch (e) {
       info.textContent =
-        String(e?.code || "").startsWith("functions/") && e.message
-          ? e.message.replace(/\s*\[\d+\]$/, "")
-          : "未能自動填寫，請手動輸入。";
+        fnError(e, "未能自動填寫，請手動輸入。");
     }
   }
   function saveHotel(f) {

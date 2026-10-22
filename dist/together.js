@@ -43,6 +43,14 @@ window.Together = (() => {
     $ = (s) => document.querySelector(s);
   const esc = (s) =>
     String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  // Message for a failed Cloud Function call: the function's own (Chinese) message, a clear one when the App Check
+  // security check failed (the SDK then waits a day before retrying), else the fallback.
+  const fnError = (e, fallback) =>
+    e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
+      ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
+      : String(e?.code || "").startsWith("functions/") && e.message
+        ? e.message.replace(/\s*\[\d+\]$/, "")
+        : fallback;
   const toast = (s) => window.UI.toast(s);
   const header = (k, t, p) => `<div class="pagehead"><div class="eyebrow">${k}</div><h1>${t}</h1>${p ? `<p>${p}</p>` : ""}</div>`;
   let fb,
@@ -1847,9 +1855,7 @@ window.Together = (() => {
     } catch (e) {
       if (msg)
         msg.textContent =
-          String(e?.code || "").startsWith("functions/") && e.message
-            ? e.message.replace(/\s*\[\d+\]$/, "")
-            : "未能完成，請檢查網絡後再試。";
+          fnError(e, "未能完成，請檢查網絡後再試。");
       console.error(e);
     } finally {
       btn.disabled = false;

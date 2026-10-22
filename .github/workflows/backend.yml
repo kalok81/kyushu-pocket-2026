@@ -1,0 +1,64 @@
+name: Deploy rules and functions
+on:
+  push:
+    branches: [main]
+    paths: ['firestore.rules', 'storage.rules', 'firebase.json', 'functions/**', 'tests/rules/**', 'scripts/deploy-rules.mjs', '.github/workflows/backend.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: backend
+  cancel-in-progress: false
+jobs:
+  rules-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Firestore and Storage rules against the emulators
+        working-directory: tests/rules
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+  deploy:
+    needs: rules-test
+    # Turned on with the repository variable BACKEND_DEPLOY=on once the deploy account has its permissions.
+    if: vars.BACKEND_DEPLOY == 'on'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Keyless: GitHub's OIDC token is exchanged for the github-deploy service account (main branch of this repo only).
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/672657048901/locations/global/workloadIdentityPools/github/providers/github-repo
+          service_account: github-deploy@kyushu-2e307.iam.gserviceaccount.com
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Release rules
+        run: node scripts/deploy-rules.mjs
+      - name: Deploy functions (when functions/ changed, or run by hand)
+        run: |
+          if [ "${{ github.event_name }}" = push ] && ! git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -q '^functions/'; then
+            echo "functions/ unchanged"; exit 0
+          fi
+          F=$PWD/functions
+          COMMON="--project=kyushu-2e307 --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=$F --memory=256Mi --max-instances=3 --quiet"
+          gcloud functions deploy processReceipt $COMMON --entry-point=processReceipt --trigger-location=asia-northeast1 \
+            --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' \
+            --trigger-event-filters-path-pattern=document='trips/{trip}/receiptJobs/{id}' \
+            --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=180s
+          gcloud functions deploy aiRoutes $COMMON --entry-point=aiRoutes --trigger-http --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=120s
+          for f in lookupPlace suggestRoutes manageTrip; do
+            gcloud functions deploy $f $COMMON --entry-point=$f --trigger-http --set-secrets=PLACES_API_KEY=places-api-key:latest --timeout=40s
+          done

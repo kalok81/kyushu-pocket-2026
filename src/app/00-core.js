@@ -59,6 +59,14 @@
     region = "全部區域",
     search = "",
     onlySaved = false;
+  // Message for a failed Cloud Function call: the function's own (Chinese) message, a clear one when the App Check
+  // security check failed (the SDK then waits a day before retrying), else the fallback.
+  const fnError = (e, fallback) =>
+    e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
+      ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
+      : String(e?.code || "").startsWith("functions/") && e.message
+        ? e.message.replace(/\s*\[\d+\]$/, "")
+        : fallback;
   function toast(s) {
     window.UI.toast(s);
   }

@@ -98,9 +98,7 @@
     } catch (e) {
       if (msg)
         msg.textContent =
-          String(e?.code || "").startsWith("functions/") && e.message
-            ? e.message.replace(/\s*\[\d+\]$/, "")
-            : "未能完成，請檢查網絡後再試。";
+          fnError(e, "未能完成，請檢查網絡後再試。");
       console.error(e);
     } finally {
       btn.disabled = false;

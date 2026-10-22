@@ -117,9 +117,7 @@
       info.textContent = "已填入，請檢查後按儲存。";
     } catch (e) {
       info.textContent =
-        String(e?.code || "").startsWith("functions/") && e.message
-          ? e.message.replace(/\s*\[\d+\]$/, "")
-          : "未能自動填寫，請手動輸入。";
+        fnError(e, "未能自動填寫，請手動輸入。");
       console.error(e);
     } finally {
       btn.disabled = false;

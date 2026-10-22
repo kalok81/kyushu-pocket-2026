@@ -62,7 +62,9 @@ API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`）。
 
 費用保護：網頁呼叫的 function 要求 Firebase App Check（reCAPTCHA Enterprise，網站金鑰在 `src/together/00-core.js` 的 `APP_CHECK_KEY`）；每位旅伴每日最多 80 次 AI 分析及 300 次地圖查詢（`usage/{uid}_{日期}`，網頁不可讀寫）；Google Cloud 預算「口袋旅伴 每月預算」HK$80，用量達 50%、90%、100% 時電郵通知帳單帳戶管理員。
 
-部署（需要 Blaze 方案；`--source` 用絕對路徑）：
+權限規則及 Cloud Functions 由 GitHub Actions（`.github/workflows/backend.yml`）部署：`firestore.rules`、`storage.rules`、`functions/` 等有改動並 push 到 `main` 時，先在 Firebase 模擬器執行 `tests/rules/` 的權限測試（需要 Java），通過後用 `scripts/deploy-rules.mjs` 發佈規則，`functions/` 有改動時再部署所有 function。GitHub 以 Workload Identity Federation 登入（`github-deploy` 服務帳戶，只限這個 repo 的 `main`，毋須在 GitHub 存放金鑰）；部署工作由 repo 變數 `BACKEND_DEPLOY=on` 開啟。
+
+在自己電腦部署（需要 Blaze 方案；`--source` 用絕對路徑）：
 
 ```sh
 cd functions && npm install
@@ -94,6 +96,7 @@ node scripts/validate.mjs     # 檔案清單、私隱、語法、build、分帳�
 cd tests && npm ci && npx playwright install chromium && npm test
 ```
 
+- `tests/rules/`：Firestore 及 Storage 權限規則測試（`cd tests/rules && npm ci && npm test`，需要 Java 21）。
 - `tests/smoke.mjs`：用虛構旅程及假 Firebase（`tests/fake/`）在 Chromium 測試登入、各頁、行程、交通、開支、清單、住宿、購物及資料簿。
 - `tests/layout.mjs`：用資料很多、名稱很長的虛構旅程，在 320／390／768／1280px 寬度檢查所有頁面及主要視窗有沒有溢出、截斷或按鈕高度不一（`SHOTS=資料夾` 可儲存截圖）。
 
