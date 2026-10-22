@@ -5,7 +5,7 @@ window.Together=(()=>{
  // Firebase web config is public by design; access is enforced by firestore.rules and the member list.
  const config={apiKey:'AIzaSyC_qsxlY9mX0OKK5bIXwUXvrrxCOFnc18M',authDomain:'kyushu-2e307.firebaseapp.com',projectId:'kyushu-2e307',storageBucket:'kyushu-2e307.firebasestorage.app',messagingSenderId:'672657048901',appId:'1:672657048901:web:d1e2f7dd92389f78f3ea2c'};
  const tabs={notes:'筆記',expenses:'開支'};
- const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],placesLoaded:false,shopFilter:'todo',shopSearch:'',shopView:'list',shopEdit:null,trip:{}};
+ const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,shopFilter:'todo',shopSearch:'',shopView:'list',shopEdit:null,trip:{}};
  const T=()=>window.TripApp,S=window.Split,$=s=>document.querySelector(s);
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const toast=s=>{$('#toast').textContent=s;$('#toast').classList.add('show');setTimeout(()=>$('#toast').classList.remove('show'),2600)};
@@ -26,7 +26,7 @@ window.Together=(()=>{
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
   return loading;
  }
- function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],placesLoaded:false,trip:{}})}
+ function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,trip:{}})}
  // Trips this companion belongs to (trips/{id}.members holds lower-case emails); open the last one used.
  async function chooseTrip(){
   const {fs,db}=fb,email=String(state.user.email||'').toLowerCase();
@@ -34,8 +34,8 @@ window.Together=(()=>{
    const snap=await fs.getDocs(fs.query(fs.collection(db,'trips'),fs.where('members','array-contains',email)));
    state.trips=snap.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>String(b.startDate||'').localeCompare(String(a.startDate||'')));
   }catch(e){state.status=e.code==='permission-denied'?'denied':'error';state.error=e.code==='permission-denied'?'':'未能載入旅程，請稍後再試。';refresh();return}
-  if(!state.trips.length){state.status='denied';refresh();return}
-  const keep=state.trips.find(t=>t.id===lastTrip.get())||state.trips[0];tripId=keep.id;lastTrip.set(tripId);state.trip=keep;
+  if(!state.trips.length){state.status='notrip';refresh();return}
+  const keep=state.trips.find(t=>t.id===lastTrip.get())||state.trips[0];tripId=keep.id;lastTrip.set(tripId);state.meta=keep;
   document.title=`${keep.name} · 口袋旅伴`;const sub=$('.brand small');if(sub)sub.textContent=keep.name;
   listen();
  }
@@ -48,6 +48,7 @@ window.Together=(()=>{
    if(name==='shopping'&&started)setTimeout(geocodeShopping,1000);
    if(name==='places'){state.placesLoaded=true;if(started)T().applyPlaceEdits(state.places);else start()}
    if(name==='planDays'&&started)T().applyPlanEdits(planMap());
+   if((name==='hotels'||name==='flights')&&started)T().refreshLists();
    if(name==='members'&&started)syncFavorites();
    refresh();
   },err=>{stop();state.status=err.code==='permission-denied'?'denied':'error';state.error=err.code==='permission-denied'?'':'同步失敗，請稍後再試。';refresh()});
@@ -59,11 +60,12 @@ window.Together=(()=>{
    state.trip[id]=json;start();
   },fail);
   const watchJobs=fs.onSnapshot(fs.query(tcol('receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();handleFillJobs();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
-  unsub=[watchJobs,...['notes','expenses','members','shopping','places','planDays'].map(watch)].concat(['data','geo','content'].map(watchTrip));
+  unsub=[watchJobs,...['notes','expenses','members','shopping','places','planDays','hotels','flights'].map(watch)].concat(state.meta.generic?[]:['data','geo','content'].map(watchTrip));
  }
  function start(){
-  const t=state.trip;if(started||!t.data||!t.geo||!t.content||!state.placesLoaded)return;
-  try{const data=JSON.parse(t.data),geo=JSON.parse(t.geo),content=JSON.parse(t.content);started=true;window.TRIP_GEO=geo;document.body.classList.remove('locked');window.startTrip(data,content);T().applyPlaceEdits(state.places);T().applyPlanEdits(planMap());syncFavorites();setTimeout(geocodeShopping,1500)}
+  const t=state.trip,generic=!!state.meta?.generic;if(started||!state.placesLoaded||(!generic&&(!t.data||!t.geo||!t.content)))return;
+  // Trips created on the site have no Sheet snapshot: start with no data and an empty pin list.
+  try{const data=generic?null:JSON.parse(t.data),geo=generic?{places:{}}:JSON.parse(t.geo),content=generic?{}:JSON.parse(t.content);started=true;window.TRIP_GEO=geo;document.body.classList.remove('locked');window.startTrip(data,content,state.meta);T().applyPlaceEdits(state.places);T().applyPlanEdits(planMap());syncFavorites();setTimeout(geocodeShopping,1500)}
   catch(e){started=false;state.status='error';state.error='旅程資料格式有誤，請重新上載。';refresh();console.error(e)}
  }
  async function logout(){
@@ -259,7 +261,12 @@ window.Together=(()=>{
  }
  // Day plans: planDays/{day} holds the whole edited stop list for that day; deleting it restores the original.
  const planMap=()=>Object.fromEntries(state.planDays.map(d=>[Number(d.id),d]));
- function savePlanDay(day,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,by:state.user.uid,byName:me().name,at:Date.now()}).catch(()=>toast('未能儲存行程，請再試。'))}
+ function savePlanDay(day,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,by:state.user.uid,byName:me().name,at:Date.now()},{merge:true}).catch(()=>toast('未能儲存行程，請再試。'))}
+ function setDayLabel(day,label,stops){fb.fs.setDoc(tdoc('planDays',String(day)),{stops,label,by:state.user.uid,byName:me().name,at:Date.now()},{merge:true}).catch(()=>toast('未能儲存，請再試。'))}
+ // Hotels and flights (trips created on the site).
+ const tripLists=()=>({hotels:state.hotels,flights:state.flights});
+ function saveItem(name,id,data){if(id){update(name,id,data);toast('已儲存')}else add(name,data)}
+ function removeItem(name,id){fb.fs.deleteDoc(tdoc(name,id)).catch(()=>toast('未能刪除，請再試。'))}
  function resetPlanDay(day){fb.fs.deleteDoc(tdoc('planDays',String(day))).then(()=>toast('已還原原本行程'),()=>toast('未能還原，請再試。'))}
  // Favourites: members/{uid}.saved. The first time, seed with the old yellow Sheet records plus this device's stars.
  function syncFavorites(){
@@ -303,7 +310,7 @@ window.Together=(()=>{
   return `<section class="panel tg-summary"><h3>分帳結算</h3>${cs.map(c=>{const total=state.expenses.filter(e=>e.currency===c).reduce((t,e)=>t+S.toMinor(e.amount,c),0),moves=S.settle(bal[c]);return `<div class="tg-currency"><div class="eyebrow">${c} · 合共 ${esc(S.format(total,c))}</div>${moves.length?moves.map(m=>`<p><b>${esc(nameOf(m.from))}</b> 要畀 <b>${esc(nameOf(m.to))}</b> ${esc(S.format(m.amount,c))}</p>`).join(''):'<p>已經清數。</p>'}</div>`}).join('')}<p class="note">日圓和港幣分開計算，不作匯率換算。</p></section>`;
  }
 
- const tripSwitch=()=>state.trips?.length>1?`<select class="trip-switch" data-trip-switch aria-label="切換旅程">${state.trips.map(t=>`<option value="${esc(t.id)}"${t.id===tripId?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`:`<span class="trip-name">${esc(state.trip?.name||'')}</span>`;
+ const tripSwitch=()=>state.trips?.length>1?`<select class="trip-switch" data-trip-switch aria-label="切換旅程">${state.trips.map(t=>`<option value="${esc(t.id)}"${t.id===tripId?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`:`<span class="trip-name">${esc(state.meta?.name||'')}</span>`;
  function statusBar(){const online=navigator.onLine,pending=['notes','expenses','shopping'].reduce((t,k)=>t+state[k].filter(x=>x.pending).length,0);return `${tripSwitch()}<span>已登入：<b>${esc(me().name)}</b></span><span class="tg-pending-${online?'on':'off'}">${online?pending?`${pending} 項同步中…`:'已同步':'離線中 · 修改會在有網絡時同步'}</span><button class="smallbtn" data-tg="logout">登出</button>`}
  function lists(){
   if(state.tab==='notes')return state.notes.length?state.notes.map(noteItem).join(''):'<div class="empty"><h2>還沒有筆記</h2><p>寫下提醒、想吃的東西或任何旅程點滴。</p></div>';
@@ -319,6 +326,7 @@ window.Together=(()=>{
   if(['idle','loading','checking'].includes(s))return {sig:s,shell:'<div class="empty"><h2>正在連接…</h2><p>第一次載入需要數秒。</p></div>'};
   if(s==='error')return {sig:s+state.error,shell:`<div class="empty"><h2>${esc(state.error||'發生錯誤')}</h2><button class="action primary" data-tg="retry">再試</button></div>`};
   if(s==='signedOut')return {sig:s,shell:`<section class="panel tg-login"><h2>旅伴專用</h2><p>行程、地點、住宿、筆記和開支只限旅伴登入查看，不會公開在網站上。</p><form class="tg-form" data-tg-form="login"><label>帳號<input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="60" required></label><label>密碼<input name="password" type="password" autocomplete="current-password" required></label><button type="submit" class="locate-button">登入</button></form><div class="tg-or">或</div><button class="action tg-google" data-tg="login">用 Google 帳戶登入</button><p class="note">這部手機會記住登入狀態，之後離線也可以查看。</p></section>`};
+  if(s==='notrip')return {sig:s,shell:`<section class="panel tg-login"><h2>建立你的第一個旅程</h2><p>填好目的地和日期，之後可以加入行程、地點、住宿和旅伴。</p>${tripForm(null)}</section>`};
   if(s==='denied')return {sig:s+state.user?.uid,shell:`<section class="panel tg-login"><h2>這個帳戶未加入任何旅程</h2><p>你已用 <b>${esc(state.user?.email)}</b> 登入，但未加入任何旅程。請旅程負責人把你加入旅伴名單，然後按再試。</p><div class="links"><button class="action primary" data-tg="retry">再試</button><button class="action" data-tg="logout">登出／換帳戶</button></div></section>`};
   if(!started)return state.empty?{sig:'empty',shell:'<div class="empty"><h2>暫時未有旅程資料</h2><p>請負責人先上載旅程資料。</p></div>'}:{sig:'trip',shell:'<div class="empty"><h2>正在載入旅程資料…</h2></div>'};
   const sig=['ready',state.tab,state.day,state.user.uid,people().map(p=>p.id+p.name).join()].join('|');
@@ -431,17 +439,46 @@ window.Together=(()=>{
  function refresh(){
   if(!started&&!$('#tgPage'))$('#app').innerHTML=header('POCKET TRAVEL','口袋旅伴')+'<div id="tgPage"></div>';
   const p=$('#tgPage');if(p)paint(p,page());
+  const tp=$('#tripsPage');if(tp)paint(tp,tripsPage());
   const box=$('#tgDrafts');if(box&&!box.childElementCount&&jobs.length)renderDrafts();
   const sp=$('#shopPage');if(sp)paint(sp,shopPage());
   document.querySelectorAll('[data-tg-day]').forEach(el=>paint(el,daySlot(Number(el.dataset.tgDay))));
   document.querySelectorAll('[data-tg-place]').forEach(el=>paint(el,placeSlot(el.dataset.tgPlace)));
+ }
+ // 我的旅程: switch trips, create one, edit the current trip, invite or remove companions (all through manageTrip).
+ const CURRENCY_NAMES={JPY:'日圓',HKD:'港幣',KRW:'韓圜',TWD:'新台幣',THB:'泰銖',CNY:'人民幣',SGD:'新加坡元',MYR:'馬幣',USD:'美元',EUR:'歐元',GBP:'英鎊',AUD:'澳元',CAD:'加元',VND:'越南盾',PHP:'菲律賓披索',IDR:'印尼盾'};
+ const currencyOptions=sel=>Object.entries(CURRENCY_NAMES).map(([k,v])=>`<option value="${k}"${k===sel?' selected':''}>${v} ${k}</option>`).join('');
+ function tripForm(t){const v=k=>esc(t?.[k]??'');return `<form class="tg-form" data-trip-form="${t?'update':'create'}"><label>旅程名稱<input name="name" required maxlength="60" placeholder="例如：2027 首爾" value="${v('name')}"></label><label>目的地<input name="destination" required maxlength="80" placeholder="例如：韓國首爾" value="${v('destination')}"></label><div class="tg-row"><label>開始日期<input name="startDate" type="date" required value="${v('startDate')}"></label><label>結束日期<input name="endDate" type="date" required value="${v('endDate')}"></label></div><div class="tg-row"><label>當地貨幣<select name="currency">${currencyOptions(t?.currency||'JPY')}</select></label><label>你們的貨幣<select name="homeCurrency">${currencyOptions(t?.homeCurrency||'HKD')}</select></label></div><button type="submit" class="locate-button">${t?'儲存旅程資料':'建立旅程'}</button><p class="note" data-trip-msg></p></form>`}
+ const myEmail=()=>String(state.user?.email||'').toLowerCase();
+ function memberLabel(email){const id=email.endsWith('@'+ACCOUNT_DOMAIN)?email.split('@')[0]:email,prof=state.members.find(m=>String(m.email||'').toLowerCase()===email);return prof?.name&&prof.name!==id?`${prof.name}（${id}）`:id}
+ function tripsPage(){
+  const t=state.meta;if(!['ready','notrip'].includes(state.status)||(t&&!started))return {sig:'wait',shell:'<div class="empty"><h2>正在連接…</h2></div>'};
+  const members=(t?.members||[]).map(e=>`<div class="pp-row"><div><b>${esc(memberLabel(e))}</b>${e===myEmail()?'<small>你</small>':''}</div>${e!==myEmail()?`<button class="smallbtn" data-trip-remove="${esc(e)}">移除</button>`:''}</div>`).join('');
+  const trips=(state.trips||[]).map(x=>`<div class="pp-row"><div><b>${esc(x.name)}</b><small>${esc(x.destination||'')} · ${esc(x.startDate||'')} → ${esc(x.endDate||'')}</small></div>${x.id===tripId?'<span class="badge">目前</span>':`<button class="action primary" data-trip-open="${esc(x.id)}">開啟</button>`}</div>`).join('')||'<p class="note">還沒有旅程。</p>';
+  return {sig:['trips',tripId||'',state.status].join('|'),shell:`${t?`<section class="panel trip-panel"><div class="eyebrow">目前旅程</div><h2>${esc(t.name)}</h2><p class="note">${esc(t.destination||'')} · ${esc(t.startDate||'')} → ${esc(t.endDate||'')} · ${esc(CURRENCY_NAMES[t.currency]||t.currency||'')}</p>${t.generic?`<details><summary>✎ 修改旅程資料</summary>${tripForm(t)}</details>`:'<p class="note">這個旅程使用原本的 Sheet 資料，名稱及日期暫時不可在網站修改。</p>'}</section><section class="panel trip-panel"><h3>旅伴</h3><div class="pp-list" data-tg-live="members"></div><details><summary>＋ 邀請旅伴</summary><form class="tg-form" data-trip-invite><div class="chips" role="radiogroup" aria-label="帳戶類型"><label class="tg-check"><input type="radio" name="kind" value="account" checked> 建立帳號 ID</label><label class="tg-check"><input type="radio" name="kind" value="google"> Google 帳戶</label></div><div class="tg-row"><label>帳號 ID 或 Gmail<input name="who" required maxlength="80" autocapitalize="none" spellcheck="false" placeholder="例如：amy 或 amy@gmail.com"></label><label>顯示名稱（帳號 ID 用）<input name="name" maxlength="40"></label></div><button type="submit" class="locate-button">邀請</button><p class="note" data-trip-msg></p></form></details></section>`:''}<section class="panel trip-panel"><h3>我的旅程</h3><div class="pp-list" data-tg-live="trips"></div></section><section class="panel trip-panel"><details${t?'':' open'}><summary>＋ 建立新旅程</summary>${tripForm(null)}</details></section>`,live:{members,trips}};
+ }
+ function renderTrips(){return `${header('MY TRIPS','我的旅程','切換旅程、建立新旅程及邀請旅伴')}<div id="tripsPage"></div>`}
+ async function tripAction(form,data,done){
+  const msg=form.querySelector('[data-trip-msg]'),btn=form.querySelector('button[type=submit]');btn.disabled=true;if(msg)msg.textContent='處理中…';
+  try{const r=(await (await callable('manageTrip',45000))(data)).data;done(r)}
+  catch(e){if(msg)msg.textContent=String(e?.code||'').startsWith('functions/')&&e.message?e.message.replace(/\s*\[\d+\]$/,''):'未能完成，請檢查網絡後再試。';console.error(e)}
+  finally{btn.disabled=false}
  }
  function render(){
   const p=new URLSearchParams(location.hash.split('?')[1]);if(tabs[p.get('tab')])state.tab=p.get('tab');if(p.has('day'))state.day=Math.min(7,Math.max(1,Number(p.get('day'))||1));
   return `${header('TOGETHER','一起記，一起走。','筆記、開支與共用行程 · 只限旅伴登入，內容不會公開')}<div id="tgPage"></div>`;
  }
 
+
  document.addEventListener('submit',e=>{
+  const tf=e.target.closest('[data-trip-form]');
+  if(tf){e.preventDefault();const v=Object.fromEntries(new FormData(tf));const create=tf.dataset.tripForm==='create';
+   tripAction(tf,{...v,action:create?'create':'update',trip:tripId},r=>{if(create){lastTrip.set(r.id);location.hash='home'}location.reload()});return}
+  const inv=e.target.closest('[data-trip-invite]');
+  if(inv){e.preventDefault();const v=new FormData(inv),who=String(v.get('who')||'').trim(),google=v.get('kind')==='google';
+   tripAction(inv,google?{action:'addMember',trip:tripId,kind:'google',email:who}:{action:'addMember',trip:tripId,kind:'account',id:who,name:String(v.get('name')||'').trim()},r=>{
+    if(!state.meta.members.includes(r.email))state.meta.members.push(r.email);inv.reset();
+    inv.querySelector('[data-trip-msg]').textContent=r.password?`已建立帳號 ${r.email.split('@')[0]}，密碼：${r.password}（只會顯示一次，請私下交給對方）`:`已加入 ${r.email.endsWith('@'+ACCOUNT_DOMAIN)?r.email.split('@')[0]:r.email}`;refresh()});return}
   const f=e.target.closest('[data-tg-form]');if(!f)return;
   if(f.dataset.tgForm==='login'){e.preventDefault();const v=new FormData(f);loginWithAccount(String(v.get('id')).trim(),String(v.get('password')));return}
   if(state.status!=='ready')return;e.preventDefault();
@@ -479,6 +516,8 @@ window.Together=(()=>{
   if(d.tg==='itemDel'){const rows=$('#tgItemRows');el.closest('.tg-line-row').remove();if(!rows.children.length)rows.innerHTML=itemRow()}
   if(d.tg==='retry'){if(fb&&state.user){state.status='checking';refresh();chooseTrip()}else load().catch(()=>{})}
   if(d.tgTab){state.tab=d.tgTab;refresh()}
+  if(d.tripOpen)switchTrip(d.tripOpen);
+  if(d.tripRemove&&confirm(`把 ${d.tripRemove} 移出這個旅程？`))callable('manageTrip',45000).then(f=>f({action:'removeMember',trip:tripId,email:d.tripRemove})).then(()=>{state.meta.members=state.meta.members.filter(x=>x!==d.tripRemove);refresh();toast('已移除')},e=>toast(e?.message?.replace(/\s*\[\d+\]$/,'')||'未能移除。'));
   if(d.tgDel){const [name,id]=d.tgDel.split(':');remove(name,id)}
   if(d.tg==='shopPhoto')$('#shopPhotoInput')?.click();
   if(d.tg==='shopAi')$('#shopAiInput')?.click();
@@ -504,8 +543,9 @@ window.Together=(()=>{
  document.addEventListener('change',e=>{const k=e.target.dataset?.draftPick;if(!k)return;e.target.checked?picked.add(k):picked.delete(k);renderDrafts()});
  document.addEventListener('input',e=>{const k=e.target.dataset?.df,card=e.target.closest?.('[data-draft]');if(!k||!card)return;(localEdits[card.dataset.draft]??={})[k]=e.target.value});
  document.addEventListener('change',e=>{const k=e.target.dataset?.df,card=e.target.closest?.('[data-draft]');if(!k||!card||!fb)return;const v=k==='day'?Number(e.target.value):k==='amount'?(e.target.value===''?'':Number(e.target.value)):e.target.value;fb.fs.updateDoc(jobRef(card.dataset.draft),{['edit.'+k]:v}).catch(()=>{});if(k!=='title')renderDrafts()});
+ document.addEventListener('click',e=>{if(e.target.closest('#tripsBtn'))location.hash='trips'});
  addEventListener('online',()=>{refresh();renderDrafts()});addEventListener('offline',()=>{refresh();renderDrafts()});
  setInterval(()=>{if(jobs.some(j=>!['done','failed'].includes(j.status)))renderDrafts()},30000);
  load().catch(()=>{});
- return Object.freeze({render,renderShopping,refresh,shoppingSpots,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
+ return Object.freeze({render,renderShopping,renderTrips,refresh,shoppingSpots,lists:tripLists,saveItem,removeItem,setDayLabel,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
 })();

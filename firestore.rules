@@ -14,8 +14,19 @@ service cloud.firestore {
       return d.by == request.auth.uid && d.byName is string && d.byName.size() <= 40
         && d.at is int && d.createdAt == request.time;
     }
-    function day(v) { return v is int && v >= 1 && v <= 7; }
+    function day(v) { return v is int && v >= 1 && v <= 60; }
     function text(v, max) { return v is string && v.size() <= max; }
+    function hotelValid(d) {
+      return d.keys().hasOnly(['name', 'address', 'checkIn', 'checkOut', 'mapsUrl', 'lat', 'lng', 'note', 'by', 'byName', 'at', 'createdAt'])
+        && text(d.name, 100) && d.name.size() > 0 && text(d.address, 200) && text(d.checkIn, 10) && text(d.checkOut, 10)
+        && text(d.mapsUrl, 500) && text(d.note, 500)
+        && (d.lat == null || d.lat is number) && (d.lng == null || d.lng is number);
+    }
+    function flightValid(d) {
+      return d.keys().hasOnly(['flightNo', 'airline', 'from', 'to', 'depart', 'arrive', 'note', 'by', 'byName', 'at', 'createdAt'])
+        && text(d.flightNo, 20) && d.flightNo.size() > 0 && text(d.airline, 60) && text(d.from, 80) && text(d.to, 80)
+        && text(d.depart, 20) && text(d.arrive, 20) && text(d.note, 500);
+    }
     function shopValid(d) {
       return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'by', 'byName', 'at', 'createdAt'])
         && (!('ai' in d) || d.ai is bool)
@@ -41,6 +52,17 @@ service cloud.firestore {
 
 
       // Trip data is uploaded with scripts/trip-data.mjs using the project owner's Google login.
+      // Hotels and flights entered on the site (trips created on the site have no Sheet).
+      match /hotels/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned() && hotelValid(request.resource.data);
+        allow update: if tripMember() && hotelValid(request.resource.data) && request.resource.data.by == resource.data.by;
+      }
+      match /flights/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned() && flightValid(request.resource.data);
+        allow update: if tripMember() && flightValid(request.resource.data) && request.resource.data.by == resource.data.by;
+      }
       match /trip/{id} { allow read: if tripMember(); allow write: if false; }
 
       match /members/{uid} {
@@ -112,9 +134,10 @@ service cloud.firestore {
       // Edited day plans: the whole stop list for one day (1-7); deleting the document restores the original plan.
       match /planDays/{day} {
         allow read, delete: if tripMember();
-        allow write: if tripMember() && day in ['1', '2', '3', '4', '5', '6', '7']
-          && request.resource.data.keys().hasOnly(['stops', 'by', 'byName', 'at'])
+        allow write: if tripMember() && day.matches('^[1-9][0-9]?$') && int(day) <= 60
+          && request.resource.data.keys().hasOnly(['stops', 'label', 'by', 'byName', 'at'])
           && request.resource.data.stops is list && request.resource.data.stops.size() <= 40
+          && (!('label' in request.resource.data) || text(request.resource.data.label, 40))
           && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
       }
       match /stops/{id} {
