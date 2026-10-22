@@ -47,7 +47,7 @@
     const pj = jobs.filter((j) => j.kind === "product");
     if (!pj.length) return "";
     const busy = pj.filter((j) => j.status !== "failed").length;
-    return `<div class="tg-drafts"><div class="tg-drafts-head"><b>${busy ? `AI 辨識中 ${busy} 張` : "未能辨識的相片"}</b></div>${pj
+    return `<div class="tg-drafts"><div class="tg-drafts-head"><b>${busy ? `AI 辨識中 ${busy} 項` : "未能辨識"}</b></div>${pj
       .map((j) => {
         const st = jobState(j),
           fail = st === "fail",
