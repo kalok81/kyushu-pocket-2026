@@ -177,3 +177,19 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
 .route-head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:6px}.route-head b{font-size:16px}.route-head span{font-size:13px;color:var(--muted-foreground)}
 .route-steps{list-style:none;margin:0 0 10px;padding:0 0 0 12px;border-left:2px solid var(--secondary);display:grid;gap:6px;font-size:13px}
 .route-steps small{color:var(--muted-foreground)}.route-steps div{color:var(--muted-foreground);font-size:12px}
+
+/* ---- Link between two slots: a dot on the timeline; tap it for route suggestions ---- */
+.stop-link{display:grid;grid-template-columns:125px 1fr;gap:24px;margin:-12px 0 12px;position:relative}
+.stop-link:before{position:absolute;content:"";left:133px;top:-14px;bottom:-14px;width:1px;background:var(--line)}
+.route-dot{position:relative;display:flex;align-items:center;gap:10px;min-height:34px;padding:4px 12px 4px 0;margin-left:-23px;border:0;background:transparent;box-shadow:none;text-align:left;font-size:13px;font-weight:500;color:var(--muted-foreground);white-space:pre-line}
+.route-dot i{flex:none;width:15px;height:15px;border-radius:50%;background:var(--card);border:2px solid var(--primary);box-shadow:0 0 0 3px var(--background)}
+.route-dot.has-route i{background:var(--primary)}
+.route-dot span{padding:4px 10px;border-radius:999px;background:var(--muted-bg);line-height:1.5}
+.route-dot.has-route span{border-radius:10px;background:var(--secondary);color:var(--foreground)}
+.route-dot:hover{background:transparent}.route-dot:hover span{filter:brightness(.97)}
+@media(max-width:760px){
+ .stop-link{grid-template-columns:1fr;gap:0;padding-left:16px;margin:-14px 0 10px}
+ .stop-link>div{display:none}
+ .stop-link:before{left:0}
+ .route-dot{margin-left:-23px}
+}

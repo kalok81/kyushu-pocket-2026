@@ -68,7 +68,7 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 
 行程頁「⌕ 從探索加入地點」亦列出「住宿」頁的酒店（「住宿」分類），可加入為站點（例如入住、回酒店），導航用酒店名稱及地址。
 
-交通建議：行程站點「⋯」→「🚃 交通」，由上一站（或酒店）出發，用 Google Routes API（`suggestRoutes` function，App Check、每日上限與地圖查詢共用）查詢公共交通／步行／駕車的多個方案，列出路線、站名、班次時間及車費，選用後寫入該站的「交通」，亦可自行修改。日本的公共交通 Google 不經 API 提供，只會提供「在 Google 地圖查看」連結。行程日期太遠（60 天後）或已過時，班次按下一個相同星期估算。
+交通建議：行程上下兩個時段之間有一個交通點（有住宿時第一站之前亦有，由酒店出發），按下查詢兩站之間的交通；同一時段有多個地點時可先選出發地及目的地，選定的交通顯示在交通點旁，用 Google Routes API（`suggestRoutes` function，App Check、每日上限與地圖查詢共用）查詢公共交通／步行／駕車的多個方案，列出路線、站名、班次時間及車費，選用後寫入該站的「交通」，亦可自行修改。日本的公共交通 Google 不經 API 提供，只會提供「在 Google 地圖查看」連結。行程日期太遠（60 天後）或已過時，班次按下一個相同星期估算。
 
 自動測試：`tests/smoke.mjs` 用虛構的測試旅程及假 Firebase（`tests/fake/`）在 Chromium 測試登入、各頁、行程、開支、清單及住宿；GitHub Actions 每次 push 先執行 `scripts/validate.mjs` 及這個測試，通過才發佈網站。本機執行：`cd tests && npm ci && npx playwright install chromium && npm test`。
 

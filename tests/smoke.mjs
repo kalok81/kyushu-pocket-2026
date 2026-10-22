@@ -87,7 +87,9 @@ try {
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
   await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=住宿]'); await page.fill('#ppTime', '08:00'); await page.click('[data-pp-hotel]'); await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 2);
-  await page.locator('[data-stop-more]').nth(1).click(); await page.click('[data-stop-route]');
+  // one link before the first slot (from the hotel) and one between the two slots
+  assert.equal(await page.locator('[data-route-link]').count(), 2); assert.match(await page.locator('[data-route-link]').first().innerText(), /由酒店出發/);
+  await page.locator('[data-route-link]').nth(1).click();
   assert.match(await page.locator('#routeFrom option:checked').innerText(), /上野酒店/);
   assert.equal(await page.inputValue('#routeTime'), '08:00');
   await page.click('#routeGo'); await page.waitForSelector('#routeResults .notice');
@@ -96,7 +98,13 @@ try {
   await page.selectOption('#routeMode', 'WALK'); await page.click('#routeGo'); await page.waitForSelector('[data-route-pick]');
   await page.click('[data-route-pick]'); await page.waitForFunction(() => document.querySelector('#routeManual textarea').value.includes('步行約 12 分'));
   await page.fill('#routeManual textarea', '🚇 銀座線 上野 → 淺草｜約 14 分'); await page.click('#routeManual button[type=submit]');
-  await page.waitForSelector('.timeline .transport'); assert.match(await page.locator('.timeline .transport').last().innerText(), /銀座線 上野 → 淺草/);
+  await page.waitForSelector('.route-dot.has-route'); assert.match(await page.locator('[data-route-link]').nth(1).innerText(), /銀座線 上野 → 淺草/);
+  // a second choice at 10:00: the link asks which destination
+  await page.locator('[data-stop-more]').nth(1).click(); await page.click('[data-stop-alt]'); await page.click('[data-pp-cat=住宿]'); await page.click('[data-pp-hotel]'); await page.keyboard.press('Escape');
+  await page.waitForSelector('.stop-group'); await page.locator('[data-route-link]').nth(1).click(); await page.waitForSelector('#routeTo');
+  assert.deepEqual(await page.locator('#routeTo option').allInnerTexts(), ['淺草寺', '上野酒店']);
+  await page.selectOption('#routeTo', { label: '上野酒店' }); assert.equal(await page.inputValue('#routeManual textarea'), '');
+  await page.keyboard.press('Escape');
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
