@@ -200,6 +200,14 @@ function price(range) {
 export const lookupPlace = onCall({ region: 'asia-northeast1', secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
+ // Either a Google Maps link, or plain text (a shop name and/or address, e.g. a shopping item's 購買地點).
+ const text = req.data?.query;
+ if (typeof text === 'string') {
+  if (!text.trim() || text.length > 300) throw new HttpsError('invalid-argument', '請輸入店名或地址。');
+  const place = await search('searchText', { textQuery: text.trim(), regionCode: 'JP' });
+  if (!place) throw new HttpsError('not-found', '找不到這個地點。');
+  return { name: place.displayName?.text || '', address: place.formattedAddress || '', lat: place.location?.latitude ?? null, lng: place.location?.longitude ?? null };
+ }
  const raw = req.data?.url;
  if (typeof raw !== 'string' || raw.length > 2000) throw new HttpsError('invalid-argument', '請貼上 Google 地圖的連結。');
  const url = await resolveMapsUrl(raw.trim().match(/https:\/\/\S+/)?.[0] || raw.trim());

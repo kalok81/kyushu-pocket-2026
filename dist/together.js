@@ -30,6 +30,7 @@ window.Together=(()=>{
   const watch=name=>fs.onSnapshot(fs.collection(db,name),{includeMetadataChanges:true},snap=>{
    state[name]=snap.docs.map(d=>({...d.data(),id:d.id,pending:d.metadata.hasPendingWrites})).sort((a,b)=>(b.at||0)-(a.at||0));
    if(state.status!=='ready'){state.status='ready';saveProfile()}
+   if(name==='shopping'&&started)setTimeout(geocodeShopping,1000);
    if(name==='places'){state.placesLoaded=true;if(started)T().applyPlaceEdits(state.places);else start()}
    if(name==='planDays'&&started)T().applyPlanEdits(planMap());
    if(name==='members'&&started)syncFavorites();
@@ -309,12 +310,35 @@ window.Together=(()=>{
  const GENERIC=new Set(['博多','天神','福岡','本店','博多店','天神店','jr','博多駅','博多站','由布院','湯布院','別府','佐賀','太宰府','中洲','大名','店','分店','cafe','coffee','shop']);
  const nameWords=n=>String(n).split(/[\s（）()【】「」『』・･,，、]+/).map(norm).filter(x=>x.length>=2&&!GENERIC.has(x));
  const placeFor=text=>{const t=norm(text);if(!t)return null;const ps=T().places;return ps.find(p=>norm(p.v[1]).length>=2&&t.includes(norm(p.v[1])))||ps.find(p=>nameWords(p.v[1]).some(k=>t.includes(k)))};
- // For 附近 › 購物: place id → unbought list items whose 購買地點 names that shop.
- function buyables(){
-  const out={};
-  for(const x of state.shopping.filter(x=>!x.bought&&x.place)){const p=placeFor(x.place);if(p)(out[p.id]??=[]).push(x.name)}
-  return out;
+ // 附近 › 購物: spots where unbought list items can be bought. An explore shop named in 購買地點 uses its pin;
+ // otherwise the item's own coordinates (geocoded from 購買地點). Items at the same spot share one card.
+ const shopLabel=t=>String(t).split(/\s*(?:日本、|日本,|〒)/)[0].trim().slice(0,40)||String(t).slice(0,40);
+ function shoppingSpots(){
+  const spots={},geo=window.TRIP_GEO?.places||{};
+  for(const x of state.shopping.filter(x=>!x.bought&&x.place)){
+   const p=placeFor(x.place),pin=p&&geo[p.id]?.[0];let key,spot;
+   if(pin){key='p:'+p.id;spot={name:p.v[1],lat:pin.lat,lng:pin.lng,placeId:p.id,address:p.v[3]}}
+   else if(Number.isFinite(x.lat)&&Number.isFinite(x.lng)){key=`${x.lat.toFixed(4)},${x.lng.toFixed(4)}`;spot={name:shopLabel(x.place),lat:x.lat,lng:x.lng,placeId:null,address:x.place}}
+   else continue;
+   (spots[key]??={...spot,items:[]}).items.push(x.name);
+  }
+  return Object.values(spots);
  }
+ // Geocode 購買地點 once per text (geoFor remembers which text the coordinates belong to); one at a time.
+ let geocoding=false;
+ async function geocodeShopping(){
+  if(geocoding||!navigator.onLine||state.status!=='ready'||!started)return;
+  const todo=state.shopping.filter(x=>x.place&&x.geoFor!==x.place&&!x.pending).slice(0,10);if(!todo.length)return;
+  geocoding=true;
+  try{
+   const call=await callable('lookupPlace',45000);
+   for(const x of todo){
+    try{const r=(await call({query:x.place})).data;await fb.fs.updateDoc(fb.fs.doc(fb.db,'shopping',x.id),{lat:Number.isFinite(r.lat)?r.lat:null,lng:Number.isFinite(r.lng)?r.lng:null,geoFor:x.place})}
+    catch(e){if(String(e?.code||'').endsWith('not-found'))await fb.fs.updateDoc(fb.fs.doc(fb.db,'shopping',x.id),{lat:null,lng:null,geoFor:x.place}).catch(()=>{});else{console.error('geocode',e);break}}
+   }
+  }finally{geocoding=false}
+ }
+
 
  // A Google Maps link pasted into 購買地點 becomes the shop name and address.
  const MAPS_LINK=/^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i;
@@ -423,5 +447,5 @@ window.Together=(()=>{
  addEventListener('online',()=>{refresh();renderDrafts()});addEventListener('offline',()=>{refresh();renderDrafts()});
  setInterval(()=>{if(jobs.some(j=>!['done','failed'].includes(j.status)))renderDrafts()},30000);
  load().catch(()=>{});
- return Object.freeze({render,renderShopping,refresh,buyables,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
+ return Object.freeze({render,renderShopping,refresh,shoppingSpots,lookupPlace,savePlace,deletePlace,restorePlace,savePlanDay,resetPlanDay,saveFavorites});
 })();
