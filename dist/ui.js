@@ -17,6 +17,11 @@ window.UI=(()=>{
    const r=await window.Swal.fire({...base(),title,input:'text',inputValue:value,inputPlaceholder:placeholder,inputAttributes:{maxlength:'60'},showCancelButton:true,confirmButtonText:'儲存',cancelButtonText:'取消'});
    return r.isConfirmed?String(r.value??''):null;
   },
+  // Resolves the chosen key of options ({key: label}), or null when cancelled.
+  async choose(title,options,value=''){
+   const r=await window.Swal.fire({...base(),title,input:'select',inputOptions:options,inputValue:value,showCancelButton:true,confirmButtonText:'儲存',cancelButtonText:'取消'});
+   return r.isConfirmed?String(r.value??''):null;
+  },
   toast(text){window.Swal.fire({target:target(),toast:true,position:'bottom',showConfirmButton:false,timer:2600,title:text,customClass:{popup:'ui-toast'}})}
  });
 })();

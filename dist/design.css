@@ -87,3 +87,18 @@ dialog::backdrop{background:rgb(10 25 22/.5);backdrop-filter:blur(2px)}
 .topactions .share:hover{background:var(--primary-hover)}
 @media(min-width:900px){.bottomnav{border:0;background:transparent;box-shadow:none}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---- Expense statistics ---- */
+.tg-stats h3{margin-top:0}.tg-stats h4{margin:18px 0 8px;font-size:13px;color:var(--muted-foreground);font-weight:600}
+.tg-total{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}.tg-total b{font-size:28px;letter-spacing:-.01em}.tg-total span{color:var(--muted-foreground);font-size:13px}
+.tg-people{list-style:none;margin:0;padding:0;display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(140px,1fr))}
+.tg-people li{display:grid;gap:2px;padding:10px 12px;border:1px solid var(--border);border-radius:calc(var(--radius) - 2px);background:var(--background)}
+.tg-people .note{margin:0;font-size:12px}
+.tg-bars{display:grid;gap:7px}.tg-bar{display:grid;grid-template-columns:minmax(90px,30%) 1fr auto;align-items:center;gap:10px;font-size:13px}
+.tg-bar span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.tg-bar div{height:10px;border-radius:999px;background:var(--muted-bg);overflow:hidden}
+.tg-bar i{display:block;height:100%;border-radius:999px;background:var(--primary)}.tg-bar b{font-variant-numeric:tabular-nums;font-size:12px}
+.tg-fx{margin-top:16px;border-top:1px solid var(--border);padding-top:12px}.tg-fx ul{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:8px}
+.tg-fx li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}.tg-fx li .note{margin:0;flex:1;font-size:12px}
+.tg-conv{display:block;font-size:12px;font-weight:500;color:var(--muted-foreground);text-align:right}
+.tg-cat{cursor:pointer;background:var(--secondary);color:var(--secondary-foreground);min-height:0;box-shadow:none}.tg-cat.none{background:transparent;border:1px dashed var(--input);color:var(--muted-foreground)}
+.tg-settle-mode{margin:0 0 10px}

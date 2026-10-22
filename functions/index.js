@@ -14,12 +14,13 @@ const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const tripInfo = t => ({ place: t?.destination || 'abroad', cur: t?.currency || 'JPY', home: t?.homeCurrency || 'HKD' });
 const receiptPrompt = t => { const { place, cur, home } = tripInfo(t); return `You read shop receipts photographed by travellers in ${place} (sometimes at home).
 Reply with JSON only, in this shape:
-{"merchant": string, "total": number, "currency": "${cur}" | "${home}" | "OTHER", "date": "YYYY-MM-DD" or null, "items": [{"name": string, "amount": number}], "confidence": "high" | "medium" | "low", "part": "whole" | "top" | "middle" | "bottom"}
+{"merchant": string, "total": number, "currency": "${cur}" | "${home}" | "OTHER", "date": "YYYY-MM-DD" or null, "items": [{"name": string, "amount": number}], "category": "food" | "transport" | "shopping" | "stay" | "fun" | "other", "confidence": "high" | "medium" | "low", "part": "whole" | "top" | "middle" | "bottom"}
 - merchant: the shop name as printed (keep the original language), at most 60 characters.
 - The receipt may come as several photos (strips of a long receipt, or separate shots of its top and bottom, possibly overlapping and in any order): treat them as one receipt and do not count repeated lines twice.
 - total: the amount actually paid, tax and service included (e.g. 合計 / お買上計 / 税込 / 免税合計 / 합계 / 결제금액 / 總計 / Total / Grand total). Not the cash tendered, change, subtotal before tax or tax lines.
 - currency: ${cur} for the local currency, ${home} if the receipt is in ${home}, otherwise OTHER.
 - items: up to 30 line items with their printed prices (quantity included in the name, e.g. ×2); empty list if unreadable.
+- category: food for restaurants, cafés, snacks and drinks; transport for trains, buses, taxis, fuel, parking and transit cards; shopping for shops, supermarkets, convenience-store goods, drugstores and souvenirs; stay for hotels and lodging; fun for tickets, attractions, onsen and entertainment; other otherwise.
 - confidence: low if the photo is blurry, cut off, or not a receipt.
 - part: whole if the photos show the complete receipt from the shop name to the total; top if the total is cut off; bottom if the shop name/header is cut off; middle if both are cut off.
 If it is not a receipt, return total 0 and confidence "low".`; };
@@ -40,6 +41,7 @@ function clean(r, t) {
   currency: [cur, home].includes(r.currency) ? r.currency : 'OTHER',
   date: typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : null,
   items: (Array.isArray(r.items) ? r.items : []).slice(0, 30).map(i => ({ name: text(i?.name, 40), amount: num(i?.amount) })).filter(i => i.name),
+  category: ['food', 'transport', 'shopping', 'stay', 'fun', 'other'].includes(r.category) ? r.category : 'other',
   confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low',
   part: ['whole', 'top', 'middle', 'bottom'].includes(r.part) ? r.part : 'whole',
  };

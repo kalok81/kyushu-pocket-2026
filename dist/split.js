@@ -15,6 +15,18 @@ window.Split=Object.freeze({
   }
   return out;
  },
+ // One balance in the home currency: each currency's balance converted with rateOf(c) (home units per 1 c);
+ // rounding leftovers go to the largest entry so it still adds up to zero. null if a rate is missing.
+ combine(balances,rateOf,home){
+  const out={},hd=this.currencies[home].decimals;
+  for(const [c,b] of Object.entries(balances)){
+   const r=c===home?1:rateOf(c);if(!(r>0))return null;
+   for(const [uid,v] of Object.entries(b))out[uid]=(out[uid]||0)+Math.round(v/10**this.currencies[c].decimals*r*10**hd);
+  }
+  const left=Object.values(out).reduce((a,b)=>a+b,0);
+  if(left){const big=Object.keys(out).sort((a,b)=>Math.abs(out[b])-Math.abs(out[a])||a.localeCompare(b))[0];out[big]-=left}
+  return out;
+ },
  settle(balance){
   const debtors=[],creditors=[];
   for(const [uid,v] of Object.entries(balance)){if(v<0)debtors.push({uid,v:-v});else if(v>0)creditors.push({uid,v})}

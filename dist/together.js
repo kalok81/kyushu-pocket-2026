@@ -10,7 +10,35 @@ window.Together=(()=>{
  const tripCurrencies=()=>[...new Set([state.meta?.currency||'JPY',state.meta?.homeCurrency||'HKD'])];
  const curOptions=sel=>tripCurrencies().map(c=>`<option value="${c}"${c===sel?' selected':''}>${CURRENCY_NAMES[c]||c} ${window.Split.currencies[c]?.symbol||''}</option>`).join('');
  const pickCur=c=>tripCurrencies().includes(c)?c:tripCurrencies()[0];
- const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,shopFilter:'todo',shopSearch:'',shopView:'list',shopEdit:null,trip:{}};
+ const CATS={food:'🍜 餐飲',transport:'🚃 交通',shopping:'🛍 購物',stay:'🏨 住宿',fun:'🎡 景點娛樂',other:'📦 其他'};
+ const catOptions=sel=>Object.entries(CATS).map(([k,v])=>`<option value="${k}"${k===sel?' selected':''}>${v}</option>`).join('');
+ // Exchange rates into the home currency (home units per 1 unit): a rate a companion set (settings/fx, shared) wins over
+ // the day's market rate from open.er-api.com (only currency codes are sent), cached on the phone for offline use.
+ const home=()=>state.meta?.homeCurrency||'HKD',FX_KEY='pocket-fx-';
+ const manualRate=c=>{const r=state.fx?.rates?.[c];return typeof r==='number'&&r>0?r:null};
+ const liveRate=c=>state.liveFx?.home===home()&&state.liveFx.rates[c]||null;
+ const rateOf=c=>c===home()?1:manualRate(c)||liveRate(c);
+ function loadFx(){
+  const h=home();try{const c=JSON.parse(localStorage.getItem(FX_KEY+h)||'null');if(c?.home===h)state.liveFx=c}catch{}
+  if(!navigator.onLine||state.liveFx&&Date.now()-state.liveFx.fetched<6*36e5)return;
+  fetch(`https://open.er-api.com/v6/latest/${h}`).then(r=>r.json()).then(j=>{
+   if(j.result!=='success')return;const rates={};
+   for(const c of Object.keys(S.currencies))if(j.rates?.[c]>0)rates[c]=1/j.rates[c];
+   state.liveFx={home:h,rates,date:j.time_last_update_unix*1000,fetched:Date.now()};try{localStorage.setItem(FX_KEY+h,JSON.stringify(state.liveFx))}catch{}refresh();
+  }).catch(()=>{});
+ }
+ const toHome=e=>{const r=rateOf(e.currency);return r?e.amount*r:null};
+ const fmtHome=v=>S.format(Math.round(v*10**S.currencies[home()].decimals),home());
+ async function setRate(c){
+  const h=home(),live=liveRate(c),cur=manualRate(c);
+  const v=await UI.prompt(`1 ${CURRENCY_NAMES[c]||c} = 幾多${CURRENCY_NAMES[h]||h}？`,cur?String(cur):'',live?`留空＝自動匯率 ${+live.toPrecision(4)}`:'例如 0.052');
+  if(v==null)return;const n=Number(v.trim());
+  if(v.trim()&&!(n>0&&n<1e6))return toast('匯率不正確。');
+  const rates={...(state.fx?.rates||{})};if(v.trim())rates[c]=n;else delete rates[c];
+  fb.fs.setDoc(tdoc('settings','fx'),{rates,by:state.user.uid,byName:me().name,at:Date.now()}).catch(()=>toast('未能儲存匯率，請再試。'));
+  toast(v.trim()?'已設定匯率，所有旅伴都會使用':'已改回自動匯率');
+ }
+ const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,shopFilter:'todo',shopSearch:'',shopView:'list',shopEdit:null,trip:{},fx:null,liveFx:null,settleMode:null};
  const T=()=>window.TripApp,S=window.Split,$=s=>document.querySelector(s);
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const toast=s=>window.UI.toast(s);
@@ -31,7 +59,7 @@ window.Together=(()=>{
   }).catch(e=>{loading=null;state.status='error';state.error='未能載入共用功能，請檢查網絡後再試。';refresh();throw e});
   return loading;
  }
- function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,trip:{}})}
+ function stop(){unsub.forEach(u=>u());unsub=[];jobs=[];Object.assign(state,{notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,trip:{},fx:null})}
  // Trips this companion belongs to (trips/{id}.members holds lower-case emails); open the last one used.
  async function chooseTrip(){
   const {fs,db}=fb,email=String(state.user.email||'').toLowerCase();
@@ -65,7 +93,8 @@ window.Together=(()=>{
    state.trip[id]=json;start();
   },fail);
   const watchJobs=fs.onSnapshot(fs.query(tcol('receiptJobs'),fs.where('by','==',state.user.uid)),{includeMetadataChanges:true},snap=>{jobs=snap.docs.map(d=>({...d.data(),id:d.id,uploading:d.metadata.hasPendingWrites})).sort((a,b)=>(a.at||0)-(b.at||0));renderDrafts();handleFillJobs();const sp=$('#shopPage');if(sp)paint(sp,shopPage())},e=>console.error('receipt jobs',e));
-  unsub=[watchJobs,...['notes','expenses','members','shopping','places','planDays','hotels','flights'].map(watch)].concat(state.meta.generic?[]:['data','geo','content'].map(watchTrip));
+  const watchFx=fs.onSnapshot(tdoc('settings','fx'),snap=>{state.fx=snap.data()||null;refresh()},()=>{});loadFx();
+  unsub=[watchJobs,watchFx,...['notes','expenses','members','shopping','places','planDays','hotels','flights'].map(watch)].concat(state.meta.generic?[]:['data','geo','content'].map(watchTrip));
  }
  function start(){
   const t=state.trip,generic=!!state.meta?.generic;if(started||!state.placesLoaded||(!generic&&(!t.data||!t.geo||!t.content)))return;
@@ -135,7 +164,7 @@ window.Together=(()=>{
  const canRetry=j=>(j.status==='failed'&&(j.image!=null||j.images!=null))||(['pending','processing'].includes(j.status)&&!j.uploading&&Date.now()-(j.startedAt||j.at||0)>STUCK);
  function draftOf(j){
   const r=j.result||{},e={...j.edit,...localEdits[j.id]},day=r.date&&T().days.find(x=>x.iso===r.date.replaceAll('-','/'));
-  return {key:j.id,file:j.file,at:j.at||0,part:r.part||(j.status==='failed'?'unknown':'whole'),photos:j.images||(j.image!=null?[j.image]:[]),status:jobState(j),error:j.error,retry:canRetry(j),title:e.title??(r.merchant||'收據'),amount:e.amount??r.total??'',currency:e.currency??pickCur(r.currency),day:Number(e.day??(day?day.n:today())),items:r.items||[],
+  return {key:j.id,file:j.file,at:j.at||0,part:r.part||(j.status==='failed'?'unknown':'whole'),photos:j.images||(j.image!=null?[j.image]:[]),status:jobState(j),error:j.error,retry:canRetry(j),title:e.title??(r.merchant||'收據'),amount:e.amount??r.total??'',currency:e.currency??pickCur(r.currency),day:Number(e.day??(day?day.n:today())),category:e.category??(CATS[r.category]?r.category:''),items:r.items||[],
    warn:r.currency==='OTHER'?`⚠️ 收據不是${tripCurrencies().map(c=>CURRENCY_NAMES[c]||c).join('或')}，請自行換算。`:r.totalFromItems?'⚠️ 讀不到總額，已用物品合計，請對照收據。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':''};
  }
  const drafts=()=>jobs.filter(j=>!j.kind||j.kind==='receipt').map(draftOf);
@@ -176,7 +205,7 @@ window.Together=(()=>{
   if(d.status!=='done'&&d.status!=='fail')return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-progress tg-progress-busy"><div></div></div>${d.retry?`<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>`:''}</article>`;
   if(d.status==='fail')return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error||'未能讀取。')}</p><div class="links">${retry}${drop}</div></article>`;
   const warn=draftDup(d,all)||d.warn;
-  return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div>${d.items.length?`<ul class="tg-lines">${d.items.map(i=>`<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join('')}</ul>`:''}${warn?`<p class="note tg-warn">${esc(warn)}</p>`:''}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
+  return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length?`<ul class="tg-lines">${d.items.map(i=>`<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join('')}</ul>`:''}${warn?`<p class="note tg-warn">${esc(warn)}</p>`:''}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
  }
  function renderDrafts(){
   const box=$('#tgDrafts');if(!box)return;
@@ -245,7 +274,7 @@ window.Together=(()=>{
   const f=$('[data-tg-form="expense"]'),v=new FormData(f),split=v.getAll('split').map(String),amount=Number(d.amount);
   if(!String(d.title).trim()||!(amount>0)||amount>1e7){toast('請檢查項目和金額。');return false}
   if(!split.length){toast('請在下面表格最少選一位分帳旅伴。');return false}
-  const exp={title:String(d.title).trim().slice(0,80),amount:Math.round(amount*100)/100,currency:d.currency,paidBy:String(v.get('paidBy')),split,day:Number(d.day),items:d.items.slice(0,30)},dup=duplicateOf(exp);
+  const exp={title:String(d.title).trim().slice(0,80),amount:Math.round(amount*100)/100,currency:d.currency,paidBy:String(v.get('paidBy')),split,day:Number(d.day),items:d.items.slice(0,30),...(CATS[d.category]?{category:d.category}:{})},dup=duplicateOf(exp);
   if(dup&&ask&&!await UI.confirm('似乎已經記錄過',{text:dupText(dup),ok:'仍然加入'}))return false;
   const job=jobs.find(j=>j.id===d.key)||{};let receipts=job.photos||[];
   if(!receipts.length&&d.photos.length){try{toast('正在保存收據相片…');receipts=await putPhotos(d.key,d.photos.map(b64Blob))}catch(e){console.warn('receipt photo upload',e);toast('收據相片未能保存（可能離線），開支照樣加入。')}}
@@ -308,22 +337,45 @@ window.Together=(()=>{
  const sameName=(a,b)=>String(a).replace(/\s+/g,'').toLowerCase()===String(b).replace(/\s+/g,'').toLowerCase();
  const duplicateOf=({title,amount,currency,day})=>state.expenses.find(e=>e.currency===currency&&Math.abs(e.amount-amount)<.005&&(e.day===day||sameName(e.title,title)));
  const dupText=e=>`${dayLabel(e.day)}「${e.title}」${S.format(S.toMinor(e.amount,e.currency),e.currency)}（${e.byName||'旅伴'} 記錄）`;
- function expenseItem(e){return `<article class="tg-item">${meta(e,`<span class="badge">${esc(dayLabel(e.day))}</span>`)}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount,e.currency),e.currency))}</b></div>${e.items?.length?`<ul class="tg-lines">${e.items.map(i=>`<li><span>${esc(i.name)}</span>${i.amount!=null?`<span>${esc(S.format(S.toMinor(i.amount,e.currency),e.currency))}</span>`:''}</li>`).join('')}</ul>`:''}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split||[]).map(nameOf).join('、'))}</p><div class="links">${e.receipts?.length?`<button class="action" data-receipts="${esc(e.id)}">🧾 收據（${e.receipts.length}）</button>`:''}${del('expenses',e)}</div></article>`}
+ function expenseItem(e){const h=e.currency!==home()&&toHome(e);return `<article class="tg-item">${meta(e,`<span class="badge">${esc(dayLabel(e.day))}</span><button type="button" class="badge tg-cat${CATS[e.category]?'':' none'}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category]||'＋ 分類'}</button>`)}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount,e.currency),e.currency))}${h?`<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>`:''}</b></div>${e.items?.length?`<ul class="tg-lines">${e.items.map(i=>`<li><span>${esc(i.name)}</span>${i.amount!=null?`<span>${esc(S.format(S.toMinor(i.amount,e.currency),e.currency))}</span>`:''}</li>`).join('')}</ul>`:''}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split||[]).map(nameOf).join('、'))}</p><div class="links">${e.receipts?.length?`<button class="action" data-receipts="${esc(e.id)}">🧾 收據（${e.receipts.length}）</button>`:''}${del('expenses',e)}</div></article>`}
+ // Spending overview in the home currency: total, per companion, per day and per category, and the rates used.
+ function stats(){
+  const list=state.expenses.filter(e=>S.currencies[e.currency]);if(!list.length)return '';
+  const h=home(),curs=[...new Set([...tripCurrencies(),...list.map(e=>e.currency)])].filter(c=>c!==h);
+  const rateRow=c=>{const m=manualRate(c),r=rateOf(c);return `<li><span>1 ${c} = ${r?+r.toPrecision(4):'？'} ${h}</span><span class="note">${m?`手動設定${state.fx?.byName?`（${esc(state.fx.byName)}）`:''}`:r?`自動 · ${new Date(state.liveFx.date).toLocaleDateString('zh-HK',{month:'numeric',day:'numeric'})}`:'未有匯率（需要網絡）'}</span><button type="button" class="smallbtn" data-fx-set="${c}">設定</button></li>`};
+  const rates=curs.length?`<details class="tg-fx"${state.fxOpen?' open':''}><summary>匯率</summary><ul>${curs.map(rateRow).join('')}</ul><p class="note">自動匯率每日更新；可以改用你們實際兌換的匯率，所有旅伴共用。</p></details>`:'';
+  const missing=[...new Set(list.map(e=>e.currency))].filter(c=>!rateOf(c));
+  if(missing.length)return `<section class="panel tg-stats"><h3>開支統計</h3><p class="note">未有 ${missing.join('、')} 的匯率，暫時未能換算成${CURRENCY_NAMES[h]||h}。連上網絡或手動設定匯率即可。</p>${rates}</section>`;
+  const add=(m,k,v)=>m.set(k,(m.get(k)||0)+v),days=new Map(),cats=new Map(),paid=new Map(),share=new Map();let total=0;
+  for(const e of list){const v=toHome(e);total+=v;add(days,e.day,v);add(cats,CATS[e.category]?e.category:'',v);add(paid,e.paidBy,v);(e.split||[]).forEach(u=>add(share,u,v/e.split.length))}
+  const bars=rows=>{const max=Math.max(...rows.map(r=>r[1]),1);return `<div class="tg-bars">${rows.map(([k,v])=>`<div class="tg-bar"><span>${esc(k)}</span><div><i style="width:${Math.max(2,v/max*100).toFixed(1)}%"></i></div><b>${esc(fmtHome(v))}</b></div>`).join('')}</div>`};
+  const ppl=[...new Set([...paid.keys(),...share.keys()])],nDays=days.size;
+  return `<section class="panel tg-stats"><h3>開支統計</h3><div class="tg-total"><b>${esc(fmtHome(total))}</b><span>合共 ${list.length} 筆${nDays>1?` · 平均每日 ${esc(fmtHome(total/nDays))}`:''}</span></div>
+  <h4>每人</h4><ul class="tg-people">${ppl.map(u=>`<li><b>${esc(nameOf(u))}</b><span>分擔 ${esc(fmtHome(share.get(u)||0))}</span><span class="note">已付 ${esc(fmtHome(paid.get(u)||0))}</span></li>`).join('')}</ul>
+  <h4>按類別</h4>${bars([...cats].sort((a,b)=>b[1]-a[1]).map(([k,v])=>[CATS[k]||'未分類',v]))}
+  <h4>按日子</h4>${bars([...days].sort((a,b)=>a[0]-b[0]).map(([d,v])=>[T().days[d-1]?`D${d} ${T().days[d-1].date}`:`D${d}`,v]))}
+  ${curs.some(c=>list.some(e=>e.currency===c))?`<p class="note">以${CURRENCY_NAMES[h]||h}計算。</p>`:''}${rates}</section>`;
+ }
  function summary(){
-  const bal=S.balances(state.expenses),cs=Object.keys(bal);
+  const bal=S.balances(state.expenses),cs=Object.keys(bal),h=home();
   if(!cs.length)return '';
-  return `<section class="panel tg-summary"><h3>分帳結算</h3>${cs.map(c=>{const total=state.expenses.filter(e=>e.currency===c).reduce((t,e)=>t+S.toMinor(e.amount,c),0),moves=S.settle(bal[c]);return `<div class="tg-currency"><div class="eyebrow">${c} · 合共 ${esc(S.format(total,c))}</div>${moves.length?moves.map(m=>`<p><b>${esc(nameOf(m.from))}</b> 要畀 <b>${esc(nameOf(m.to))}</b> ${esc(S.format(m.amount,c))}</p>`).join(''):'<p>已經清數。</p>'}</div>`}).join('')}<p class="note">各貨幣分開計算，不作匯率換算。</p></section>`;
+  const combined=cs.length>1||cs[0]!==h?S.combine(bal,rateOf,h):null,mode=combined?state.settleMode||'home':'each';
+  const moveRows=(moves,c)=>moves.length?moves.map(m=>`<p><b>${esc(nameOf(m.from))}</b> 要畀 <b>${esc(nameOf(m.to))}</b> ${esc(S.format(m.amount,c))}</p>`).join(''):'<p>已經清數。</p>';
+  const toggle=combined?`<div class="chips tg-settle-mode"><button type="button" class="chip${mode==='home'?' active':''}" data-settle="home">全部換成${CURRENCY_NAMES[h]||h}</button><button type="button" class="chip${mode==='each'?' active':''}" data-settle="each">各貨幣分開</button></div>`:'';
+  const body=mode==='home'?`<div class="tg-currency">${moveRows(S.settle(combined),h)}</div><p class="note">按目前匯率把各貨幣換算成${CURRENCY_NAMES[h]||h}後一次過結算。</p>`
+   :`${cs.map(c=>{const total=state.expenses.filter(e=>e.currency===c).reduce((t,e)=>t+S.toMinor(e.amount,c),0);return `<div class="tg-currency"><div class="eyebrow">${c} · 合共 ${esc(S.format(total,c))}</div>${moveRows(S.settle(bal[c]),c)}</div>`}).join('')}<p class="note">各貨幣分開計算，不作匯率換算。</p>`;
+  return `<section class="panel tg-summary"><h3>分帳結算</h3>${toggle}${body}</section>`;
  }
 
  const tripSwitch=()=>state.trips?.length>1?`<select class="trip-switch" data-trip-switch aria-label="切換旅程">${state.trips.map(t=>`<option value="${esc(t.id)}"${t.id===tripId?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`:`<span class="trip-name">${esc(state.meta?.name||'')}</span>`;
  function statusBar(){const online=navigator.onLine,pending=['notes','expenses','shopping'].reduce((t,k)=>t+state[k].filter(x=>x.pending).length,0);return `${tripSwitch()}<span>已登入：<b>${esc(me().name)}</b></span><span class="tg-pending-${online?'on':'off'}">${online?pending?`${pending} 項同步中…`:'已同步':'離線中 · 修改會在有網絡時同步'}</span><button class="smallbtn" data-tg="logout">登出</button>`}
  function lists(){
   if(state.tab==='notes')return state.notes.length?state.notes.map(noteItem).join(''):'<div class="empty"><h2>還沒有筆記</h2><p>寫下提醒、想吃的東西或任何旅程點滴。</p></div>';
-  if(state.tab==='expenses')return summary()+(state.expenses.length?state.expenses.map(expenseItem).join(''):'<div class="empty"><h2>還沒有開支</h2><p>每筆開支記下誰付款、分給誰，網站會計算誰要畀誰。</p></div>');
+  if(state.tab==='expenses')return stats()+summary()+(state.expenses.length?state.expenses.map(expenseItem).join(''):'<div class="empty"><h2>還沒有開支</h2><p>每筆開支記下誰付款、分給誰，網站會計算誰要畀誰。</p></div>');
  }
  function forms(){
   if(state.tab==='notes')return `<form class="panel tg-form" data-tg-form="note"><label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾"></textarea></label><label>關於<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><button type="submit" class="locate-button">加入筆記</button></form>`;
-  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據（可多張）</button><input type="file" accept="image/*" id="tgReceipt" multiple hidden><p class="note">AI 在背景讀出店名、金額、日期及物品，可以關閉網頁，稍後回來確認。同一張收據分開影的相片會提示合併，也可以自己選擇合併。加入或捨棄後相片會刪除。</p></div><div id="tgDrafts" class="tg-drafts"></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency">${curOptions(tripCurrencies()[0])}</select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
+  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據（可多張）</button><input type="file" accept="image/*" id="tgReceipt" multiple hidden><p class="note">AI 在背景讀出店名、金額、日期及物品，可以關閉網頁，稍後回來確認。同一張收據分開影的相片會提示合併，也可以自己選擇合併。加入或捨棄後相片會刪除。</p></div><div id="tgDrafts" class="tg-drafts"></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><label>分類<select name="category"><option value="">未分類</option>${catOptions('')}</select></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency">${curOptions(tripCurrencies()[0])}</select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
   return '';
  }
  function page(){
@@ -493,7 +545,7 @@ window.Together=(()=>{
    const prices=v.getAll('itemAmount'),items=v.getAll('itemName').map((n,i)=>({name:String(n).trim().slice(0,40),amount:prices[i]===''?null:Math.round(Number(prices[i])*100)/100})).filter(i=>i.name&&(i.amount==null||(i.amount>=0&&i.amount<=1e7))).slice(0,30);
    const sum=items.reduce((t,i)=>t+(i.amount||0),0),amount=v.get('amount')===''?sum:Number(v.get('amount')),split=v.getAll('split').map(String);
    if(!str('title')||!(amount>0)||amount>1e7)return toast('請輸入項目和金額（或物品金額）。');if(!split.length)return toast('請最少選一位分帳旅伴。');
-   const exp={title:str('title').slice(0,80),amount:Math.round(amount*100)/100,currency:pickCur(String(v.get('currency'))),paidBy:str('paidBy'),split,day:day||today(),items},dup=duplicateOf(exp);
+   const exp={title:str('title').slice(0,80),amount:Math.round(amount*100)/100,currency:pickCur(String(v.get('currency'))),paidBy:str('paidBy'),split,day:day||today(),items,...(CATS[str('category')]?{category:str('category')}:{})},dup=duplicateOf(exp);
    const go=()=>{add('expenses',exp);f.reset();$('#tgItemRows').innerHTML=itemRow()};
    if(dup)UI.confirm('似乎已經記錄過',{text:dupText(dup),ok:'仍然加入'}).then(ok=>ok&&go());else go();
    return;
@@ -517,6 +569,9 @@ window.Together=(()=>{
   if(d.draftAdd){const x=drafts().find(i=>i.key===d.draftAdd);if(x)addDraft(x,true).then(ok=>{if(ok)renderDrafts()})}
   if(d.tg==='draftsAddAll')(async()=>{const all=drafts(),ok=all.filter(x=>x.status==='done'&&!draftDup(x,all));let n=0;for(const x of ok)if(await addDraft(x,false))n++;else break;renderDrafts();const left=drafts().filter(x=>x.status==='done').length;if(n)toast(`已加入 ${n} 筆${left?`，尚有 ${left} 筆待確認`:''}`)})();
   if(d.receipts)showReceipts(d.receipts);
+  if(d.fxSet)setRate(d.fxSet);
+  if(d.settle){state.settleMode=d.settle;refresh()}
+  if(d.expCat){const x=state.expenses.find(i=>i.id===d.expCat);if(x)UI.choose('開支分類',CATS,x.category||'food').then(v=>{if(v&&CATS[v]&&v!==x.category)update('expenses',x.id,{category:v})})}
   if(d.tg==='itemAdd'){$('#tgItemRows').insertAdjacentHTML('beforeend',itemRow());$('#tgItemRows').lastElementChild.querySelector('input').focus()}
   if(d.tg==='itemDel'){const rows=$('#tgItemRows');el.closest('.tg-line-row').remove();if(!rows.children.length)rows.innerHTML=itemRow()}
   if(d.tg==='retry'){if(fb&&state.user){state.status='checking';refresh();chooseTrip()}else load().catch(()=>{})}
@@ -537,6 +592,7 @@ window.Together=(()=>{
   if((d.shopToggle||d.tgDel?.startsWith('shopping:'))&&$('#detail').open&&$('#detailBody .shop-detail-photo, #detailBody .shop-item'))$('#detail').close();
  });
  document.addEventListener('change',e=>{if(e.target.id==='tgReceipt'&&e.target.files.length){if(state.status==='ready')queueReceipts([...e.target.files]);e.target.value=''}if(e.target.id==='shopPhotoInput'&&e.target.files[0]){pickShopPhoto(e.target.files[0]);e.target.value=''}if((e.target.id==='shopAiInput'||e.target.id==='shopAiCam')&&e.target.files.length){if(state.status==='ready')queueProducts([...e.target.files]);e.target.value=''}});
+ document.addEventListener('toggle',e=>{if(e.target.classList?.contains('tg-fx'))state.fxOpen=e.target.open},true);
  document.addEventListener('click',e=>{const img=e.target.closest('[data-shop-zoom]');if(img)img.classList.toggle('zoom')});
  const placeField=t=>t.name==='place'&&t.closest('[data-tg-form="shop"]');
  document.addEventListener('change',e=>{if(placeField(e.target))placeFromMaps(e.target)});

@@ -14,6 +14,7 @@ service cloud.firestore {
       return d.by == request.auth.uid && d.byName is string && d.byName.size() <= 40
         && d.at is int && d.createdAt == request.time;
     }
+    function expenseCat(v) { return v in ['food', 'transport', 'shopping', 'stay', 'fun', 'other']; }
     function day(v) { return v is int && v >= 1 && v <= 60; }
     function text(v, max) { return v is string && v.size() <= max; }
     function hotelValid(d) {
@@ -84,7 +85,8 @@ service cloud.firestore {
       match /expenses/{id} {
         allow read, delete: if tripMember();
         allow create: if tripMember() && owned()
-          && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'items', 'receipts', 'receiptHashes', 'by', 'byName', 'at', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['title', 'amount', 'currency', 'paidBy', 'split', 'day', 'items', 'receipts', 'receiptHashes', 'category', 'by', 'byName', 'at', 'createdAt'])
+          && (!('category' in request.resource.data) || expenseCat(request.resource.data.category))
           && (!('receipts' in request.resource.data) || (request.resource.data.receipts is list && request.resource.data.receipts.size() <= 4))
           && (!('receiptHashes' in request.resource.data) || (request.resource.data.receiptHashes is list && request.resource.data.receiptHashes.size() <= 4))
           && (!('items' in request.resource.data) || (request.resource.data.items is list && request.resource.data.items.size() <= 30))
@@ -94,6 +96,17 @@ service cloud.firestore {
           && request.resource.data.paidBy is string
           && request.resource.data.split is list && request.resource.data.split.size() > 0 && request.resource.data.split.size() <= 20
           && day(request.resource.data.day);
+        // Only the category can be changed afterwards (any companion can sort an expense).
+        allow update: if tripMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['category'])
+          && expenseCat(request.resource.data.category);
+      }
+      // Exchange rates companions set by hand (home-currency units per 1 unit), shared by the whole trip.
+      match /settings/{id} {
+        allow read: if tripMember();
+        allow write: if tripMember() && id == 'fx'
+          && request.resource.data.keys().hasOnly(['rates', 'by', 'byName', 'at'])
+          && request.resource.data.rates is map && request.resource.data.rates.size() <= 16
+          && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
       }
       function placeValid(d) {
         return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'points', 'mapsUrl', 'deleted', 'by', 'byName', 'at', 'createdAt'])
