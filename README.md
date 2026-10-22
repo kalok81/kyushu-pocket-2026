@@ -29,6 +29,10 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 
 網站支援多個旅程：每個旅程的資料都放在 Firestore `trips/{tripId}/…`（例如 `trips/fukuoka-2026`），`trips/{tripId}.members` 是該旅程旅伴的電郵（小寫）。登入後會開啟上次使用的旅程，有多個旅程時可在「共用」頁頂切換。
 
+右上角「旅程」打開「我的旅程」頁：切換旅程、建立新旅程（名稱、目的地、日期、當地及自己的貨幣）、修改目前旅程，以及邀請或移除旅伴（建立帳號 ID 會顯示一次密碼，或加入 Google 帳戶）。旅程文件只由 Cloud Function `manageTrip` 修改，旅伴名單與網站允許名單（`config/members`）保持一致。
+
+在網站建立的旅程（`generic: true`）不需要 Sheet：每天按日期產生，可在行程頁按「✎ 這天標題」命名；住宿（`hotels`，可貼 Google 地圖連結自動填寫）及航班（`flights`）在各自的頁面輸入；附近頁的地圖以目的地為中心。
+
 ## 旅伴共用（Firebase）
 
 「行程」頁可直接新增站點；每個站點按「⋯」可修改、刪除、調動或加入同一時間的選擇（修改即時儲存）；探索頁的地點可按「＋ 加入行程」插入指定日子（按時間排位），編輯模式的「⌕ 從探索加入地點」亦可在行程頁直接搜尋及連續加入；站點的「＋ 加入」可在同一時間加入其他選擇（連續同一時間的站點會左右並排顯示）。修改過的日子整天行程存放在 Firestore `planDays/{1-7}`，可按「↺ 還原原本行程」。
@@ -58,6 +62,7 @@ node scripts/trip-data.mjs upload private/trip.json    # 檢查並上載
 gcloud secrets versions add deepseek-api-key --data-file=-   # 貼上 DeepSeek API key，按 Enter 再按 Ctrl-D
 cd functions && npm install
 gcloud functions deploy processReceipt --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=processReceipt --trigger-location=asia-northeast1 --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' --trigger-event-filters-path-pattern=document='trips/{trip}/receiptJobs/{id}' --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --max-instances=3 --timeout=180s
+gcloud functions deploy manageTrip --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=manageTrip --trigger-http --allow-unauthenticated --set-secrets=PLACES_API_KEY=places-api-key:latest --max-instances=3
 gcloud functions deploy lookupPlace --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=. --entry-point=lookupPlace --trigger-http --allow-unauthenticated --set-secrets=PLACES_API_KEY=places-api-key:latest --max-instances=3
 ```
 - `firestore.rules`：資料庫權限規則。
