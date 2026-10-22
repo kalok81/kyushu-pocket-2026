@@ -4,6 +4,7 @@
 window.Together=(()=>{
  // Firebase web config is public by design; access is enforced by firestore.rules and the member list.
  const config={apiKey:'AIzaSyC_qsxlY9mX0OKK5bIXwUXvrrxCOFnc18M',authDomain:'kyushu-2e307.firebaseapp.com',projectId:'kyushu-2e307',storageBucket:'kyushu-2e307.firebasestorage.app',messagingSenderId:'672657048901',appId:'1:672657048901:web:d1e2f7dd92389f78f3ea2c'};
+ const APP_CHECK_KEY='6Lfpt_otAAAAADBIq06Vcd_4KI5NJtGosFA4ZlTG';
  const tabs={notes:'筆記',expenses:'開支'};
  // The trip's local and home currencies (trips/{t}.currency, homeCurrency); names for the pickers.
  const CURRENCY_NAMES={JPY:'日圓',HKD:'港幣',KRW:'韓圜',TWD:'新台幣',THB:'泰銖',CNY:'人民幣',SGD:'新加坡元',MYR:'馬幣',USD:'美元',EUR:'歐元',GBP:'英鎊',AUD:'澳元',CAD:'加元',VND:'越南盾',PHP:'菲律賓披索',IDR:'印尼盾'};
@@ -50,8 +51,10 @@ window.Together=(()=>{
  function load(){
   if(fb)return Promise.resolve(fb);if(loading)return loading;
   state.status='loading';state.error='';refresh();
-  loading=Promise.all(['app','auth','firestore'].map(n=>import(`./vendor/firebase/firebase-${n}.js`))).then(([app,auth,fs])=>{
+  loading=Promise.all(['app','auth','firestore','app-check'].map(n=>import(`./vendor/firebase/firebase-${n}.js`))).then(([app,auth,fs,check])=>{
    const a=app.initializeApp(config);
+   // App Check (reCAPTCHA Enterprise) shows requests come from this site; the Google Maps and trip functions require it.
+   try{check.initializeAppCheck(a,{provider:new check.ReCaptchaEnterpriseProvider(APP_CHECK_KEY),isTokenAutoRefreshEnabled:true})}catch(e){console.warn('App Check',e)}
    let db;try{db=fs.initializeFirestore(a,{localCache:fs.persistentLocalCache({tabManager:fs.persistentMultipleTabManager()})})}catch{db=fs.getFirestore(a)}
    fb={app:a,auth:auth.getAuth(a),A:auth,db,fs};
    auth.onAuthStateChanged(fb.auth,user=>{stop();state.user=user;if(!user){if(started)return location.reload();state.status='signedOut';refresh();return}state.status='checking';refresh();chooseTrip()});

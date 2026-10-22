@@ -10,6 +10,19 @@ initializeApp();
 const DEEPSEEK_API_KEY = defineSecret('DEEPSEEK_API_KEY');
 const PLACES_API_KEY = defineSecret('PLACES_API_KEY');
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+// Daily limits per companion, so a leaked login cannot run up the AI or Google Maps bill.
+const DAILY = { ai: 80, maps: 300 };
+
+// Counts one use in usage/{uid}_{UTC date} (no client access: firestore.rules has no match for it).
+async function useQuota(uid, kind) {
+ const ref = getFirestore().doc(`usage/${uid}_${new Date().toISOString().slice(0, 10)}`);
+ const n = await getFirestore().runTransaction(async tx => {
+  const v = ((await tx.get(ref)).get(kind) || 0) + 1;
+  tx.set(ref, { [kind]: v, at: Date.now() }, { merge: true });
+  return v;
+ });
+ if (n > DAILY[kind]) throw new HttpsError('resource-exhausted', '今日使用次數已達上限，明天再試。');
+}
 // Prompts follow the trip: where the travellers are and which currencies they use.
 const tripInfo = t => ({ place: t?.destination || 'abroad', cur: t?.currency || 'JPY', home: t?.homeCurrency || 'HKD' });
 const receiptPrompt = t => { const { place, cur, home } = tripInfo(t); return `You read shop receipts photographed by travellers in ${place} (sometimes at home).
@@ -119,6 +132,7 @@ cloudEvent('processReceipt', async event => {
  const tripDoc = (await getFirestore().doc(`trips/${trip}`).get()).data();
  try {
   if (!Array.isArray(images) || !images.length || images.length > 4 || !images.every(validImage)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
+  await useQuota(job.by, 'ai');
   if (job.kind === 'productFill') {
    // Photo added in the shopping form: return the details so the page can fill the empty fields.
    const { confidence: _c, ...result } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
@@ -211,9 +225,10 @@ function price(range) {
  return [amount(range.startPrice), amount(range.endPrice)].filter(Boolean).join('–');
 }
 
-export const lookupPlace = onCall({ region: 'asia-northeast1', secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
+export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
+ await useQuota(req.auth.uid, 'maps');
  // Either a Google Maps link, or plain text (a shop name and/or address, e.g. a shopping item's 購買地點).
  const text = req.data?.query, country = typeof req.data?.country === 'string' && /^[A-Z]{2}$/.test(req.data.country) ? req.data.country : '';
  if (typeof text === 'string') {
@@ -268,7 +283,7 @@ async function geocode(text) {
   return p?.location ? { lat: p.location.latitude, lng: p.location.longitude, country: p.addressComponents?.find(c => c.types?.includes('country'))?.shortText || '' } : null;
  } catch { return null; }
 }
-export const manageTrip = onCall({ region: 'asia-northeast1', secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
+export const manageTrip = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未獲准使用。');
  const db = getFirestore(), me = req.auth.token.email.toLowerCase(), d = req.data || {}, action = d.action;
