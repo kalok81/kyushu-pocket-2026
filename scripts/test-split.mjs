@@ -12,6 +12,6 @@ assert.deepEqual(Array.from(s.settle(b.JPY),m=>({...m})),[{from:'b',to:'a',amoun
 b=s.balances([{amount:9000,currency:'JPY',paidBy:'a',split:['a','b','c']},{amount:3000,currency:'JPY',paidBy:'b',split:['a','b','c']}]);
 const moves=Array.from(s.settle(b.JPY),m=>({...m}));const after={...b.JPY};for(const m of moves){after[m.from]+=m.amount;after[m.to]-=m.amount}
 assert(Object.values(after).every(v=>v===0));assert.equal(moves.length,2);
-assert.deepEqual({...s.balances([{amount:-5,currency:'JPY',paidBy:'a',split:['b']},{amount:5,currency:'EUR',paidBy:'a',split:['b']},{amount:5,currency:'JPY',paidBy:'a',split:[]}])},{});
-assert.equal(s.format(123456,'JPY'),'¥123,456');assert.equal(s.format(1005,'HKD'),'HK$10.05');
+assert.deepEqual({...s.balances([{amount:-5,currency:'JPY',paidBy:'a',split:['b']},{amount:5,currency:'XXX',paidBy:'a',split:['b']},{amount:5,currency:'JPY',paidBy:'a',split:[]}])},{});
+assert.equal(s.format(123456,'JPY'),'¥123,456');assert.equal(s.format(15000,'KRW'),'₩15,000');assert.equal(s.format(12550,'THB'),'฿125.50');assert.equal(s.format(1005,'HKD'),'HK$10.05');
 console.log('Expense split rounding, multi-currency balances and settlement checks passed.');

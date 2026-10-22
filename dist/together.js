@@ -5,6 +5,11 @@ window.Together=(()=>{
  // Firebase web config is public by design; access is enforced by firestore.rules and the member list.
  const config={apiKey:'AIzaSyC_qsxlY9mX0OKK5bIXwUXvrrxCOFnc18M',authDomain:'kyushu-2e307.firebaseapp.com',projectId:'kyushu-2e307',storageBucket:'kyushu-2e307.firebasestorage.app',messagingSenderId:'672657048901',appId:'1:672657048901:web:d1e2f7dd92389f78f3ea2c'};
  const tabs={notes:'筆記',expenses:'開支'};
+ // The trip's local and home currencies (trips/{t}.currency, homeCurrency); names for the pickers.
+ const CURRENCY_NAMES={JPY:'日圓',HKD:'港幣',KRW:'韓圜',TWD:'新台幣',THB:'泰銖',CNY:'人民幣',SGD:'新加坡元',MYR:'馬幣',USD:'美元',EUR:'歐元',GBP:'英鎊',AUD:'澳元',CAD:'加元',VND:'越南盾',PHP:'菲律賓披索',IDR:'印尼盾'};
+ const tripCurrencies=()=>[...new Set([state.meta?.currency||'JPY',state.meta?.homeCurrency||'HKD'])];
+ const curOptions=sel=>tripCurrencies().map(c=>`<option value="${c}"${c===sel?' selected':''}>${CURRENCY_NAMES[c]||c} ${window.Split.currencies[c]?.symbol||''}</option>`).join('');
+ const pickCur=c=>tripCurrencies().includes(c)?c:tripCurrencies()[0];
  const state={status:'idle',error:'',user:null,tab:'notes',day:1,notes:[],expenses:[],members:[],shopping:[],places:[],planDays:[],hotels:[],flights:[],placesLoaded:false,shopFilter:'todo',shopSearch:'',shopView:'list',shopEdit:null,trip:{}};
  const T=()=>window.TripApp,S=window.Split,$=s=>document.querySelector(s);
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -130,8 +135,8 @@ window.Together=(()=>{
  const canRetry=j=>(j.status==='failed'&&(j.image!=null||j.images!=null))||(['pending','processing'].includes(j.status)&&!j.uploading&&Date.now()-(j.startedAt||j.at||0)>STUCK);
  function draftOf(j){
   const r=j.result||{},e={...j.edit,...localEdits[j.id]},day=r.date&&T().days.find(x=>x.iso===r.date.replaceAll('-','/'));
-  return {key:j.id,file:j.file,at:j.at||0,part:r.part||(j.status==='failed'?'unknown':'whole'),photos:j.images||(j.image!=null?[j.image]:[]),status:jobState(j),error:j.error,retry:canRetry(j),title:e.title??(r.merchant||'收據'),amount:e.amount??r.total??'',currency:e.currency??(r.currency==='HKD'?'HKD':'JPY'),day:Number(e.day??(day?day.n:today())),items:r.items||[],
-   warn:r.currency==='OTHER'?'⚠️ 收據不是日圓或港幣，請自行換算。':r.totalFromItems?'⚠️ 讀不到總額，已用物品合計，請對照收據。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':''};
+  return {key:j.id,file:j.file,at:j.at||0,part:r.part||(j.status==='failed'?'unknown':'whole'),photos:j.images||(j.image!=null?[j.image]:[]),status:jobState(j),error:j.error,retry:canRetry(j),title:e.title??(r.merchant||'收據'),amount:e.amount??r.total??'',currency:e.currency??pickCur(r.currency),day:Number(e.day??(day?day.n:today())),items:r.items||[],
+   warn:r.currency==='OTHER'?`⚠️ 收據不是${tripCurrencies().map(c=>CURRENCY_NAMES[c]||c).join('或')}，請自行換算。`:r.totalFromItems?'⚠️ 讀不到總額，已用物品合計，請對照收據。':r.confidence==='low'?'⚠️ 相片不太清楚，請仔細檢查。':''};
  }
  const drafts=()=>jobs.filter(j=>!j.kind||j.kind==='receipt').map(draftOf);
  const draftDup=(d,all=drafts())=>{const exp={title:d.title,amount:Number(d.amount),currency:d.currency,day:Number(d.day)},earlier=all.slice(0,all.findIndex(x=>x.key===d.key)).find(x=>x.status==='done'&&x.currency===exp.currency&&Math.abs(Number(x.amount)-exp.amount)<.005&&(Number(x.day)===exp.day||sameName(x.title,exp.title)));const dup=duplicateOf(exp);return dup?`⚠️ 可能重複：${dupText(dup)} 已經記錄過。`:earlier?`⚠️ 與「${earlier.title}」可能是同一張收據。`:''};
@@ -171,7 +176,7 @@ window.Together=(()=>{
   if(d.status!=='done'&&d.status!=='fail')return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-progress tg-progress-busy"><div></div></div>${d.retry?`<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>`:''}</article>`;
   if(d.status==='fail')return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error||'未能讀取。')}</p><div class="links">${retry}${drop}</div></article>`;
   const warn=draftDup(d,all)||d.warn;
-  return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency"><option value="JPY">日圓 ¥</option><option value="HKD"${d.currency==='HKD'?' selected':''}>港幣 HK$</option></select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div>${d.items.length?`<ul class="tg-lines">${d.items.map(i=>`<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join('')}</ul>`:''}${warn?`<p class="note tg-warn">${esc(warn)}</p>`:''}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
+  return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div>${d.items.length?`<ul class="tg-lines">${d.items.map(i=>`<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join('')}</ul>`:''}${warn?`<p class="note tg-warn">${esc(warn)}</p>`:''}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
  }
  function renderDrafts(){
   const box=$('#tgDrafts');if(!box)return;
@@ -247,7 +252,7 @@ window.Together=(()=>{
   add('expenses',{...exp,...(receipts.length?{receipts:receipts.slice(0,4)}:{}),...(job.hashes?.length?{receiptHashes:job.hashes.slice(0,4)}:{})});fb.fs.deleteDoc(jobRef(d.key)).catch(()=>{});jobs=jobs.filter(j=>j.id!==d.key);delete localEdits[d.key];return true;
  }
  // Place edits: new places are their own documents; edits/deletions of Sheet places use the place id as document id.
- async function lookupPlace(url){if(!navigator.onLine)throw new Error('offline');return (await (await callable('lookupPlace',45000))({url})).data}
+ async function lookupPlace(url){if(!navigator.onLine)throw new Error('offline');return (await (await callable('lookupPlace',45000))({url,country:state.meta?.country||''})).data}
  function savePlace({place,fields,cats,lat,lng,points=[],mapsUrl}){
   const {fs,db}=fb,data={fields,cats,lat,lng,points,mapsUrl,deleted:false};
   if(place?.custom){update('places',place.overlayId,data);toast('已儲存')}
@@ -307,7 +312,7 @@ window.Together=(()=>{
  function summary(){
   const bal=S.balances(state.expenses),cs=Object.keys(bal);
   if(!cs.length)return '';
-  return `<section class="panel tg-summary"><h3>分帳結算</h3>${cs.map(c=>{const total=state.expenses.filter(e=>e.currency===c).reduce((t,e)=>t+S.toMinor(e.amount,c),0),moves=S.settle(bal[c]);return `<div class="tg-currency"><div class="eyebrow">${c} · 合共 ${esc(S.format(total,c))}</div>${moves.length?moves.map(m=>`<p><b>${esc(nameOf(m.from))}</b> 要畀 <b>${esc(nameOf(m.to))}</b> ${esc(S.format(m.amount,c))}</p>`).join(''):'<p>已經清數。</p>'}</div>`}).join('')}<p class="note">日圓和港幣分開計算，不作匯率換算。</p></section>`;
+  return `<section class="panel tg-summary"><h3>分帳結算</h3>${cs.map(c=>{const total=state.expenses.filter(e=>e.currency===c).reduce((t,e)=>t+S.toMinor(e.amount,c),0),moves=S.settle(bal[c]);return `<div class="tg-currency"><div class="eyebrow">${c} · 合共 ${esc(S.format(total,c))}</div>${moves.length?moves.map(m=>`<p><b>${esc(nameOf(m.from))}</b> 要畀 <b>${esc(nameOf(m.to))}</b> ${esc(S.format(m.amount,c))}</p>`).join(''):'<p>已經清數。</p>'}</div>`}).join('')}<p class="note">各貨幣分開計算，不作匯率換算。</p></section>`;
  }
 
  const tripSwitch=()=>state.trips?.length>1?`<select class="trip-switch" data-trip-switch aria-label="切換旅程">${state.trips.map(t=>`<option value="${esc(t.id)}"${t.id===tripId?' selected':''}>${esc(t.name)}</option>`).join('')}</select>`:`<span class="trip-name">${esc(state.meta?.name||'')}</span>`;
@@ -318,7 +323,7 @@ window.Together=(()=>{
  }
  function forms(){
   if(state.tab==='notes')return `<form class="panel tg-form" data-tg-form="note"><label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾"></textarea></label><label>關於<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><button type="submit" class="locate-button">加入筆記</button></form>`;
-  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據（可多張）</button><input type="file" accept="image/*" id="tgReceipt" multiple hidden><p class="note">AI 在背景讀出店名、金額、日期及物品，可以關閉網頁，稍後回來確認。同一張收據分開影的相片會提示合併，也可以自己選擇合併。加入或捨棄後相片會刪除。</p></div><div id="tgDrafts" class="tg-drafts"></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD">港幣 HK$</option></select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
+  if(state.tab==='expenses'){const ps=people();return `<form class="panel tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">📷 影收據／上載收據（可多張）</button><input type="file" accept="image/*" id="tgReceipt" multiple hidden><p class="note">AI 在背景讀出店名、金額、日期及物品，可以關閉網頁，稍後回來確認。同一張收據分開影的相片會提示合併，也可以自己選擇合併。加入或捨棄後相片會刪除。</p></div><div id="tgDrafts" class="tg-drafts"></div><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency">${curOptions(tripCurrencies()[0])}</select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map(p=>`<option value="${esc(p.id)}"${p.id===state.user.uid?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map(p=>`<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join('')}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`}
   return '';
  }
  function page(){
@@ -347,7 +352,7 @@ window.Together=(()=>{
  const shopPreview=()=>shopPhoto?`<img src="${photoSrc(shopPhoto)}" alt="物品相片"><button type="button" class="smallbtn" data-tg="shopPhotoClear">移除相片</button>`:'';
  function shopForm(x){
   const v=k=>esc(x?.[k]??'');
-  return `<form class="panel tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div><button type="button" class="action primary" data-tg="shopPhoto">📷 影相／上載圖片（AI 填寫）</button><input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v('name')}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v('qty')}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v('detail')}"></label></div><label>購買地點／地址<input name="place" maxlength="500" placeholder="店名、地址，或貼上 Google 地圖連結" value="${v('place')}"></label><p class="note" id="shopPlaceInfo"></p><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price??''}"></label><label>貨幣<select name="currency"><option value="JPY">日圓 ¥</option><option value="HKD"${x?.currency==='HKD'?' selected':''}>港幣 HK$</option></select></label></div><div class="links"><button type="submit" class="locate-button">${x?'儲存修改':'加入購物清單'}</button>${x?'<button type="button" class="action" data-tg="shopCancel">取消</button>':''}</div></form>`;
+  return `<form class="panel tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div><button type="button" class="action primary" data-tg="shopPhoto">📷 影相／上載圖片（AI 填寫）</button><input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v('name')}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v('qty')}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v('detail')}"></label></div><label>購買地點／地址<input name="place" maxlength="500" placeholder="店名、地址，或貼上 Google 地圖連結" value="${v('place')}"></label><p class="note" id="shopPlaceInfo"></p><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price??''}"></label><label>貨幣<select name="currency">${curOptions(x?.currency||tripCurrencies()[0])}</select></label></div><div class="links"><button type="submit" class="locate-button">${x?'儲存修改':'加入購物清單'}</button>${x?'<button type="button" class="action" data-tg="shopCancel">取消</button>':''}</div></form>`;
  }
  function shopItem(x){
   const price=x.price!=null?`<b class="shop-price">${esc(S.format(S.toMinor(x.price,x.currency),x.currency))}</b>`:'';
@@ -395,7 +400,7 @@ window.Together=(()=>{
   try{
    const call=await callable('lookupPlace',45000);
    for(const x of todo){
-    try{const r=(await call({query:x.place})).data;await fb.fs.updateDoc(tdoc('shopping',x.id),{lat:Number.isFinite(r.lat)?r.lat:null,lng:Number.isFinite(r.lng)?r.lng:null,geoFor:x.place})}
+    try{const r=(await call({query:x.place,country:state.meta?.country||''})).data;await fb.fs.updateDoc(tdoc('shopping',x.id),{lat:Number.isFinite(r.lat)?r.lat:null,lng:Number.isFinite(r.lng)?r.lng:null,geoFor:x.place})}
     catch(e){if(String(e?.code||'').endsWith('not-found'))await fb.fs.updateDoc(tdoc('shopping',x.id),{lat:null,lng:null,geoFor:x.place}).catch(()=>{});else{console.error('geocode',e);break}}
    }
   }finally{geocoding=false}
@@ -446,7 +451,7 @@ window.Together=(()=>{
   document.querySelectorAll('[data-tg-place]').forEach(el=>paint(el,placeSlot(el.dataset.tgPlace)));
  }
  // 我的旅程: switch trips, create one, edit the current trip, invite or remove companions (all through manageTrip).
- const CURRENCY_NAMES={JPY:'日圓',HKD:'港幣',KRW:'韓圜',TWD:'新台幣',THB:'泰銖',CNY:'人民幣',SGD:'新加坡元',MYR:'馬幣',USD:'美元',EUR:'歐元',GBP:'英鎊',AUD:'澳元',CAD:'加元',VND:'越南盾',PHP:'菲律賓披索',IDR:'印尼盾'};
+
  const currencyOptions=sel=>Object.entries(CURRENCY_NAMES).map(([k,v])=>`<option value="${k}"${k===sel?' selected':''}>${v} ${k}</option>`).join('');
  function tripForm(t){const v=k=>esc(t?.[k]??'');return `<form class="tg-form" data-trip-form="${t?'update':'create'}"><label>旅程名稱<input name="name" required maxlength="60" placeholder="例如：2027 首爾" value="${v('name')}"></label><label>目的地<input name="destination" required maxlength="80" placeholder="例如：韓國首爾" value="${v('destination')}"></label><div class="tg-row"><label>開始日期<input name="startDate" type="date" required value="${v('startDate')}"></label><label>結束日期<input name="endDate" type="date" required value="${v('endDate')}"></label></div><div class="tg-row"><label>當地貨幣<select name="currency">${currencyOptions(t?.currency||'JPY')}</select></label><label>你們的貨幣<select name="homeCurrency">${currencyOptions(t?.homeCurrency||'HKD')}</select></label></div><button type="submit" class="locate-button">${t?'儲存旅程資料':'建立旅程'}</button><p class="note" data-trip-msg></p></form>`}
  const myEmail=()=>String(state.user?.email||'').toLowerCase();
@@ -488,14 +493,14 @@ window.Together=(()=>{
    const prices=v.getAll('itemAmount'),items=v.getAll('itemName').map((n,i)=>({name:String(n).trim().slice(0,40),amount:prices[i]===''?null:Math.round(Number(prices[i])*100)/100})).filter(i=>i.name&&(i.amount==null||(i.amount>=0&&i.amount<=1e7))).slice(0,30);
    const sum=items.reduce((t,i)=>t+(i.amount||0),0),amount=v.get('amount')===''?sum:Number(v.get('amount')),split=v.getAll('split').map(String);
    if(!str('title')||!(amount>0)||amount>1e7)return toast('請輸入項目和金額（或物品金額）。');if(!split.length)return toast('請最少選一位分帳旅伴。');
-   const exp={title:str('title').slice(0,80),amount:Math.round(amount*100)/100,currency:v.get('currency')==='HKD'?'HKD':'JPY',paidBy:str('paidBy'),split,day:day||today(),items},dup=duplicateOf(exp);
+   const exp={title:str('title').slice(0,80),amount:Math.round(amount*100)/100,currency:pickCur(String(v.get('currency'))),paidBy:str('paidBy'),split,day:day||today(),items},dup=duplicateOf(exp);
    if(dup&&!confirm(`似乎已經記錄過：\n${dupText(dup)}\n\n仍然要加入嗎？`))return;
    add('expenses',exp);
    f.reset();$('#tgItemRows').innerHTML=itemRow();return;
   }
   if(f.dataset.tgForm==='shop'){
    const price=v.get('price')===''?null:Number(v.get('price'));if(!str('name'))return;if(price!=null&&!(price>=0&&price<=1e7))return toast('價錢不正確。');
-   const item={name:str('name').slice(0,80),qty:str('qty').slice(0,30),detail:str('detail').slice(0,500),place:str('place').slice(0,200),price:price==null?null:Math.round(price*100)/100,currency:v.get('currency')==='HKD'?'HKD':'JPY',photo:shopPhoto};
+   const item={name:str('name').slice(0,80),qty:str('qty').slice(0,30),detail:str('detail').slice(0,500),place:str('place').slice(0,200),price:price==null?null:Math.round(price*100)/100,currency:pickCur(String(v.get('currency'))),photo:shopPhoto};
    if(state.shopEdit){update('shopping',state.shopEdit,{...item,ai:false});toast('已儲存')}else add('shopping',{...item,bought:false,boughtBy:null,boughtAt:null});
    state.shopEdit=null;shopPhoto=null;$('#shopPage').dataset.sig='';refresh();return;
   }

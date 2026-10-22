@@ -34,7 +34,7 @@ service cloud.firestore {
         && (!('geoFor' in d) || text(d.geoFor, 200))
         && text(d.name, 80) && d.name.size() > 0 && text(d.qty, 30) && text(d.detail, 500) && text(d.place, 200)
         && (d.price == null || (d.price is number && d.price >= 0 && d.price <= 10000000))
-        && d.currency in ['JPY', 'HKD']
+        && d.currency in ['JPY', 'HKD', 'KRW', 'TWD', 'THB', 'CNY', 'SGD', 'MYR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'VND', 'PHP', 'IDR']
         && (d.photo == null || text(d.photo, 400000))
         && d.bought is bool && (d.boughtBy == null || text(d.boughtBy, 40)) && (d.boughtAt == null || d.boughtAt is int);
     }
@@ -90,7 +90,7 @@ service cloud.firestore {
           && (!('items' in request.resource.data) || (request.resource.data.items is list && request.resource.data.items.size() <= 30))
           && text(request.resource.data.title, 80) && request.resource.data.title.size() > 0
           && request.resource.data.amount is number && request.resource.data.amount > 0 && request.resource.data.amount <= 10000000
-          && request.resource.data.currency in ['JPY', 'HKD']
+          && request.resource.data.currency in ['JPY', 'HKD', 'KRW', 'TWD', 'THB', 'CNY', 'SGD', 'MYR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'VND', 'PHP', 'IDR']
           && request.resource.data.paidBy is string
           && request.resource.data.split is list && request.resource.data.split.size() > 0 && request.resource.data.split.size() <= 20
           && day(request.resource.data.day);

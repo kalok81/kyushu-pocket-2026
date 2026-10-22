@@ -10,17 +10,19 @@ initializeApp();
 const DEEPSEEK_API_KEY = defineSecret('DEEPSEEK_API_KEY');
 const PLACES_API_KEY = defineSecret('PLACES_API_KEY');
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
-const PROMPT = `You read shop receipts photographed by travellers in Japan (sometimes Hong Kong).
+// Prompts follow the trip: where the travellers are and which currencies they use.
+const tripInfo = t => ({ place: t?.destination || 'abroad', cur: t?.currency || 'JPY', home: t?.homeCurrency || 'HKD' });
+const receiptPrompt = t => { const { place, cur, home } = tripInfo(t); return `You read shop receipts photographed by travellers in ${place} (sometimes at home).
 Reply with JSON only, in this shape:
-{"merchant": string, "total": number, "currency": "JPY" | "HKD" | "OTHER", "date": "YYYY-MM-DD" or null, "items": [{"name": string, "amount": number}], "confidence": "high" | "medium" | "low", "part": "whole" | "top" | "middle" | "bottom"}
-- merchant: the shop name as printed (keep Japanese), at most 60 characters.
+{"merchant": string, "total": number, "currency": "${cur}" | "${home}" | "OTHER", "date": "YYYY-MM-DD" or null, "items": [{"name": string, "amount": number}], "confidence": "high" | "medium" | "low", "part": "whole" | "top" | "middle" | "bottom"}
+- merchant: the shop name as printed (keep the original language), at most 60 characters.
 - The receipt may come as several photos (strips of a long receipt, or separate shots of its top and bottom, possibly overlapping and in any order): treat them as one receipt and do not count repeated lines twice.
-- total: the amount actually paid, tax included (合計 / お買上計 / 税込 / お支払 / お会計 / ご請求額 / 免税合計 / 免税対象合計). Not the cash tendered (お預り), change (お釣り), subtotal before tax (小計) or tax lines (消費税).
-- currency: JPY for yen (¥, 円), HKD for Hong Kong dollars, otherwise OTHER.
+- total: the amount actually paid, tax and service included (e.g. 合計 / お買上計 / 税込 / 免税合計 / 합계 / 결제금액 / 總計 / Total / Grand total). Not the cash tendered, change, subtotal before tax or tax lines.
+- currency: ${cur} for the local currency, ${home} if the receipt is in ${home}, otherwise OTHER.
 - items: up to 30 line items with their printed prices (quantity included in the name, e.g. ×2); empty list if unreadable.
 - confidence: low if the photo is blurry, cut off, or not a receipt.
 - part: whole if the photos show the complete receipt from the shop name to the total; top if the total is cut off; bottom if the shop name/header is cut off; middle if both are cut off.
-If it is not a receipt, return total 0 and confidence "low".`;
+If it is not a receipt, return total 0 and confidence "low".`; };
 
 async function isMember(token) {
  if (!token?.email || token.email_verified !== true) return false;
@@ -28,13 +30,14 @@ async function isMember(token) {
  return (doc.get('emails') || []).includes(token.email.toLowerCase());
 }
 
-function clean(r) {
+function clean(r, t) {
+ const { cur, home } = tripInfo(t);
  const num = v => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1e7 ? Math.round(v * 100) / 100 : 0);
  const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
  return {
   merchant: text(r.merchant, 60),
   total: num(r.total),
-  currency: ['JPY', 'HKD'].includes(r.currency) ? r.currency : 'OTHER',
+  currency: [cur, home].includes(r.currency) ? r.currency : 'OTHER',
   date: typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : null,
   items: (Array.isArray(r.items) ? r.items : []).slice(0, 30).map(i => ({ name: text(i?.name, 40), amount: num(i?.amount) })).filter(i => i.name),
   confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low',
@@ -42,7 +45,7 @@ function clean(r) {
  };
 }
 
-const readReceipt = images => askDeepSeek(PROMPT, images).then(clean);
+const readReceipt = (images, t) => askDeepSeek(receiptPrompt(t), images).then(r => clean(r, t));
 
 async function askDeepSeek(prompt, images) {
  // DeepSeek's JSON mode can return empty content (or run out of tokens on long replies): log why and retry once.
@@ -72,20 +75,22 @@ async function askDeepSeek(prompt, images) {
  }
  throw new HttpsError('internal', '未能讀取收據內容，可以重試或手動輸入。');
 }
-const PRODUCT_PROMPT = `You identify products that travellers in Japan photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
+const productPrompt = t => { const { place, cur, home } = tripInfo(t); return `You identify products that travellers in ${place} photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
 Reply with JSON only, in this shape:
-{"name": string, "spec": string, "detail": string, "price": number or null, "currency": "JPY" | "HKD", "place": string, "confidence": "high" | "medium" | "low"}
-- name: the product in Traditional Chinese (Hong Kong usage), with the brand and the original Japanese/English product name in brackets when different, at most 80 characters.
-- spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, ミント味), at most 30 characters; empty if unknown.
+{"name": string, "spec": string, "detail": string, "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
+- name: the product in Traditional Chinese (Hong Kong usage), with the brand and the original-language product name in brackets when different, at most 80 characters.
+- spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, mint), at most 30 characters; empty if unknown.
 - detail: one short Traditional Chinese line on what it is or what it is for, at most 60 characters.
 - price: only if a price tag or label with this product's price is visible (tax-included price if both are shown); otherwise null.
+- currency: ${cur} unless the price is clearly in ${home}.
 - place: a shop name only if it is visible in the photo (price tag, shelf sign, bag); otherwise empty.
-- confidence: low if the photo is unclear or shows no identifiable product.`;
+- confidence: low if the photo is unclear or shows no identifiable product.`; };
 
-function cleanProduct(r) {
+function cleanProduct(r, t) {
+ const { cur, home } = tripInfo(t);
  const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
  const price = typeof r.price === 'number' && Number.isFinite(r.price) && r.price > 0 && r.price <= 1e7 ? Math.round(r.price * 100) / 100 : null;
- return { name: text(r.name, 80), qty: text(r.spec, 30), detail: text(r.detail, 500), place: text(r.place, 200), price, currency: r.currency === 'HKD' ? 'HKD' : 'JPY', confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
+ return { name: text(r.name, 80), qty: text(r.spec, 30), detail: text(r.detail, 500), place: text(r.place, 200), price, currency: r.currency === home ? home : cur, confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
 }
 
 const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.test(image) && image.length * 0.75 <= MAX_IMAGE_BYTES;
@@ -109,25 +114,26 @@ cloudEvent('processReceipt', async event => {
  });
  if (job === null) return;
  const { images } = job;
+ const tripDoc = (await getFirestore().doc(`trips/${trip}`).get()).data();
  try {
   if (!Array.isArray(images) || !images.length || images.length > 4 || !images.every(validImage)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
   if (job.kind === 'productFill') {
    // Photo added in the shopping form: return the details so the page can fill the empty fields.
-   const { confidence: _c, ...result } = cleanProduct(await askDeepSeek(PRODUCT_PROMPT, images));
+   const { confidence: _c, ...result } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
    if (!result.name) throw new HttpsError('not-found', '認不出物品，請手動輸入。');
    await ref.update({ status: 'done', result, images: FieldValue.delete(), doneAt: Date.now() });
    return;
   }
   if (job.kind === 'product') {
    // Product photo: add the item straight to the shared shopping list (with the photo) and drop the job.
-   const { confidence: _confidence, ...item } = cleanProduct(await askDeepSeek(PRODUCT_PROMPT, images));
+   const { confidence: _confidence, ...item } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
    if (!item.name) throw new HttpsError('not-found', '認不出物品，可以重試或手動輸入。');
    const db = getFirestore();
    await db.collection(`trips/${trip}/shopping`).add({ ...item, photo: images[0].length <= 400000 ? images[0] : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
    await ref.delete();
    return;
   }
-  const result = await readReceipt(images);
+  const result = await readReceipt(images, tripDoc);
   // No readable total line: fall back to the item sum, flagged so the page asks the traveller to check it.
   const itemSum = Math.round(result.items.reduce((t, i) => t + i.amount, 0) * 100) / 100;
   if (!result.total && itemSum > 0) Object.assign(result, { total: itemSum, totalFromItems: true, confidence: 'low' });
@@ -168,8 +174,8 @@ function parseMapsUrl(url) {
  return { query: name || (coords ? null : q) || null, at };
 }
 
-// Name and address in Japanese (as on signs and in the Sheet); hours and type label in Chinese.
-const SEARCH_FIELDS = ['id', 'displayName', 'formattedAddress', 'location', 'types', 'websiteUri', 'googleMapsUri', 'priceRange'].map(f => 'places.' + f).join(',');
+// Hours and type label in Chinese; name and address in the language chosen by langFor.
+const SEARCH_FIELDS = ['id', 'displayName', 'formattedAddress', 'location', 'types', 'websiteUri', 'googleMapsUri', 'priceRange', 'addressComponents'].map(f => 'places.' + f).join(',');
 const DETAIL_FIELDS = 'regularOpeningHours.weekdayDescriptions,primaryTypeDisplayName';
 async function placesApi(path, fields, body) {
  const res = await fetch(`https://places.googleapis.com/v1/${path}`, {
@@ -184,7 +190,10 @@ async function placesApi(path, fields, body) {
  }
  return res.json();
 }
-const search = async (kind, body) => (await placesApi(`places:${kind}`, SEARCH_FIELDS, { languageCode: 'ja', maxResultCount: 1, ...body })).places?.[0];
+// Names and addresses in Japanese for trips in Japan (as on signs); elsewhere in Traditional Chinese.
+const langFor = country => (country === 'JP' ? 'ja' : 'zh-TW');
+const search = async (kind, body, country) => (await placesApi(`places:${kind}`, SEARCH_FIELDS, { languageCode: langFor(country), maxResultCount: 1, ...(country && kind === 'searchText' ? { regionCode: country } : {}), ...body })).places?.[0];
+const district = p => { const c = p?.addressComponents || [], pick = t => c.find(x => x.types?.includes(t))?.longText; return pick('sublocality_level_1') || pick('sublocality') || pick('locality') || pick('administrative_area_level_2') || ''; };
 
 function category(types = []) {
  const t = types.join(' ');
@@ -194,7 +203,7 @@ function category(types = []) {
  return '';
 }
 function price(range) {
- const amount = p => p && `${p.currencyCode === 'JPY' ? '¥' : p.currencyCode + ' '}${Number(p.units || 0).toLocaleString('en-US')}`;
+ const amount = p => p && `${{ JPY: '¥', KRW: '₩', TWD: 'NT$', HKD: 'HK$', THB: '฿', CNY: '¥', USD: 'US$', EUR: '€', GBP: '£' }[p.currencyCode] || p.currencyCode + ' '}${Number(p.units || 0).toLocaleString('en-US')}`;
  if (!range) return '';
  if (range.endPrice && Number(range.startPrice?.units || 0) <= 1) return `${amount(range.endPrice)} 以下`;
  return [amount(range.startPrice), amount(range.endPrice)].filter(Boolean).join('–');
@@ -204,10 +213,10 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', secrets: [PLACES_
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
  // Either a Google Maps link, or plain text (a shop name and/or address, e.g. a shopping item's 購買地點).
- const text = req.data?.query;
+ const text = req.data?.query, country = typeof req.data?.country === 'string' && /^[A-Z]{2}$/.test(req.data.country) ? req.data.country : '';
  if (typeof text === 'string') {
   if (!text.trim() || text.length > 300) throw new HttpsError('invalid-argument', '請輸入店名或地址。');
-  const place = await search('searchText', { textQuery: text.trim(), regionCode: 'JP' });
+  const place = await search('searchText', { textQuery: text.trim() }, country);
   if (!place) throw new HttpsError('not-found', '找不到這個地點。');
   return { name: place.displayName?.text || '', address: place.formattedAddress || '', lat: place.location?.latitude ?? null, lng: place.location?.longitude ?? null };
  }
@@ -217,8 +226,8 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', secrets: [PLACES_
  const { query, at } = parseMapsUrl(url);
  const bias = at && { circle: { center: { latitude: at.lat, longitude: at.lng }, radius: 300 } };
  const place = query
-  ? await search('searchText', { textQuery: query, ...(bias && { locationBias: bias }) })
-  : at ? await search('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }) : null;
+  ? await search('searchText', { textQuery: query, ...(bias && { locationBias: bias }) }, country)
+  : at ? await search('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }, country) : null;
  if (!place) throw new HttpsError('not-found', '找不到這個地點，請手動輸入。');
  const detail = await placesApi(`places/${place.id}?languageCode=zh-TW`, DETAIL_FIELDS).catch(() => ({}));
  return {
@@ -232,6 +241,7 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', secrets: [PLACES_
   type: detail.primaryTypeDisplayName?.text || '',
   website: place.websiteUri || '',
   mapsUrl: place.googleMapsUri || url.href,
+  district: district(place),
  };
 });
 
