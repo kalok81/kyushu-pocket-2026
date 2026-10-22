@@ -2,7 +2,7 @@
 window.startTrip=(D,C,meta={})=>{
 // Trips created on the site have no Sheet snapshot (G): days come from the trip dates, hotels and flights from Firestore.
 const G=!D;
-if(G){D={updated:'',tabs:[{name:'資料',rows:[{cells:[]}]},{name:'酒店',rows:[]},{name:'別府 由布院 南佐賀',rows:[]},{name:'機票',rows:[]}],baggage:[]};C={suggestions:{},hotels:[],base:{title:'',text:''},areas:[],...C}}
+if(G){D={updated:'',tabs:[{name:'資料',rows:[{cells:[]}]},{name:'酒店',rows:[]},{name:'別府 由布院 南佐賀',rows:[]},{name:'機票',rows:[]}],baggage:[]};C={suggestions:{},hotels:[],base:{title:'',text:''},...C,areas:meta.areas||[]}}
 const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const tab=n=>D.tabs.find(s=>s.name===n), text=r=>r.cells.map(c=>c.text), allRows=n=>tab(n).rows.map(text), urlList=s=>[...new Set((s||'').match(/https?:\/\/[^\s<>]+/g)||[])].filter(u=>{try{return ['https:','http:'].includes(new URL(u).protocol)}catch{return false}}), link=(u,label,cls='action')=>`<a class="${cls}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`, maps=s=>'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(s), route=s=>'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(s), sheet=(id)=>D.sheetUrl.split('#')[0]+'#gid='+id;
 const categories=['餐廳','景點','商店','手信'];
@@ -125,7 +125,7 @@ function applyPlaceEdits(list){
  const edits=new Map(list.filter(o=>o.base).map(o=>[o.base,o])),geo={...baseGeo},clean=o=>({fields:Array.from({length:12},(_,i)=>String(o.fields?.[i]??'')),cats:(o.cats||[]).filter(c=>categories.includes(c))});
  const out=basePlaces.flatMap(p=>{const o=edits.get(p.id);if(!o)return [p];if(o.deleted){delete geo[p.id];return []}const c=clean(o);return [{...p,v:c.fields,cats:c.cats.length?c.cats:p.cats,edited:true}]});
  list.filter(o=>!o.base&&!o.deleted).sort((a,b)=>(a.at||0)-(b.at||0)).forEach(o=>{const c=clean(o);out.push({id:'u_'+o.id,overlayId:o.id,custom:true,v:c.fields,cells:c.fields.map(t=>({text:t,note:'',url:'',yellow:false})),copies:[],cats:c.cats,marked:false,yellowFields:[]})});
- list.forEach(o=>{const id=o.base||'u_'+o.id;if(!o.deleted&&Number.isFinite(o.lat)&&Number.isFinite(o.lng))geo[id]=[{lat:o.lat,lng:o.lng,label:'',source:o.mapsUrl||'https://www.google.com/maps'}]});
+ list.forEach(o=>{const id=o.base||'u_'+o.id,src=o.mapsUrl||'https://www.google.com/maps',pts=(o.points||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));if(o.deleted)return;if(pts.length)geo[id]=pts.map(p=>({lat:p.lat,lng:p.lng,label:String(p.label||''),source:src}));else if(Number.isFinite(o.lat)&&Number.isFinite(o.lng))geo[id]=[{lat:o.lat,lng:o.lng,label:'',source:src}]});
  places.splice(0,places.length,...out);window.TRIP_GEO.places=geo;
  if(current==='explore'&&$('#results'))renderResults();else if(current==='notebook'&&$('#notebookResults'))notebookResults();else if(current==='nearby')nearbyResults();else if(current==='home')render();
 }

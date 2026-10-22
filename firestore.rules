@@ -96,7 +96,8 @@ service cloud.firestore {
           && day(request.resource.data.day);
       }
       function placeValid(d) {
-        return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'mapsUrl', 'deleted', 'by', 'byName', 'at', 'createdAt'])
+        return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'points', 'mapsUrl', 'deleted', 'by', 'byName', 'at', 'createdAt'])
+        && (!('points' in d) || (d.points is list && d.points.size() <= 10))
           && (d.base == null || text(d.base, 20)) && d.fields is list && d.fields.size() == 12
           && d.cats is list && d.cats.size() <= 4
           && (d.lat == null || d.lat is number) && (d.lng == null || d.lng is number)
