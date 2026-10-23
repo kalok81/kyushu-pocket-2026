@@ -103,6 +103,7 @@
     if (!url) return toast("請先貼上 Google 地圖連結。");
     btn.disabled = true;
     info.textContent = "正在查詢 Google 地圖…";
+    const done = Kit.busy(info, { seconds: 5 });
     try {
       const r = await window.Together.lookupPlace(url),
         put = (name, value) => {
@@ -119,6 +120,7 @@
         fnError(e, "未能自動填寫，請手動輸入。");
       console.error(e);
     } finally {
+      done();
       btn.disabled = false;
     }
   }

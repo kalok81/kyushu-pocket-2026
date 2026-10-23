@@ -135,7 +135,7 @@
       box.innerHTML = `<div class="notice">Google 不向其他網站提供日本的公共交通路線，只可以在 Google 地圖 App 內查看。請按下面按鈕查看，揀好路線後在下面「交通」填寫；步行和駕車可以直接在這裡查詢。</div><div class="links">${gmLink}</div>`;
       return;
     }
-    box.innerHTML = '<p class="note">正在查詢 Google 地圖…</p>';
+    box.innerHTML = Kit.progress({ text: "正在查詢 Google 地圖…", seconds: 6 });
     try {
       const r = await window.Together.suggestRoutes({
         origin: from.point,
@@ -165,7 +165,7 @@
       box = $("#routeAi");
     if (!c?.ai || !box) return;
     const { from, to, dest, time } = c.ai;
-    box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} AI 正在考慮路線…</b><p class="note">大約需要 10–30 秒。</p></div>`;
+    box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} AI 正在考慮路線…</b>${Kit.progress({ text: "大約需要 10–30 秒。", seconds: 25 })}</div>`;
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     try {
       const r = await window.Together.aiRoutes({

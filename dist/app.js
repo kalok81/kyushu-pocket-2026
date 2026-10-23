@@ -517,6 +517,7 @@ window.startTrip = (meta = {}) => {
     // The AI write-up (類型, 必吃・必買・特色, 參考價格與營業時間) is asked for only while one of them is empty (one AI use).
     const wantHighlights = ["f2", "f4", "f5"].some((k) => !el[k].value.trim());
     info.textContent = wantHighlights ? "正在查詢 Google 地圖，並由 AI 整理評論…" : "正在查詢 Google 地圖…";
+    const done = Kit.busy(info, { seconds: wantHighlights ? 12 : 5 });
     try {
       const r = await window.Together.lookupPlace(url, { highlights: wantHighlights }),
         put = (name, value) => {
@@ -548,6 +549,7 @@ window.startTrip = (meta = {}) => {
         fnError(e, "未能自動填寫，請手動輸入。");
       console.error(e);
     } finally {
+      done();
       btn.disabled = false;
     }
   }
@@ -735,6 +737,7 @@ window.startTrip = (meta = {}) => {
     if (!url) return toast("請先貼上 Google 地圖連結。");
     btn.disabled = true;
     info.textContent = "正在查詢 Google 地圖…";
+    const done = Kit.busy(info, { seconds: 5 });
     try {
       const r = await window.Together.lookupPlace(url),
         put = (name, value) => {
@@ -751,6 +754,7 @@ window.startTrip = (meta = {}) => {
         fnError(e, "未能自動填寫，請手動輸入。");
       console.error(e);
     } finally {
+      done();
       btn.disabled = false;
     }
   }
@@ -1207,7 +1211,7 @@ window.startTrip = (meta = {}) => {
       box.innerHTML = `<div class="notice">Google 不向其他網站提供日本的公共交通路線，只可以在 Google 地圖 App 內查看。請按下面按鈕查看，揀好路線後在下面「交通」填寫；步行和駕車可以直接在這裡查詢。</div><div class="links">${gmLink}</div>`;
       return;
     }
-    box.innerHTML = '<p class="note">正在查詢 Google 地圖…</p>';
+    box.innerHTML = Kit.progress({ text: "正在查詢 Google 地圖…", seconds: 6 });
     try {
       const r = await window.Together.suggestRoutes({
         origin: from.point,
@@ -1237,7 +1241,7 @@ window.startTrip = (meta = {}) => {
       box = $("#routeAi");
     if (!c?.ai || !box) return;
     const { from, to, dest, time } = c.ai;
-    box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} AI 正在考慮路線…</b><p class="note">大約需要 10–30 秒。</p></div>`;
+    box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} AI 正在考慮路線…</b>${Kit.progress({ text: "大約需要 10–30 秒。", seconds: 25 })}</div>`;
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     try {
       const r = await window.Together.aiRoutes({
@@ -1524,6 +1528,7 @@ window.startTrip = (meta = {}) => {
       url = el.mapsUrl.value.trim();
     if (!url) return toast("請先貼上 Google 地圖連結。");
     info.textContent = "正在查詢 Google 地圖…";
+    const done = Kit.busy(info, { seconds: 5 });
     try {
       const r = await window.Together.lookupPlace(url);
       if (r.name) el.name.value = r.name;
@@ -1537,6 +1542,8 @@ window.startTrip = (meta = {}) => {
     } catch (e) {
       info.textContent =
         fnError(e, "未能自動填寫，請手動輸入。");
+    } finally {
+      done();
     }
   }
   function saveHotel(f) {

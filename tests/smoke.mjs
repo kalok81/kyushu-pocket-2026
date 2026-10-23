@@ -239,9 +239,11 @@ try {
   await page.click('[data-note-kind=coupon]'); await page.waitForSelector('[data-tg-form=note][data-kind=coupon]');
   await page.locator('#notePhotoInput').setInputFiles({ name: 'coupon.png', mimeType: 'image/png', buffer: png });
   await page.waitForFunction(() => /AI 正在讀取相片/.test(document.querySelector('#noteFillInfo').textContent));
+  assert.equal(await page.locator('[data-tg-form=note] .ai-progress').count(), 1, 'a progress bar while the AI reads');
   const job = await answer({ kind: 'coupon', title: 'Bic Camera 免稅 10% + 5%', text: '滿 ¥5,000，出示護照', code: 'BIC555', until: '2099-01-31', place: '淺草寺 本堂' });
   assert.equal(job.mode, 'coupon'); assert.equal(job.images.length, 1);
   await page.waitForFunction(() => document.querySelector('[data-tg-form=note] [name=code]').value === 'BIC555');
+  await page.waitForFunction(() => !document.querySelector('[data-tg-form=note] .ai-progress'));
   assert.equal(await page.inputValue('[data-tg-form=note] [name=title]'), 'Bic Camera 免稅 10% + 5%');
   assert.equal(await page.inputValue('[data-tg-form=note] [name=until]'), '2099-01-31');
   assert.equal(await page.locator('[data-tg-form=note] [name=placeId] option:checked').innerText(), '淺草寺（雷門）');

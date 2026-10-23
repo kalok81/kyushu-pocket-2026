@@ -24,6 +24,7 @@
       url = el.mapsUrl.value.trim();
     if (!url) return toast("請先貼上 Google 地圖連結。");
     info.textContent = "正在查詢 Google 地圖…";
+    const done = Kit.busy(info, { seconds: 5 });
     try {
       const r = await window.Together.lookupPlace(url);
       if (r.name) el.name.value = r.name;
@@ -37,6 +38,8 @@
     } catch (e) {
       info.textContent =
         fnError(e, "未能自動填寫，請手動輸入。");
+    } finally {
+      done();
     }
   }
   function saveHotel(f) {

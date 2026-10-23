@@ -789,3 +789,11 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 #detailBody .shop-detail-photo{display:block;width:100%;max-height:60vh;object-fit:contain;border-radius:12px;background:var(--muted-bg);margin:4px 0 14px}
 #detailBody .shop-item>div{min-width:0}
 .shop-find-all{justify-self:start;margin-top:-4px}
+/* AI progress (Kit.progress / Kit.busy): time-based bar, 100% when done */
+.ai-progress{display:grid;gap:4px;margin:6px 0}
+.ai-progress-bar{height:6px;border-radius:999px;background:var(--muted-bg);overflow:hidden}
+.ai-progress-bar i{display:block;height:100%;width:var(--from,0%);border-radius:999px;background:var(--primary);animation:ai-fill var(--rest,15s) cubic-bezier(.15,.7,.35,1) forwards}
+.ai-progress>span{font-size:13px;color:var(--muted-foreground)}
+.ai-progress.done .ai-progress-bar i{width:100%;animation:none;transition:width .3s}
+@keyframes ai-fill{to{width:92%}}
+@media(prefers-reduced-motion:reduce){.ai-progress-bar i{animation-duration:.01s}}
