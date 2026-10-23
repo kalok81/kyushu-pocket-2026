@@ -216,16 +216,57 @@ async function readProductLink(link) {
  }
  if (got.type.startsWith('image/')) return { image: await smallJpeg(got.buf), facts: null, link: got.url.href };
  if (!/html|xml/.test(got.type)) throw new HttpsError('invalid-argument', '這個連結不是網頁或圖片。');
- const facts = pageFacts(decodeHtml(got), got.url);
+ const html = decodeHtml(got), facts = pageFacts(html, got.url);
  let image = null;
  if (facts.picture) image = await safeFetch(facts.picture).then(p => (p.type.startsWith('image/') ? smallJpeg(p.buf) : null)).catch(() => null);
- return { image, facts, link: got.url.href };
+ return { image, facts, link: got.url.href, html, base: got.url };
 }
 const pagePrompt = (t, f) => `${productPrompt(t)}
 The traveller pasted a link to this web page instead of a photo; the picture (if any) is the page's main image.
 If the page is not about one specific product (a home, category, search or shop page), reply with an empty name and confidence low.
 Use the page for the name, spec and detail; the price only if it is in ${tripInfo(t).cur} or ${tripInfo(t).home}; place: the shop or brand selling it if clear.
 Page: ${JSON.stringify({ site: f.site, title: f.title, brand: f.brand, description: f.description, price: f.price, currency: f.currency, text: f.text.slice(0, 2000) })}`;
+
+// ---- Articles that list several products (手信推介, 必買清單): the whole page through DeepSeek Fetch (Markdown, with its
+// pictures as ![](url)), the model lists each product, and each gets a small picture for the traveller to choose from.
+const articlePrompt = (t, page, pics) => `${productPrompt(t)}
+This time the traveller pasted a link to an article or list that recommends several products. List every specific product it recommends, in the order of the article, instead of one product.
+Reply with JSON only: {"items": [{"name": string, "spec": string, "detail": string, "category": string, "price": number or null, "currency": string, "place": string, "image": string}]}
+- Up to 15 items; same rules as above for each field. detail: what it is and why the article recommends it, at most 60 characters.
+- place: where the article says to buy it (shop, station, airport), at most 80 characters; empty if not said.
+- image: the number of the article's picture of that product from the Pictures list (by its heading and alt text); 0 if none.
+- Skip things that are not products to buy (restaurants, sights, hotels). Empty list if the page recommends no products.
+Article title: ${JSON.stringify(page.title || '')}
+Article (Markdown): ${String(page.content).slice(0, 14000)}
+Pictures (in page order, with the heading they come under): ${JSON.stringify((pics || []).map(({ n, alt, heading }) => ({ n, alt, heading })))}`;
+// The article's pictures in page order, each with its alt text and the heading above it (lazy-loaded data-src first).
+function articlePictures(html, base) {
+ const out = [];
+ let heading = '';
+ for (const m of html.matchAll(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>|<img\b[^>]*>/gi)) {
+  if (m[1] !== undefined) { heading = decodeEntities(m[1].replace(/<[^>]+>/g, '')).replace(/\s+/g, ' ').trim().slice(0, 80); continue; }
+  const tag = m[0], attr = k => tag.match(new RegExp(`\\s${k}=["']([^"']+)["']`, 'i'))?.[1];
+  const src = attr('data-src') || attr('data-lazy-src') || attr('data-original') || attr('src');
+  if (!src || src.startsWith('data:') || /logo|icon|sprite|avatar|banner|pixel|placeholder|\.svg|\.gif/i.test(src)) continue;
+  try { out.push({ n: out.length + 1, url: new URL(decodeEntities(src), base).href, alt: decodeEntities(attr('alt') || '').slice(0, 80), heading }); } catch {}
+ }
+ return out.slice(0, 80);
+}
+async function articleItems(url, t, pics) {
+ const page = await deepseekTool('fetch', { url });
+ if (!page?.content) return null;
+ const r = await askDeepSeek(articlePrompt(t, page, pics), [], { think: false });
+ const items = (Array.isArray(r?.items) ? r.items : []).slice(0, 15).map(x => ({ ...cleanProduct({ ...x, confidence: 'high' }, t), image: pics?.[Number(x?.image) - 1]?.url || '' }))
+  .filter(x => x.name);
+ // Pictures: 480px JPEGs, fetched in parallel (the job document stays well under Firestore's 1 MB).
+ const choices = await Promise.all(items.map(async ({ image, confidence: _c, ...x }) => ({
+  ...x,
+  photo: image ? await safeFetch(image).then(async g => (g.type.startsWith('image/') ? (await sharp(g.buf, { failOn: 'none' }).rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64') : null), () => null) : null,
+ })));
+ let size = 0;
+ for (const c of choices) if (c.photo && (size += c.photo.length) > 700000) c.photo = null;
+ return { choices, title: String(page.title || '').slice(0, 120), link: url.slice(0, 500) };
+}
 
 // ---- Notes and coupons: fill the 共用 form from a photo (coupon, sign, menu, timetable) or a web page ----
 const noteFillPrompt = (t, mode, f) => { const { place } = tripInfo(t); return `Travellers in ${place} keep notes and coupons in a shared trip app. ${f ? 'They pasted a link to the web page below' : 'They added the photo'} to a ${mode === 'coupon' ? 'coupon' : 'note'}.
@@ -300,7 +341,13 @@ cloudEvent('processReceipt', async event => {
    });
    const pics = got.image ? [got.image] : [];
    const { confidence, ...item } = cleanProduct(await askDeepSeek(got.facts ? pagePrompt(tripDoc, got.facts) : productPrompt(tripDoc), pics), tripDoc);
-   if (!item.name || confidence === 'low') throw new HttpsError('not-found', '這個連結看不到特定商品，請貼上產品頁面或產品圖片。');
+   if (!item.name || confidence === 'low') {
+    // Not one product: an article or list ("福岡手信10大推介"). The traveller picks from the products it names.
+    const list = got.facts ? await articleItems(job.url, tripDoc, got.html && articlePictures(got.html, got.base)) : null;
+    if (!list?.choices.length) throw new HttpsError('not-found', '這個連結看不到特定商品，請貼上產品頁面或產品圖片。');
+    await ref.update({ status: 'done', result: list, doneAt: Date.now() });
+    return;
+   }
    await getFirestore().collection(`trips/${trip}/shopping`).add({ ...item, url: got.link.slice(0, 500), photo: got.image && got.image.length <= 400000 ? got.image : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
    await ref.delete();
    return;

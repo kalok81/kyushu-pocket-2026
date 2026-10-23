@@ -324,12 +324,20 @@
     }
     if (d.tg === "shopPhoto") $("#shopPhotoInput")?.click();
     if (d.tg === "shopAi") $("#shopAiInput")?.click();
-    if (d.tg === "shopAiCam") $("#shopAiCam")?.click();
     if (d.tg === "shopPhotoClear") {
       shopPhoto = null;
       $("#shopPreview").innerHTML = "";
     }
     if (d.tg === "shopAdd") openShopSheet();
+    if (d.articleAll) {
+      const j = jobs.find((x) => x.id === d.articleAll),
+        picks = (articlePicks[d.articleAll] ??= new Set()),
+        all = j?.result?.choices?.length || 0;
+      if (picks.size === all) picks.clear();
+      else for (let i = 0; i < all; i++) picks.add(i);
+      repaintJobs();
+    }
+    if (d.articleAdd) addArticlePicks(d.articleAdd);
     if (d.tg === "shopPlaceAdd") {
       const rows = $("#shopPlaceRows");
       if (rows.querySelectorAll("input").length >= 6) toast("最多 6 個購買地點。");
@@ -389,11 +397,19 @@
       pickShopPhoto(e.target.files[0]);
       e.target.value = "";
     }
-    if ((e.target.id === "shopAiInput" || e.target.id === "shopAiCam") && e.target.files.length) {
+    if (e.target.id === "shopAiInput" && e.target.files.length) {
       if (state.status === "ready") queueProducts([...e.target.files]);
       e.target.value = "";
       Kit.close();
     }
+  });
+  document.addEventListener("change", (e) => {
+    const k = e.target.dataset?.articlePick;
+    if (!k) return;
+    const [id, i] = k.split(":"),
+      picks = (articlePicks[id] ??= new Set());
+    e.target.checked ? picks.add(Number(i)) : picks.delete(Number(i));
+    repaintJobs();
   });
   document.addEventListener("change", (e) => {
     const id = e.target.dataset?.check;

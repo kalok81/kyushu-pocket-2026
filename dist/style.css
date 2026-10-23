@@ -797,3 +797,11 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .ai-progress.done .ai-progress-bar i{width:100%;animation:none;transition:width .3s}
 @keyframes ai-fill{to{width:92%}}
 @media(prefers-reduced-motion:reduce){.ai-progress-bar i{animation-duration:.01s}}
+/* 購物: products listed from an article, to tick and add together */
+.article-choices .choice-list{list-style:none;margin:10px 0;padding:0;display:grid;gap:2px;max-height:60vh;overflow:auto}
+.choice-list label{display:grid;grid-template-columns:22px 56px minmax(0,1fr);gap:10px;align-items:center;padding:8px 4px;border-top:1px solid var(--border);cursor:pointer}
+.choice-list li:first-child label{border-top:0}
+.choice-list input{width:20px;height:20px;margin:0}
+.choice-list img,.choice-ph{width:56px;height:56px;border-radius:8px;object-fit:cover;background:var(--muted-bg);display:grid;place-items:center;color:var(--muted-foreground)}
+.choice-list b{display:block;font-size:15px;line-height:1.4}
+.choice-list small{display:block;font-size:13px;color:var(--muted-foreground);line-height:1.45}

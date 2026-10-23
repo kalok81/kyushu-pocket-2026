@@ -332,6 +332,23 @@ try {
   await page.goto(base + '/#explore'); await page.waitForSelector('#results .card.place');
   for (const name of ['仲見世通り', '淺草寺（雷門）']) assert.match(await page.locator('#results .card.place', { hasText: name }).first().locator('.buy-here').innerText(), /雷門せんべい/);
  });
+ await step('shopping: an article link lists its products to pick from', async () => {
+  await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
+  await page.fill('[data-tg-form=shopLink] [name=url]', 'https://news.example.com/fukuoka-10'); await page.click('[data-tg-form=shopLink] button[type=submit]');
+  await page.evaluate(async () => {
+   const fs = await import('./vendor/firebase/firebase-firestore.js'), jobs = globalThis.__fakeStore.receiptJobs || {};
+   const id = Object.keys(jobs).find((k) => jobs[k].url === 'https://news.example.com/fukuoka-10');
+   await fs.updateDoc({ c: 'receiptJobs', id }, { status: 'done', result: { title: '福岡手信10大推介', link: 'https://news.example.com/fukuoka-10', choices: [
+    { name: '博多通饅頭（博多通りもん）', qty: '8個入', detail: '牛油奶香饅頭', cat: 'food', place: '博多駅', price: 1200, currency: 'JPY', photo: null },
+    { name: '二◯加煎餅', qty: '', detail: '面具形煎餅', cat: 'food', place: '福岡空港', price: null, currency: 'JPY', photo: null },
+   ] } });
+  });
+  await page.waitForSelector('.article-choices'); assert.match(await page.locator('.article-choices').innerText(), /找到 2 件[\s\S]*博多通饅頭[\s\S]*二◯加煎餅/);
+  assert.equal(await page.locator('[data-article-add]').isDisabled(), true, 'nothing ticked yet');
+  await page.locator('[data-article-pick$=":1"]').check(); await page.click('[data-article-add]');
+  await page.waitForFunction(() => !document.querySelector('.article-choices'));
+  await page.waitForSelector('.shop-item:has-text("二◯加煎餅")'); assert.equal(await page.locator('.shop-item:has-text("博多通饅頭")').count(), 0);
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

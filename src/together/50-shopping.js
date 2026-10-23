@@ -43,11 +43,67 @@
     fs.addDoc(tcol("receiptJobs"), { url: url.slice(0, 500), kind: "product", file: host.slice(0, 120), status: "pending", by: state.user.uid, byName: me().name, at: Date.now(), createdAt: fs.serverTimestamp() }).catch(() => toast("未能送出連結，請確認你仍在旅伴名單。"));
     toast("已送出連結，AI 會在背景讀取並加入清單");
   }
+  // An article link that lists several products comes back as choices: tick the ones to buy, then add them together.
+  const articlePicks = {},
+    repaintJobs = () => {
+      const el = $('[data-tg-live="jobs"]');
+      if (el) el.innerHTML = productJobsHtml();
+    };
+  function choicesHtml(j) {
+    const r = j.result,
+      picks = (articlePicks[j.id] ??= new Set()),
+      cur = (c) => (c.price != null ? esc(S.format(S.toMinor(c.price, c.currency), c.currency)) : "");
+    return `<article class="tg-item article-choices" data-draft="${esc(j.id)}"><div class="tg-meta">${Kit.badge(`找到 ${r.choices.length} 件`)}<span>${esc(r.title || j.file)}</span></div><ul class="choice-list">${r.choices
+      .map(
+        (c, i) =>
+          `<li><label><input type="checkbox" data-article-pick="${esc(j.id)}:${i}"${picks.has(i) ? " checked" : ""}>${c.photo ? `<img src="${photoSrc(c.photo)}" alt="">` : `<span class="choice-ph">${icon("bag")}</span>`}<span><b>${esc(c.name)}</b><small>${[c.qty, cur(c), c.place].filter(Boolean).map(esc).join(" · ")}</small>${c.detail ? `<small>${esc(c.detail)}</small>` : ""}</span></label></li>`,
+      )
+      .join("")}</ul><div class="links">${Kit.btn(`加入所選（${picks.size}）`, { variant: "primary", size: "sm", icon: "plus", attrs: { "data-article-add": j.id, disabled: !picks.size } })}${Kit.btn(picks.size === r.choices.length ? "全部不選" : "全選", { size: "sm", attrs: { "data-article-all": j.id } })}${Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": j.id } })}</div></article>`;
+  }
+  async function addArticlePicks(id) {
+    const j = jobs.find((x) => x.id === id),
+      picks = [...(articlePicks[id] || [])].sort((a, b) => a - b);
+    if (!j?.result?.choices || !picks.length) return;
+    const { fs } = fb;
+    let n = 0;
+    for (const i of picks) {
+      const c = j.result.choices[i];
+      if (!c) continue;
+      await fs
+        .addDoc(tcol("shopping"), {
+          name: c.name,
+          qty: c.qty || "",
+          detail: c.detail || "",
+          cat: SHOP_CATS[c.cat] ? c.cat : "other",
+          place: c.place || "",
+          price: c.price ?? null,
+          currency: pickCur(c.currency),
+          photo: c.photo && c.photo.length <= 400000 ? c.photo : null,
+          ...(j.result.link ? { url: j.result.link } : {}),
+          bought: false,
+          boughtBy: null,
+          boughtAt: null,
+          ai: true,
+          by: state.user.uid,
+          byName: me().name,
+          at: Date.now() + n,
+          createdAt: fs.serverTimestamp(),
+        })
+        .then(() => n++, (e) => console.error(e));
+    }
+    if (n) {
+      fs.deleteDoc(jobRef(id)).catch(() => {});
+      delete articlePicks[id];
+      toast(`已加入 ${n} 件物品`);
+    } else toast("未能加入，請再試。");
+  }
   function productJobsHtml() {
-    const pj = jobs.filter((j) => j.kind === "product");
-    if (!pj.length) return "";
+    const pj = jobs.filter((j) => j.kind === "product" && !j.result?.choices),
+      lists = jobs.filter((j) => j.kind === "product" && j.status === "done" && j.result?.choices?.length);
+    if (!pj.length && !lists.length) return "";
+    if (!pj.length) return `<div class="tg-drafts">${lists.map(choicesHtml).join("")}</div>`;
     const busy = pj.filter((j) => j.status !== "failed").length;
-    return `<div class="tg-drafts"><div class="tg-drafts-head"><b>${busy ? `AI 辨識中 ${busy} 項` : "未能辨識"}</b></div>${pj
+    return `<div class="tg-drafts">${lists.map(choicesHtml).join("")}<div class="tg-drafts-head"><b>${busy ? `AI 辨識中 ${busy} 項` : "未能辨識"}</b></div>${pj
       .map((j) => {
         const st = jobState(j),
           fail = st === "fail",
@@ -217,7 +273,7 @@
   }
   function shopForm(x) {
     const v = (k) => esc(x?.[k] ?? "");
-    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div>${Kit.btn("加相片（AI 填寫空白欄位）", { icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopPhoto" } })}<input type="file" accept="image/*" id="shopPhotoInput" hidden><p class="note" id="shopFillInfo">加相片，或輸入物品名稱後按「AI 按名稱填寫」，AI 會把資料填入空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label>${Kit.btn("AI 按名稱填寫", { size: "sm", variant: "secondary", icon: "sparkles", cls: "shop-find-all", attrs: { "data-tg": "shopFindAll" } })}<div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
+    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div>${x ? Kit.btn(shopPhoto ? "更換相片" : "加相片", { icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopPhoto" } }) : ""}<input type="file" accept="image/*" id="shopPhotoInput" hidden><p class="note" id="shopFillInfo">${x ? "加相片後可按「用相片重新 AI 分析」；" : ""}輸入物品名稱後按「AI 按名稱填寫」，AI 會上網找資料填入空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label>${Kit.btn("AI 按名稱填寫", { size: "sm", variant: "secondary", icon: "sparkles", cls: "shop-find-all", attrs: { "data-tg": "shopFindAll" } })}<div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
       .map(([k, v]) => `<option value="${k}"${(x ? shopCat(x) : "food") === k ? " selected" : ""}>${v}</option>`)
       .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div><div class="links">${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}${Kit.btn("AI 找購買地點", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-tg": "shopFindPlaces" } })}</div><p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。「AI 找購買地點」會上網搜尋目的地有售的地方。</p></fieldset><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
@@ -241,7 +297,7 @@
       `${Kit.sheetHead(x ? "修改物品" : "加入購物清單")}${
         x
           ? ""
-          : `<section class="shop-ai"><p class="shop-ai-title">${icon("sparkles")}<b>AI 認物品，自動加入</b></p><div class="links">${Kit.btn("影相", { variant: "primary", icon: "camera", attrs: { "data-tg": "shopAiCam" } })}${Kit.btn("上載相片", { variant: "secondary", icon: "image", attrs: { "data-tg": "shopAi" } })}</div><input type="file" accept="image/*" capture="environment" id="shopAiCam" hidden><input type="file" accept="image/*" id="shopAiInput" multiple hidden><form class="tg-form shop-link" data-tg-form="shopLink"><label>或貼上產品網頁／圖片連結<span class="searchrow"><input name="url" class="search" type="url" inputmode="url" autocomplete="off" placeholder="https://…" required>${Kit.btn("讀取", { type: "submit", variant: "secondary" })}</span></label></form><p class="note">AI 會認出物品、規格及價錢並加入清單，之後可以修改；也可以在購物頁直接貼上截圖。</p></section><p class="form-divider"><span>或自己輸入</span></p>`
+          : `<section class="shop-ai"><p class="shop-ai-title">${icon("sparkles")}<b>AI 認物品，自動加入</b></p>${Kit.btn("影相／上載相片（可多張）", { variant: "primary", icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopAi" } })}<input type="file" accept="image/*" id="shopAiInput" multiple hidden><form class="tg-form shop-link" data-tg-form="shopLink"><label>或貼上產品網頁／圖片連結<span class="searchrow"><input name="url" class="search" type="url" inputmode="url" autocomplete="off" placeholder="https://…" required>${Kit.btn("讀取", { type: "submit", variant: "secondary" })}</span></label></form><p class="note">手機會讓你選擇影相或從相簿揀相。AI 會認出物品、規格及價錢並加入清單，之後可以修改；也可以在購物頁直接貼上截圖。產品網頁、圖片，或「手信推介」一類列出多款產品的文章都可以貼上。</p></section><p class="form-divider"><span>或自己輸入</span></p>`
       }${shopForm(x)}`,
     );
   }
