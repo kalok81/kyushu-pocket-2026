@@ -419,8 +419,9 @@ window.startTrip = (meta = {}) => {
       `<div class="detail-badges">${Kit.badge(esc(cat), catCls)}<span>${esc(areaOf(p) || p.v[0])}</span></div><h2 class="detailtitle">${esc(p.v[1])}${zhLine(p.zh)}</h2>${p.v[9]?.includes("已閉店") ? '<p class="closed">已結業 · 保留原有記錄</p>' : ""}<div class="detail-actions">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}<button class="save btn btn-outline btn-icon${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"}" aria-pressed="${on}">${icon("star")}</button>${Kit.btn("編輯", { icon: "edit", iconOnly: true, attrs: { "data-place-edit": p.id } })}${Kit.menu([
         { label: "複製地址", icon: "copy", attrs: { "data-copy": p.v[3] || p.v[1] } },
         { label: "刪除地點", icon: "trash", danger: true, attrs: { "data-place-delete": p.id } },
-      ])}</div><div class="detail-actions detail-links">${Kit.btn("導航", { href: route(p.v[1] + " " + p.v[3]), external: true, icon: "nav" })}${Kit.btn("Google 地圖", { href: placeMap(p), external: true, icon: "map" })}</div><div class="info-list">${[
-        p.v[3] && row("pin", "地址", esc(p.v[3]), Kit.btn("複製地址", { icon: "copy", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-copy": p.v[3] } })),
+      ])}</div><div class="info-list">${[
+        // Address with its map, directions and copy buttons as small icons (map and directions even without an address).
+        row("pin", "地址", esc(p.v[3] || "未有地址"), `<span class="row-tools">${Kit.btn("Google 地圖", { href: placeMap(p), external: true, icon: "map", iconOnly: true, variant: "ghost", size: "sm" })}${Kit.btn("導航", { href: route(p.v[1] + " " + p.v[3]), external: true, icon: "nav", iconOnly: true, variant: "ghost", size: "sm" })}${p.v[3] ? Kit.btn("複製地址", { icon: "copy", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-copy": p.v[3] } }) : ""}</span>`),
         p.v[4] && row("sparkles", "必吃・必買・特色", esc(p.v[4])),
         p.v[5] && row("clock", "價錢及營業時間", esc(p.v[5])),
         p.v[11] && row("note", "備註及預約", esc(p.v[11])),
