@@ -10,7 +10,7 @@
 - `src/app/*.js` → `dist/app.js`：旅程頁面（總覽、行程、探索、附近、住宿、機票、資料簿）。
 - `src/together/*.js` → `dist/together.js`：登入、選擇旅程、Firestore 同步，以及共用、購物、我的旅程頁面。
 - 每組檔案按功能分開（檔名前的數字是合併次序），由 `node scripts/build.mjs` 合併成 `dist/` 的同名檔案；同一組檔案共用變數，毋須模組或打包工具。**修改 `src/` 後要執行 build**，`scripts/validate.mjs` 會檢查 `dist/` 是否最新。
-- `dist/style.css`：版面；`dist/design.css`：統一設計規範（顏色變數、按鈕、標籤、選單、底部視窗、頁頭等元件樣式），改顏色或圓角只需改檔案頂部的變數。
+- `dist/style.css`：唯一的樣式檔：頂部的顏色、圓角及陰影變數，基本元素，`Kit` 元件（按鈕、標籤、選單、底部視窗、頁頭等），然後是各頁版面。改顏色或圓角只需改頂部的變數。
 - `dist/ui.js`：確認、輸入及提示視窗（SweetAlert2，網頁載入後才在閒置時下載，載入失敗時改用瀏覽器內置視窗）。
 - `dist/split.js`：分帳計算（各貨幣分開，或按匯率合併成自己的貨幣）。
 - `dist/weather.js`：每日天氣（Open-Meteo，免費、毋須 API key，只傳送約 1 公里精度的座標；手機快取 3 小時）。

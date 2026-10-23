@@ -4,7 +4,13 @@
   function renderNearby() {
     const coordinates = window.TRIP_GEO?.places || {},
       coverage = places.filter((p) => (coordinates[p.id] || []).length).length;
-    return `${header("附近", "只找已加入的地點，按直線距離由近至遠排序")}<section class="nearby-panel"><button class="locate-button" id="locateNow"${nearbyState.loading ? ' disabled aria-busy="true"' : ""}>${nearbyState.loading ? "正在取得位置…" : nearbyState.position ? `${icon("locate")} 重新定位` : `${icon("locate")} 定位看附近`}</button><button class="action map-pick-button" id="pickOnMap">${icon("pin")} 在地圖選位置</button><p class="nearby-help">手機定位：按下後請允許瀏覽器使用位置。你的位置只在這次網頁內計算，不會儲存或傳送到網站伺服器。</p><div class="chips" role="group" aria-label="附近距離範圍">${[100, 200, 500].map((r) => `<button class="chip ${nearbyState.radius === r ? "active" : ""}" data-radius="${r}" aria-pressed="${nearbyState.radius === r}">${r}米</button>`).join("")}</div><div class="chips" role="group" aria-label="附近地點分類">${["全部", ...exploreCats, "購物"].map((c) => `<button class="chip ${nearbyState.category === c ? "active" : ""}" data-near-category="${c}" aria-pressed="${nearbyState.category === c}">${c === "購物" ? `${icon("bag")} 購物` : c}</button>`).join("")}</div>${nearbyState.category === "購物" ? '<p class="note">按購物清單中未買物品的「購買地點」定位。</p>' : ""}<div id="nearbyStatus" role="status" aria-live="polite">${nearbyState.error ? `<div class="notice nearby-error">${esc(nearbyState.error)}</div>` : nearbyState.loading ? "<p>定位中，請稍候…</p>" : nearbyState.position && nearbyState.mode === "manual" ? '<p class="note">📍 以地圖選取的位置為中心 · 距離並非從手機目前位置計算</p>' : nearbyState.position ? `<p class="note">已取得位置 · 定位精度約 ±${Math.ceil(nearbyState.accuracy)}米${nearbyState.accuracy > nearbyState.radius ? "；誤差大於所選範圍，建議到室外重新定位或選較大範圍。" : ""}</p>` : '<p class="note">尚未選取位置。選擇範圍後，可用手機定位或在地圖選位置。</p>'}</div></section><div id="nearbyResults"></div><p class="note">距離為直線估算，並非步行路程；樓層、入口及河道可能影響實際路程。已建立座標 ${coverage}/${places.length} 個地點；未有可靠座標的項目暫不納入附近結果。</p><p class="note">座標來源：店方／場地地圖及公開地點資料。<button class="action" id="nearbyCoverage">查看座標覆蓋情況</button></p>`;
+    return `${header("附近", "只找已加入的地點，按直線距離由近至遠排序")}<section class="nearby-panel"><div class="links">${Kit.btn(nearbyState.loading ? "正在取得位置…" : nearbyState.position ? "重新定位" : "定位看附近", { variant: "primary", icon: "locate", attrs: { id: "locateNow", disabled: nearbyState.loading, "aria-busy": nearbyState.loading ? "true" : null } })}${Kit.btn("在地圖選位置", { icon: "pin", attrs: { id: "pickOnMap" } })}</div><p class="nearby-help">手機定位：按下後請允許瀏覽器使用位置。你的位置只在這次網頁內計算，不會儲存或傳送到網站伺服器。</p>${Kit.chips(
+      [100, 200, 500].map((r) => ({ label: `${r}米`, active: nearbyState.radius === r, attrs: { "data-radius": r } })),
+      { label: "附近距離範圍" },
+    )}${Kit.chips(
+      ["全部", ...exploreCats, "購物"].map((c) => ({ label: c, icon: c === "購物" ? "bag" : "", active: nearbyState.category === c, attrs: { "data-near-category": c } })),
+      { label: "附近地點分類" },
+    )}${nearbyState.category === "購物" ? '<p class="note">按購物清單中未買物品的「購買地點」定位。</p>' : ""}<div id="nearbyStatus" role="status" aria-live="polite">${nearbyState.error ? `<div class="notice nearby-error">${esc(nearbyState.error)}</div>` : nearbyState.loading ? "<p>定位中，請稍候…</p>" : nearbyState.position && nearbyState.mode === "manual" ? '<p class="note">以地圖選取的位置為中心 · 距離並非從手機目前位置計算</p>' : nearbyState.position ? `<p class="note">已取得位置 · 定位精度約 ±${Math.ceil(nearbyState.accuracy)}米${nearbyState.accuracy > nearbyState.radius ? "；誤差大於所選範圍，建議到室外重新定位或選較大範圍。" : ""}</p>` : '<p class="note">尚未選取位置。選擇範圍後，可用手機定位或在地圖選位置。</p>'}</div></section><div id="nearbyResults"></div><p class="note">距離為直線估算，並非步行路程；樓層、入口及河道可能影響實際路程。已建立座標 ${coverage}/${places.length} 個地點；未有可靠座標的項目暫不納入附近結果。</p><p class="note">座標來源：店方／場地地圖及公開地點資料。</p>${Kit.btn("查看座標覆蓋情況", { size: "sm", variant: "ghost", attrs: { id: "nearbyCoverage" } })}`;
   }
   function nearbyResults() {
     const target = $("#nearbyResults");
@@ -21,7 +27,7 @@
       nearbyState.radius,
       nearbyState.category,
     );
-    target.innerHTML = `<div class="resultsbar"><span>${nearbyState.radius}米內 · ${rs.length} 個已加入地點</span></div>${rs.length ? `<div class="cardgrid">${rs.map((r) => placeCard(r.place, r)).join("")}</div>` : `<div class="empty"><h2>這個範圍內暫時沒有符合的地點</h2><p>可試試較大範圍、其他分類，或重新定位。</p><a class="action" href="#explore">查看全部地點 →</a></div>`}`;
+    target.innerHTML = `<div class="resultsbar"><span>${nearbyState.radius}米內 · ${rs.length} 個已加入地點</span></div>${rs.length ? `<div class="cardgrid">${rs.map((r) => placeCard(r.place, r)).join("")}</div>` : Kit.empty("這個範圍內暫時沒有符合的地點", "可試試較大範圍、其他分類，或重新定位。", Kit.btn("查看全部地點", { href: "#explore", size: "sm" }))}`;
   }
   // 附近 › 購物: shopping spots (explore shops or geocoded 購買地點) within the radius, nearest first.
   function shoppingNearby(target) {
@@ -35,10 +41,10 @@
         ? `<div class="cardgrid">${spots
             .map((s) => {
               const p = s.placeId && places.find((x) => x.id === s.placeId);
-              return `<article class="card place"><div class="place-top"><span class="badge shop">購物</span></div><h3>${esc(s.name)}</h3><div class="distance-badge">距離約 ${Math.round(s.distance)} 米</div><p class="buy-here">🛍 可買：${s.items.map(esc).join("、")}</p>${s.address ? `<p class="note">${esc(s.address)}</p>` : ""}<div class="actions">${p ? `<button class="action primary" data-place="${esc(p.id)}">店舖資料</button>` : ""}${link(route(p ? `${p.v[1]} ${p.v[3]}` : s.address), "導航")}</div></article>`;
+              return `<article class="card place"><div class="place-top">${Kit.badge("購物", "shop")}</div><h3>${esc(s.name)}</h3><div class="distance-badge">距離約 ${Math.round(s.distance)} 米</div><p class="buy-here">${icon("bag")} 可買：${s.items.map(esc).join("、")}</p>${s.address ? `<p class="note">${esc(s.address)}</p>` : ""}<div class="actions">${p ? Kit.btn("店舖資料", { variant: "secondary", size: "sm", attrs: { "data-place": p.id } }) : ""}${link(route(p ? `${p.v[1]} ${p.v[3]}` : s.address), "導航")}</div></article>`;
             })
             .join("")}</div>`
-        : '<div class="empty"><h2>這個範圍內暫時沒有可買清單物品的地方</h2><p>購物清單中未買、而且有「購買地點」的物品才會顯示。可試試較大範圍。</p><a class="action" href="#shopping">查看購物清單 →</a></div>'
+        : Kit.empty("這個範圍內暫時沒有可買清單物品的地方", "購物清單中未買、而且有「購買地點」的物品才會顯示。可試試較大範圍。", Kit.btn("查看購物清單", { href: "#shopping", size: "sm" }))
     }`;
   }
   function refreshNearby() {
@@ -119,6 +125,6 @@
     const geo = window.TRIP_GEO?.places || {},
       missing = places.filter((p) => !(geo[p.id] || []).length);
     openDialog(
-      `<div class="eyebrow">LOCATION COVERAGE</div><h2 class="detailtitle">座標覆蓋情況</h2><p>已建立 ${places.length - missing.length}/${places.length} 個地點座標。範圍較大的景點以標示位置計算；沒有可靠位置的項目不以區域中心代替。</p>${missing.length ? `<h3>尚未納入附近結果</h3><ul>${missing.map((p) => `<li>${esc(p.v[1])}</li>`).join("")}</ul>` : "<p>所有清單地點均已建立座標。</p>"}`,
+      `${Kit.sheetHead("座標覆蓋情況")}<p>已建立 ${places.length - missing.length}/${places.length} 個地點座標。範圍較大的景點以標示位置計算；沒有可靠位置的項目不以區域中心代替。</p>${missing.length ? `<h3>尚未納入附近結果</h3><ul>${missing.map((p) => `<li>${esc(p.v[1])}</li>`).join("")}</ul>` : "<p>所有清單地點均已建立座標。</p>"}`,
     );
   }

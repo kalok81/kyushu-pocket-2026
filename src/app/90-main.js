@@ -137,7 +137,10 @@
     if (el.dataset.planPick !== undefined) pickPlaceForPlan(selectedDay);
     if (el.dataset.ppCat) {
       ppCat = el.dataset.ppCat;
-      document.querySelectorAll("[data-pp-cat]").forEach((b) => b.classList.toggle("active", b.dataset.ppCat === ppCat));
+      document.querySelectorAll("[data-pp-cat]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.ppCat === ppCat);
+        b.setAttribute("aria-pressed", b.dataset.ppCat === ppCat);
+      });
       ppResults();
     }
     if (el.dataset.ppAdd) addPickedPlace(el.dataset.ppAdd);

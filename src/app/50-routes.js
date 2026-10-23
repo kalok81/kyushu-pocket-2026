@@ -105,7 +105,7 @@
     routeCtx = { day, i, origins, mode: "TRANSIT" };
     const start = origins.find((o) => o.key === def)?.time || "";
     openDialog(
-      `<div class="eyebrow">GETTING THERE · DAY ${day}</div><h2 class="detailtitle" id="routeTitle">前往 ${esc(to.title)}</h2>${dests.length > 1 ? `<div class="tg-form route-form"><label>目的地（同一時間有 ${dests.length} 個選擇）<select id="routeTo">${dests.map((k) => `<option value="${k}"${k === i ? " selected" : ""}>${esc(list[k].title)}</option>`).join("")}</select></label></div>` : ""}${
+      `<div class="eyebrow">交通 · D${day}</div><h2 class="detailtitle" id="routeTitle">前往 ${esc(to.title)}</h2>${dests.length > 1 ? `<div class="tg-form route-form"><label>目的地（同一時間有 ${dests.length} 個選擇）<select id="routeTo">${dests.map((k) => `<option value="${k}"${k === i ? " selected" : ""}>${esc(list[k].title)}</option>`).join("")}</select></label></div>` : ""}${
         origins.length
           ? `<div class="tg-form route-form"><label>出發地<select id="routeFrom">${origins.map((o) => `<option value="${esc(o.key)}"${o.key === def ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</select></label><div class="tg-row"><label>出發時間<input id="routeTime" type="time" value="${esc(start || "09:00")}"></label><label>方式<select id="routeMode">${Object.entries(
               ROUTE_MODES,
@@ -113,9 +113,9 @@
               .map(([k, [v]]) => `<option value="${k}">${v}</option>`)
               .join(
                 "",
-              )}</select></label></div><button type="button" class="locate-button" id="routeGo">查詢路線建議</button></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
+              )}</select></label></div>${Kit.btn("查詢路線建議", { variant: "primary", cls: "btn-block", attrs: { id: "routeGo" } })}</div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
           : '<p class="note">這天前面沒有站點，亦未有住宿資料，未能查詢路線；可以自行填寫。</p>'
-      }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label><button type="submit" class="action primary">儲存交通</button></form>`,
+      }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label>${Kit.btn("儲存交通", { type: "submit", variant: "secondary" })}</form>`,
     );
   }
   async function runRoutes() {
@@ -129,7 +129,7 @@
       time = $("#routeTime").value || "09:00";
     c.mode = mode;
     const gm = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from.point.address || `${from.point.lat},${from.point.lng}`)}&destination=${encodeURIComponent(dest.address || `${dest.lat},${dest.lng}`)}&travelmode=${ROUTE_MODES[mode][1]}`;
-    const gmLink = `<a class="action" href="${gm}" target="_blank" rel="noopener">在 Google 地圖查看 ↗</a><button type="button" class="action primary" data-route-ai>✨ AI 分析</button>`;
+    const gmLink = `${Kit.btn("在 Google 地圖查看", { href: gm, external: true, size: "sm", icon: "map" })}${Kit.btn("AI 分析", { variant: "secondary", size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}`;
     c.ai = { from, to, dest, time };
     if (mode === "TRANSIT" && meta.country === "JP") {
       box.innerHTML = `<div class="notice">Google 不向其他網站提供日本的公共交通路線，只可以在 Google 地圖 App 內查看。請按下面按鈕查看，揀好路線後在下面「交通」填寫；步行和駕車可以直接在這裡查詢。</div><div class="links">${gmLink}</div>`;
@@ -146,7 +146,7 @@
       });
       c.options = r.options;
       box.innerHTML = r.options.length
-        ? `${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol><button type="button" class="action primary" data-route-pick="${k}">選用這個</button></div>`).join("")}<div class="links">${gmLink}</div>`
+        ? `${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": k } })}</div>`).join("")}<div class="links">${gmLink}</div>`
         : `<p class="note">Google 地圖找不到${ROUTE_MODES[mode][0]}路線。</p><div class="links">${gmLink}</div>`;
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p><div class="links">${gmLink}</div>`;
@@ -165,7 +165,7 @@
       box = $("#routeAi");
     if (!c?.ai || !box) return;
     const { from, to, dest, time } = c.ai;
-    box.innerHTML = '<div class="route-ai-wait"><b>✨ AI 正在考慮路線…</b><p class="note">大約需要 10–30 秒。</p></div>';
+    box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} AI 正在考慮路線…</b><p class="note">大約需要 10–30 秒。</p></div>`;
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     try {
       const r = await window.Together.aiRoutes({
@@ -185,7 +185,7 @@
       });
       c.aiOptions = r.options;
       box.innerHTML = r.options.length
-        ? `<div class="route-ai-head"><b>✨ AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}<button type="button" class="action primary" data-route-ai-pick="${k}">選用這個</button></div>`).join("")}`
+        ? `<div class="route-ai-head"><b>${icon("sparkles")} AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-ai-pick": k } })}</div>`).join("")}`
         : '<p class="note">AI 未能提供路線建議。</p>';
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(fnError(e, "未能進行 AI 分析，請檢查網絡後再試。"))}</p>`;

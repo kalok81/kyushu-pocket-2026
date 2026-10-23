@@ -78,8 +78,8 @@ try {
   await page.goto(base + '/#hotels'); await page.click('[data-hotel-new]'); await page.fill('#hotelForm [name=name]', '測試酒店'); await page.click('#hotelForm button[type=submit]');
   const delHotel = async () => { await page.click('.card.hotel .more summary'); await page.click('[data-hotel-del]:visible'); await page.waitForSelector('.ui-pop'); };
   await page.waitForSelector('.card.hotel'); await delHotel();
-  await page.click('.ui-pop .action'); await page.waitForTimeout(300); assert.equal(await page.locator('.card.hotel').count(), 1, 'cancel keeps the hotel');
-  await delHotel(); await page.click('.ui-pop .locate-button');
+  await page.click('.ui-pop .btn-outline'); await page.waitForTimeout(300); assert.equal(await page.locator('.card.hotel').count(), 1, 'cancel keeps the hotel');
+  await delHotel(); await page.click('.ui-pop .btn-danger');
   await page.waitForFunction(() => !document.querySelector('.card.hotel'));
  });
  await step('plan: add a hotel from 住宿 as a stop', async () => {
@@ -156,7 +156,7 @@ try {
   const text = await page.locator('#notebookResults').innerText();
   for (const want of ['淺草寺', '上野酒店', '蘋果批']) assert.match(text, new RegExp(want), `notebook should list ${want}`);
   assert.equal(await page.locator('#moreNotebook').count(), 0);
-  assert.doesNotMatch(await page.locator('.sourcefooter').first().innerText(), /資料快照/);
+  assert.doesNotMatch(await page.locator('#app').innerText(), /資料快照/);
   await page.click('[data-notebook-type=行程]'); assert.match(await page.locator('#notebookResults').innerText(), /D1 1\/4\/2030 · 10:00/);
   await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detail a[href^="#plan?day="]'); await page.keyboard.press('Escape');
   await page.click('[data-notebook-type=購物]'); await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detailBody .shop-item');

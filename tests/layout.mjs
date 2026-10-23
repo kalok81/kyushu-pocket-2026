@@ -15,6 +15,7 @@ const checks=()=>{
  const W=innerWidth,res=[],vis=e=>{const s=getComputedStyle(e);return s.display!=='none'&&s.visibility!=='hidden'&&e.getClientRects().length};
  const name=e=>{let s=e.tagName.toLowerCase();if(e.id)s+='#'+e.id;if(e.className&&typeof e.className==='string')s+='.'+e.className.trim().split(/\s+/).slice(0,2).join('.');const t=(e.innerText||e.value||'').trim().replace(/\s+/g,' ').slice(0,40);return s+(t?` "${t}"`:'')};
  const scroller=e=>{for(let a=e.parentElement;a;a=a.parentElement){const s=getComputedStyle(a);if(/(auto|scroll)/.test(s.overflowX)&&a.scrollWidth>a.clientWidth)return true}return false};
+ if(/\$\{[A-Za-z]/.test(document.body.innerHTML))res.push(['TEMPLATE','a ${…} placeholder was printed instead of filled in']);
  if(document.documentElement.scrollWidth>W+1)res.push(['PAGE-HSCROLL',`page is ${document.documentElement.scrollWidth}px wide in ${W}px`]);
  const root=document.querySelector('#detail[open]')||document.body;
  for(const e of root.querySelectorAll('*')){

@@ -150,15 +150,15 @@
       (d.status === "done" || d.status === "fail") && d.photos.length
         ? `<label class="tg-pick"><input type="checkbox" data-draft-pick="${d.key}"${picked.has(d.key) ? " checked" : ""}> 選擇</label>`
         : "";
-    const head = `<div class="tg-meta"><span class="badge">${STATUS[d.status]}</span><span>${esc(d.file)}</span>${pick}</div>`,
-      retry = d.retry ? `<button type="button" class="smallbtn" data-draft-retry="${d.key}">重試</button>` : "",
-      drop = `<button type="button" class="smallbtn" data-draft-drop="${d.key}">捨棄</button>`;
+    const head = `<div class="tg-meta">${Kit.badge(STATUS[d.status])}<span>${esc(d.file)}</span>${pick}</div>`,
+      retry = d.retry ? Kit.btn("重試", { size: "sm", icon: "redo", attrs: { "data-draft-retry": d.key } }) : "",
+      drop = Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": d.key } });
     if (d.status !== "done" && d.status !== "fail")
       return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-progress tg-progress-busy"><div></div></div>${d.retry ? `<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>` : ""}</article>`;
     if (d.status === "fail")
       return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error || "未能讀取。")}</p><div class="links">${retry}${drop}</div></article>`;
     const warn = draftDup(d, all) || d.warn;
-    return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
+    return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links">${Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-draft-add": d.key } })}${drop}</div></article>`;
   }
   function renderDrafts() {
     const box = $("#tgDrafts");
@@ -179,14 +179,14 @@
     const suggestions = mergeGroups(all)
       .map(
         (g) =>
-          `<div class="notice tg-merge">🧾 ${esc(g.map((d) => d.file).join("、"))} 似乎是同一張收據的不同部分。<button type="button" class="action primary" data-tg="mergeDrafts" data-keys="${g.map((d) => d.key).join(",")}">合併並重新分析</button></div>`,
+          `<div class="notice tg-merge">${esc(g.map((d) => d.file).join("、"))} 似乎是同一張收據的不同部分。${Kit.btn("合併並重新分析", { variant: "secondary", size: "sm", attrs: { "data-tg": "mergeDrafts", "data-keys": g.map((d) => d.key).join(",") } })}</div>`,
       )
       .join("");
     const pickedBar =
       picked.size >= 2
-        ? `<div class="notice tg-merge">已選 ${picked.size} 張相片。<button type="button" class="action primary" data-tg="mergeDrafts" data-keys="${[...picked].join(",")}">合併所選（同一張收據）</button></div>`
+        ? `<div class="notice tg-merge">已選 ${picked.size} 張相片。${Kit.btn("合併所選（同一張收據）", { variant: "secondary", size: "sm", attrs: { "data-tg": "mergeDrafts", "data-keys": [...picked].join(",") } })}</div>`
         : "";
-    box.innerHTML = `${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready ? `<button type="button" class="action primary" data-tg="draftsAddAll">全部加入（${ready}）</button>` : ""}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading ? `${uploading} 張正在上載${navigator.onLine ? "" : "（離線中，有網絡時會繼續）"}。` : ""}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」使用下面表格的設定；有 ⚠️ 的不會在「全部加入」時加入。</p>${all.map((d) => draftHtml(d, all)).join("")}`;
+    box.innerHTML = `${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready ? Kit.btn(`全部加入（${ready}）`, { variant: "primary", size: "sm", icon: "check", attrs: { "data-tg": "draftsAddAll" } }) : ""}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading ? `${uploading} 張正在上載${navigator.onLine ? "" : "（離線中，有網絡時會繼續）"}。` : ""}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」使用下面表格的設定；有 ⚠️ 的不會在「全部加入」時加入。</p>${all.map((d) => draftHtml(d, all)).join("")}`;
     if (card && field) {
       const el = box.querySelector(`[data-draft="${card.dataset.draft}"] [data-df="${field}"]`);
       if (el) el.focus();
@@ -300,7 +300,7 @@
     const e = state.expenses.find((x) => x.id === id);
     if (!e?.receipts?.length) return;
     $("#detailBody").innerHTML =
-      `<div class="eyebrow">RECEIPT</div><h2 class="detailtitle">${esc(e.title)}</h2><p class="note">${esc(dupText(e))}</p><div class="receipt-photos">載入中…</div>`;
+      `${Kit.sheetHead(esc(e.title), "收據")}<p class="note">${esc(dupText(e))}</p><div class="receipt-photos">載入中…</div>`;
     $("#detail").showModal();
     try {
       const { m, st } = await storage(),

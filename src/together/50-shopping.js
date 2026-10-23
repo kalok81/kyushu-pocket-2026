@@ -52,7 +52,7 @@
         const st = jobState(j),
           fail = st === "fail",
           retry = canRetry(j);
-        return `<article class="tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta"><span class="badge">${fail ? "未能辨識" : STATUS[st]}</span><span>${esc(j.file)}</span></div>${fail ? `<p class="note">${esc(j.error || "未能辨識。")}</p>` : '<div class="tg-progress tg-progress-busy"><div></div></div>'}${fail || retry ? `<div class="links">${retry ? `<button type="button" class="smallbtn" data-draft-retry="${esc(j.id)}">重試</button>` : ""}<button type="button" class="smallbtn" data-draft-drop="${esc(j.id)}">捨棄</button></div>` : ""}</article>`;
+        return `<article class="tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta">${Kit.badge(fail ? "未能辨識" : STATUS[st])}<span>${esc(j.file)}</span></div>${fail ? `<p class="note">${esc(j.error || "未能辨識。")}</p>` : '<div class="tg-progress tg-progress-busy"><div></div></div>'}${fail || retry ? `<div class="links">${retry ? Kit.btn("重試", { size: "sm", icon: "redo", attrs: { "data-draft-retry": j.id } }) : ""}${Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": j.id } })}</div>` : ""}</article>`;
       })
       .join("")}</div>`;
   }
@@ -66,7 +66,7 @@
   const NOTE_PHOTO_MAX = 3;
   let notePhotoDraft = [];
   const notePhotoPreview = () =>
-    notePhotoDraft.map((p, i) => `<span class="note-photo-thumb"><img src="${photoSrc(p)}" alt=""><button type="button" class="smallbtn" data-note-photo-del="${i}" aria-label="移除相片">×</button></span>`).join("");
+    notePhotoDraft.map((p, i) => `<span class="note-photo-thumb"><img src="${photoSrc(p)}" alt="">${Kit.btn("移除相片", { icon: "x", iconOnly: true, size: "sm", cls: "thumb-del", attrs: { "data-note-photo-del": i } })}</span>`).join("");
   async function addNotePhotos(files) {
     for (const file of files.slice(0, NOTE_PHOTO_MAX - notePhotoDraft.length)) {
       try {
@@ -149,30 +149,30 @@
     const n = state.notes.find((x) => x.id === id),
       p = n?.photos?.[i];
     if (!p) return;
-    $("#detailBody").innerHTML = `<div class="eyebrow">${n.kind === "coupon" ? "COUPON" : "NOTE"}</div><h2 class="detailtitle">${esc(n.title || String(n.text || "").split("\n")[0].slice(0, 40))}</h2>${n.code ? `<p class="coupon-code big"><b>${esc(n.code)}</b></p>` : ""}<img class="note-photo-full" src="${photoSrc(p)}" alt="">`;
+    $("#detailBody").innerHTML = `${Kit.sheetHead(esc(n.title || String(n.text || "").split("\n")[0].slice(0, 40)), n.kind === "coupon" ? "優惠券" : "筆記")}${n.code ? `<p class="coupon-code big"><b>${esc(n.code)}</b></p>` : ""}<img class="note-photo-full" src="${photoSrc(p)}" alt="">`;
     if (!$("#detail").open) $("#detail").showModal();
   }
   const shopPreview = () =>
     shopPhoto
-      ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片"><button type="button" class="smallbtn" data-tg="shopPhotoClear">移除相片</button>`
+      ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片">${Kit.btn("移除相片", { size: "sm", icon: "x", attrs: { "data-tg": "shopPhotoClear" } })}`
       : "";
   function shopForm(x) {
     const v = (k) => esc(x?.[k] ?? "");
-    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div><button type="button" class="action" data-tg="shopPhoto">${icon("camera")} 加相片（AI 填寫空白欄位）</button><input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
+    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div>${Kit.btn("加相片（AI 填寫空白欄位）", { icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopPhoto" } })}<input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
       .map(([k, v]) => `<option value="${k}"${(x ? shopCat(x) : "food") === k ? " selected" : ""}>${v}</option>`)
       .join("")}</select></label><label>購買地點／地址<input name="place" maxlength="500" placeholder="店名、地址，或貼上 Google 地圖連結" value="${v("place")}"></label><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
       .map((p) => `<option value="${esc(p.id)}"${x?.placeId === p.id ? " selected" : ""}>${esc(p.v[1])}${p.v[0] ? ` · ${esc(p.v[0])}` : ""}</option>`)
-      .join("")}</select></label><p class="note" id="shopPlaceInfo"></p><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div><button type="submit" class="locate-button">${x ? "儲存修改" : "加入購物清單"}</button></form>`;
+      .join("")}</select></label><p class="note" id="shopPlaceInfo"></p><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
   }
   function shopItem(x) {
     const price = x.price != null ? `<b class="shop-price">${esc(S.format(S.toMinor(x.price, x.currency), x.currency))}</b>` : "";
-    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>` : ""}<div>${itemTop(x, `<span class="badge shop-cat">${SHOP_CATS[shopCat(x)]}</span>${x.ai ? '<span class="badge">AI 填寫</span>' : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}</h3>${price}</div>${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${matchPlace(x) ? `<p class="shop-place">${icon("compass")}探索：<button type="button" class="buy-item" data-place="${esc(matchPlace(x).id)}">${esc(matchPlace(x).v[1])}</button></p>` : ""}${x.place ? `<p class="shop-place">${icon("pin")}<span>${esc(x.place)}</span></p>` : ""}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.place ? Kit.btn("地圖", { size: "sm", external: true, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}` }) : ""}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
+    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}</h3>${price}</div>${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${matchPlace(x) ? `<p class="shop-place">${icon("compass")}探索：<button type="button" class="buy-item" data-place="${esc(matchPlace(x).id)}">${esc(matchPlace(x).v[1])}</button></p>` : ""}${x.place ? `<p class="shop-place">${icon("pin")}<span>${esc(x.place)}</span></p>` : ""}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.place ? Kit.btn("地圖", { size: "sm", external: true, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}` }) : ""}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
   }
   // Photo grid: one tile per item; tapping opens the item with a large photo in the detail dialog.
   function shopTile(x) {
     const price = x.price != null ? esc(S.format(S.toMinor(x.price, x.currency), x.currency)) : "";
-    return `<button type="button" class="shop-tile${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.photo ? `<img src="${photoSrc(x.photo)}" alt="" loading="lazy">` : '<span class="shop-tile-ph" aria-hidden="true">🛍</span>'}<span class="shop-tile-name">${x.bought ? "✓ " : ""}${esc(x.name)}</span>${price ? `<span class="shop-tile-price">${price}</span>` : ""}</button>`;
+    return `<button type="button" class="shop-tile${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.photo ? `<img src="${photoSrc(x.photo)}" alt="" loading="lazy">` : `<span class="shop-tile-ph" aria-hidden="true">${icon("bag")}</span>`}<span class="shop-tile-name">${x.bought ? "✓ " : ""}${esc(x.name)}</span>${price ? `<span class="shop-tile-price">${price}</span>` : ""}</button>`;
   }
   // Add / edit sheet: AI from photos or a link first, then the form for typing an item in.
   function openShopSheet(x = null) {
@@ -194,7 +194,7 @@
     if (!$("#detail").open) $("#detail").showModal();
   }
   function shopPage() {
-    if (state.status !== "ready") return { sig: "wait", shell: '<div class="empty"><h2>正在連接…</h2></div>' };
+    if (state.status !== "ready") return { sig: "wait", shell: Kit.empty("正在連接…") };
     const todo = state.shopping.filter((x) => !x.bought),
       q = norm(state.shopSearch),
       match = (x) => !q || norm([x.name, x.qty, x.detail, x.place].join(" ")).includes(q);
@@ -204,18 +204,12 @@
       shown = state.shopCat === "all" ? byStatus : byStatus.filter((x) => shopCat(x) === state.shopCat);
     const count = (k) => byStatus.filter((x) => shopCat(x) === k).length,
       cats = [["all", "全部分類", byStatus.length], ...Object.entries(SHOP_CATS).map(([k, v]) => [k, v, count(k)]).filter(([k, , n]) => n || state.shopCat === k)]
-        .map(([k, t, n]) => `<button class="chip ${state.shopCat === k ? "active" : ""}" data-shop-cat="${k}" aria-pressed="${state.shopCat === k}">${t} ${n}</button>`)
-        .join("");
+        .map(([k, t, n]) => ({ label: `${t} ${n}`, active: state.shopCat === k, attrs: { "data-shop-cat": k } }));
     const filters = [
       ["todo", "未買", todo.length],
       ["done", "已買", state.shopping.length - todo.length],
       ["all", "全部", state.shopping.length],
-    ]
-      .map(
-        ([k, t, n]) =>
-          `<button class="chip ${state.shopFilter === k ? "active" : ""}" data-shop-filter="${k}" aria-pressed="${state.shopFilter === k}">${t} ${n}</button>`,
-      )
-      .join("");
+    ].map(([k, t, n]) => ({ label: `${t} ${n}`, active: state.shopFilter === k, attrs: { "data-shop-filter": k } }));
     const sorted = [...shown].sort((a, b) => a.bought - b.bought || (b.at || 0) - (a.at || 0)),
       block = (xs) => (state.shopView === "grid" ? `<div class="shop-grid">${xs.map(shopTile).join("")}</div>` : xs.map(shopItem).join(""));
     // All categories: one heading per category, in the order of SHOP_CATS.
@@ -240,8 +234,14 @@
           { label: '<span class="sr-only">相片</span>', icon: "grid", active: state.shopView === "grid", attrs: { "data-shop-view": "grid", title: "相片" } },
         ],
         { cls: "view-toggle", label: "顯示方式" },
-      )}</div><div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="chips shop-cats" role="group" aria-label="分類" data-tg-live="cats"></div><div class="tg-list" data-tg-live="list"></div>${Kit.fab("加入物品", { "data-tg": "shopAdd" })}`,
-      live: { status: statusBar(), jobs: productJobsHtml(), filters, cats, list },
+      )}</div><div data-tg-live="filters"></div><div data-tg-live="cats"></div><div class="tg-list" data-tg-live="list"></div>${Kit.fab("加入物品", { "data-tg": "shopAdd" })}`,
+      live: {
+        status: statusBar(),
+        jobs: productJobsHtml(),
+        filters: Kit.chips(filters, { cls: "tabs", label: "篩選" }),
+        cats: Kit.chips(cats, { cls: "shop-cats", label: "分類" }),
+        list,
+      },
     };
   }
   // Match a 購買地點 to an explore shop: the whole name, or one distinctive word of it (島本, 唐十), compared without

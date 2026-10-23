@@ -128,7 +128,10 @@
   }
   const notebookArea = (r) => r.region || "其他";
   function renderNotebook() {
-    return `${header("資料簿", "搜尋全部旅程資料，或按分類及區域篩選")}<div class="controls notebook-controls"><div class="searchrow"><input id="notebookSearch" class="search" type="search" aria-label="搜尋完整資料簿" placeholder="輸入店名、菜式、酒店、航班或日期…" value="${esc(notebookSearch)}"><select id="notebookRegion" aria-label="資料簿區域"><option>全部區域</option>${[...new Set(notebookRecords().map(notebookArea))].map((r) => `<option${r === notebookRegion ? " selected" : ""}>${esc(r)}</option>`).join("")}</select></div><div class="chips">${["全部", "餐廳", "景點", "商店", "行程", "酒店", "機票", "購物", "筆記"].map((t) => `<button class="chip ${t === notebookType ? "active" : ""}" data-notebook-type="${t}" aria-pressed="${t === notebookType}">${t}</button>`).join("")}</div></div><div id="notebookResults"></div><div class="sourcefooter">資料由旅伴在網站內輸入，所有旅伴即時同步。</div>`;
+    return `${header("資料簿", "搜尋全部旅程資料，或按分類及區域篩選")}<div class="controls notebook-controls"><div class="searchrow"><input id="notebookSearch" class="search" type="search" aria-label="搜尋完整資料簿" placeholder="輸入店名、菜式、酒店、航班或日期…" value="${esc(notebookSearch)}"><select id="notebookRegion" aria-label="資料簿區域"><option>全部區域</option>${[...new Set(notebookRecords().map(notebookArea))].map((r) => `<option${r === notebookRegion ? " selected" : ""}>${esc(r)}</option>`).join("")}</select></div>${Kit.chips(
+      ["全部", "餐廳", "景點", "商店", "行程", "酒店", "機票", "購物", "筆記"].map((t) => ({ label: t, active: t === notebookType, attrs: { "data-notebook-type": t } })),
+      { label: "類別" },
+    )}</div><div id="notebookResults"></div><p class="note">資料由旅伴在網站內輸入，所有旅伴即時同步。</p>`;
   }
   function notebookResults() {
     const all = notebookRecords(),
@@ -144,7 +147,7 @@
               .includes(q)),
       );
     $("#notebookResults").innerHTML =
-      `<div class="resultsbar"><span>找到 ${rs.length} 項${notebookSearch ? " ·「" + esc(notebookSearch) + "」" : ""}</span><button id="notebookReset" class="smallbtn">清除篩選</button></div><div class="notebook-list">${rs.map((r) => `<article class="notebook-card"><div class="notebook-meta"><span class="badge">${esc(r.type)}</span><span>${esc(r.region)}</span></div><h2>${esc(r.title)}</h2><p class="notebook-summary">${esc(r.summary)}</p>${r.sub ? `<p class="notebook-sub">${esc(r.sub)}</p>` : ""}<div class="notebook-bottom"><small>${esc(r.source)}</small><button class="action primary" data-notebook-record="${r.id}">查看詳情 →</button></div></article>`).join("")}</div>${rs.length ? "" : '<div class="empty"><h2>找不到符合的資料</h2><p>試用較短的店名、菜式或日期，或按「清除篩選」。</p></div>'}`;
+      `<div class="resultsbar"><span>找到 ${rs.length} 項${notebookSearch ? " ·「" + esc(notebookSearch) + "」" : ""}</span>${Kit.btn("清除篩選", { variant: "ghost", size: "sm", attrs: { id: "notebookReset" } })}</div><div class="notebook-list">${rs.map((r) => `<article class="notebook-card"><div class="notebook-meta">${Kit.badge(esc(r.type))}<span>${esc(r.region)}</span></div><h2>${esc(r.title)}</h2><p class="notebook-summary">${esc(r.summary)}</p>${r.sub ? `<p class="notebook-sub">${esc(r.sub)}</p>` : ""}<div class="notebook-bottom"><small>${esc(r.source)}</small>${Kit.btn("查看詳情", { variant: "secondary", size: "sm", attrs: { "data-notebook-record": r.id } })}</div></article>`).join("")}</div>${rs.length ? "" : Kit.empty("找不到符合的資料", "試用較短的店名、菜式或日期，或按「清除篩選」。")}`;
   }
   function bindNotebook() {
     notebookResults();
@@ -169,11 +172,11 @@
       return;
     }
     openDialog(
-      `<div class="eyebrow">${esc(r.type)} · ${esc(r.source)}</div><h2 class="detailtitle">${esc(r.title)}</h2>${(r.fields || [])
+      `${Kit.sheetHead(esc(r.title), `${esc(r.type)} · ${esc(r.source)}`)}${(r.fields || [])
         .filter((f) => f[1])
         .map((f) => `<section class="detail-section"><h3>${esc(f[0])}</h3><p>${esc(f[1])}</p></section>`)
         .join(
           "",
-        )}<div class="links">${r.day ? `<a class="action primary" href="#plan?day=${r.day}">在行程查看</a>` : ""}${r.placeId && places.some((p) => p.id === r.placeId) ? `<button class="action" data-place="${esc(r.placeId)}">地點資料</button>` : ""}${r.target ? link(route(r.target), "導航") : ""}${(r.urls || []).map((u, i) => link(u, "參考網站 " + (i + 1))).join("")}</div>`,
+        )}<div class="links">${r.day ? Kit.btn("在行程查看", { href: `#plan?day=${r.day}`, variant: "secondary", size: "sm", icon: "calendar" }) : ""}${r.placeId && places.some((p) => p.id === r.placeId) ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": r.placeId } }) : ""}${r.target ? link(route(r.target), "導航") : ""}${(r.urls || []).map((u, i) => link(u, "參考網站 " + (i + 1))).join("")}</div>`,
     );
   }

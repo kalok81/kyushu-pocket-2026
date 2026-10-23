@@ -693,15 +693,15 @@ window.Together = (() => {
       (d.status === "done" || d.status === "fail") && d.photos.length
         ? `<label class="tg-pick"><input type="checkbox" data-draft-pick="${d.key}"${picked.has(d.key) ? " checked" : ""}> 選擇</label>`
         : "";
-    const head = `<div class="tg-meta"><span class="badge">${STATUS[d.status]}</span><span>${esc(d.file)}</span>${pick}</div>`,
-      retry = d.retry ? `<button type="button" class="smallbtn" data-draft-retry="${d.key}">重試</button>` : "",
-      drop = `<button type="button" class="smallbtn" data-draft-drop="${d.key}">捨棄</button>`;
+    const head = `<div class="tg-meta">${Kit.badge(STATUS[d.status])}<span>${esc(d.file)}</span>${pick}</div>`,
+      retry = d.retry ? Kit.btn("重試", { size: "sm", icon: "redo", attrs: { "data-draft-retry": d.key } }) : "",
+      drop = Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": d.key } });
     if (d.status !== "done" && d.status !== "fail")
       return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-progress tg-progress-busy"><div></div></div>${d.retry ? `<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>` : ""}</article>`;
     if (d.status === "fail")
       return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error || "未能讀取。")}</p><div class="links">${retry}${drop}</div></article>`;
     const warn = draftDup(d, all) || d.warn;
-    return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links"><button type="button" class="action primary" data-draft-add="${d.key}">加入</button>${drop}</div></article>`;
+    return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links">${Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-draft-add": d.key } })}${drop}</div></article>`;
   }
   function renderDrafts() {
     const box = $("#tgDrafts");
@@ -722,14 +722,14 @@ window.Together = (() => {
     const suggestions = mergeGroups(all)
       .map(
         (g) =>
-          `<div class="notice tg-merge">🧾 ${esc(g.map((d) => d.file).join("、"))} 似乎是同一張收據的不同部分。<button type="button" class="action primary" data-tg="mergeDrafts" data-keys="${g.map((d) => d.key).join(",")}">合併並重新分析</button></div>`,
+          `<div class="notice tg-merge">${esc(g.map((d) => d.file).join("、"))} 似乎是同一張收據的不同部分。${Kit.btn("合併並重新分析", { variant: "secondary", size: "sm", attrs: { "data-tg": "mergeDrafts", "data-keys": g.map((d) => d.key).join(",") } })}</div>`,
       )
       .join("");
     const pickedBar =
       picked.size >= 2
-        ? `<div class="notice tg-merge">已選 ${picked.size} 張相片。<button type="button" class="action primary" data-tg="mergeDrafts" data-keys="${[...picked].join(",")}">合併所選（同一張收據）</button></div>`
+        ? `<div class="notice tg-merge">已選 ${picked.size} 張相片。${Kit.btn("合併所選（同一張收據）", { variant: "secondary", size: "sm", attrs: { "data-tg": "mergeDrafts", "data-keys": [...picked].join(",") } })}</div>`
         : "";
-    box.innerHTML = `${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready ? `<button type="button" class="action primary" data-tg="draftsAddAll">全部加入（${ready}）</button>` : ""}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading ? `${uploading} 張正在上載${navigator.onLine ? "" : "（離線中，有網絡時會繼續）"}。` : ""}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」使用下面表格的設定；有 ⚠️ 的不會在「全部加入」時加入。</p>${all.map((d) => draftHtml(d, all)).join("")}`;
+    box.innerHTML = `${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready ? Kit.btn(`全部加入（${ready}）`, { variant: "primary", size: "sm", icon: "check", attrs: { "data-tg": "draftsAddAll" } }) : ""}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading ? `${uploading} 張正在上載${navigator.onLine ? "" : "（離線中，有網絡時會繼續）"}。` : ""}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」使用下面表格的設定；有 ⚠️ 的不會在「全部加入」時加入。</p>${all.map((d) => draftHtml(d, all)).join("")}`;
     if (card && field) {
       const el = box.querySelector(`[data-draft="${card.dataset.draft}"] [data-df="${field}"]`);
       if (el) el.focus();
@@ -843,7 +843,7 @@ window.Together = (() => {
     const e = state.expenses.find((x) => x.id === id);
     if (!e?.receipts?.length) return;
     $("#detailBody").innerHTML =
-      `<div class="eyebrow">RECEIPT</div><h2 class="detailtitle">${esc(e.title)}</h2><p class="note">${esc(dupText(e))}</p><div class="receipt-photos">載入中…</div>`;
+      `${Kit.sheetHead(esc(e.title), "收據")}<p class="note">${esc(dupText(e))}</p><div class="receipt-photos">載入中…</div>`;
     $("#detail").showModal();
     try {
       const { m, st } = await storage(),
@@ -958,7 +958,7 @@ window.Together = (() => {
     toast(v.trim() ? "已設定匯率，所有旅伴都會使用" : "已改回自動匯率");
   }
   const itemRow = (it = {}) =>
-    `<div class="tg-line-row"><input name="itemName" maxlength="40" placeholder="物品" aria-label="物品" value="${esc(it.name ?? "")}"><input name="itemAmount" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" placeholder="金額" aria-label="金額" value="${it.amount ?? ""}"><button type="button" class="smallbtn" data-tg="itemDel" aria-label="移除物品">×</button></div>`;
+    `<div class="tg-line-row"><input name="itemName" maxlength="40" placeholder="物品" aria-label="物品" value="${esc(it.name ?? "")}"><input name="itemAmount" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" placeholder="金額" aria-label="金額" value="${it.amount ?? ""}">${Kit.btn("移除物品", { icon: "x", iconOnly: true, variant: "ghost", attrs: { "data-tg": "itemDel" } })}</div>`;
   // Same receipt twice: same amount and currency, plus the same day or the same shop name.
   const sameName = (a, b) => String(a).replace(/\s+/g, "").toLowerCase() === String(b).replace(/\s+/g, "").toLowerCase();
   const duplicateOf = ({ title, amount, currency, day }) =>
@@ -969,7 +969,7 @@ window.Together = (() => {
     `${dayLabel(e.day)}「${e.title}」${S.format(S.toMinor(e.amount, e.currency), e.currency)}（${e.byName || "旅伴"} 記錄）`;
   function expenseItem(e) {
     const h = e.currency !== home() && toHome(e);
-    return `<article class="tg-item">${itemTop(e, `<span class="badge">${esc(dayLabel(e.day))}</span><button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i) => `<li><span>${esc(i.name)}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
+    return `<article class="tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i) => `<li><span>${esc(i.name)}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
   }
   // Spending overview in the home currency: total, per companion, per day and per category, and the rates used.
   function stats() {
@@ -980,7 +980,7 @@ window.Together = (() => {
     const rateRow = (c) => {
       const m = manualRate(c),
         r = rateOf(c);
-      return `<li><span>1 ${c} = ${r ? +r.toPrecision(4) : "？"} ${h}</span><span class="note">${m ? `手動設定${state.fx?.byName ? `（${esc(state.fx.byName)}）` : ""}` : r ? `自動 · ${new Date(state.liveFx.date).toLocaleDateString("zh-HK", { month: "numeric", day: "numeric" })}` : "未有匯率（需要網絡）"}</span><button type="button" class="smallbtn" data-fx-set="${c}">設定</button></li>`;
+      return `<li><span>1 ${c} = ${r ? +r.toPrecision(4) : "？"} ${h}</span><span class="note">${m ? `手動設定${state.fx?.byName ? `（${esc(state.fx.byName)}）` : ""}` : r ? `自動 · ${new Date(state.liveFx.date).toLocaleDateString("zh-HK", { month: "numeric", day: "numeric" })}` : "未有匯率（需要網絡）"}</span>${Kit.btn("設定", { size: "sm", attrs: { "data-fx-set": c } })}</li>`;
     };
     const rates = curs.length
       ? `<details class="tg-fx"${state.fxOpen ? " open" : ""}><summary>匯率</summary><ul>${curs.map(rateRow).join("")}</ul><p class="note">自動匯率每日更新；可以改用你們實際兌換的匯率，所有旅伴共用。</p></details>`
@@ -1028,7 +1028,13 @@ window.Together = (() => {
             .join("")
         : "<p>已經清數。</p>";
     const toggle = combined
-      ? `<div class="chips tg-settle-mode"><button type="button" class="chip${mode === "home" ? " active" : ""}" data-settle="home">全部換成${CURRENCY_NAMES[h] || h}</button><button type="button" class="chip${mode === "each" ? " active" : ""}" data-settle="each">各貨幣分開</button></div>`
+      ? Kit.chips(
+          [
+            { label: `全部換成${CURRENCY_NAMES[h] || h}`, active: mode === "home", attrs: { "data-settle": "home" } },
+            { label: "各貨幣分開", active: mode === "each", attrs: { "data-settle": "each" } },
+          ],
+          { cls: "tg-settle-mode", label: "結算方式" },
+        )
       : "";
     const body =
       mode === "home"
@@ -1060,18 +1066,18 @@ window.Together = (() => {
   const noteLink = (n) => (n.url ? Kit.btn("打開連結", { href: n.url, external: true, size: "sm", icon: "link" }) : "");
   const isoToday = () => new Date().toLocaleDateString("en-CA");
   function couponDue(c) {
-    if (c.used) return `<span class="badge">✓ 已使用${c.usedBy ? `（${esc(c.usedBy)}）` : ""}</span>`;
+    if (c.used) return Kit.badge(`✓ 已使用${c.usedBy ? `（${esc(c.usedBy)}）` : ""}`);
     if (!c.until) return "";
     const days = Math.round((Date.parse(c.until) - Date.parse(isoToday())) / 864e5);
     return days < 0
-      ? `<span class="badge coupon-expired">已過期（${esc(c.until)}）</span>`
-      : `<span class="badge${days <= 3 ? " coupon-soon" : ""}">${days ? `還有 ${days} 天` : "今天到期"} · ${esc(c.until)}</span>`;
+      ? Kit.badge(`已過期（${esc(c.until)}）`, "coupon-expired")
+      : Kit.badge(`${days ? `還有 ${days} 天` : "今天到期"} · ${esc(c.until)}`, days <= 3 ? "coupon-soon" : "");
   }
   function noteItem(n) {
-    const place = n.placeName ? `<span class="badge">${esc(n.placeName)}</span>` : "",
-      day = n.day ? `<span class="badge">${esc(dayLabel(n.day))}</span>` : "";
+    const place = n.placeName ? Kit.badge(esc(n.placeName)) : "",
+      day = n.day ? Kit.badge(esc(dayLabel(n.day))) : "";
     if (n.kind === "coupon")
-      return `<article class="tg-item coupon${n.used ? " used" : ""}">${itemTop(n, `<span class="badge coupon-tag">${icon("ticket")}優惠券</span>${day}${place}`, [del("notes", n)])}<h3>${esc(n.title)}</h3>${n.text ? `<p class="tg-text">${linkify(n.text)}</p>` : ""}${n.code ? `<div class="coupon-code"><span>優惠碼</span><b>${esc(n.code)}</b>${Kit.btn("複製", { size: "sm", icon: "copy", attrs: { "data-copy-code": n.code } })}</div>` : ""}<div class="coupon-due">${couponDue(n)}</div>${notePhotos(n)}<div class="links">${Kit.btn(n.used ? "改回未使用" : "已使用", { size: "sm", variant: n.used ? "outline" : "secondary", icon: n.used ? "undo" : "check", attrs: { "data-coupon-used": n.id } })}${noteLink(n)}</div></article>`;
+      return `<article class="tg-item coupon${n.used ? " used" : ""}">${itemTop(n, `${Kit.badge(`${icon("ticket")}優惠券`, "coupon-tag")}${day}${place}`, [del("notes", n)])}<h3>${esc(n.title)}</h3>${n.text ? `<p class="tg-text">${linkify(n.text)}</p>` : ""}${n.code ? `<div class="coupon-code"><span>優惠碼</span><b>${esc(n.code)}</b>${Kit.btn("複製", { size: "sm", icon: "copy", attrs: { "data-copy-code": n.code } })}</div>` : ""}<div class="coupon-due">${couponDue(n)}</div>${notePhotos(n)}<div class="links">${Kit.btn(n.used ? "改回未使用" : "已使用", { size: "sm", variant: n.used ? "outline" : "secondary", icon: n.used ? "undo" : "check", attrs: { "data-coupon-used": n.id } })}${noteLink(n)}</div></article>`;
     return `<article class="tg-item">${itemTop(n, day + place, [del("notes", n)])}<p class="tg-text">${linkify(n.text)}</p>${notePhotos(n)}${n.url ? `<div class="links">${noteLink(n)}</div>` : ""}</article>`;
   }
   function syncText() {
@@ -1133,13 +1139,13 @@ window.Together = (() => {
     const me = state.user.uid,
       items = [...state.checklist].sort((a, b) => (a.at || 0) - (b.at || 0));
     if (!items.length)
-      return '<div class="empty"><h2>還沒有清單</h2><p>加入要準備和要帶的東西，每位旅伴各自剔選。</p><button type="button" class="action primary" data-tg="checkSuggest">加入建議項目</button></div>';
+      return Kit.empty("還沒有清單", "加入要準備和要帶的東西，每位旅伴各自剔選。", Kit.btn("加入建議項目", { variant: "secondary", icon: "plus", attrs: { "data-tg": "checkSuggest" } }));
     const mine = items.filter((i) => (i.doneBy || []).includes(me)).length,
       ppl = people();
     const row = (i) => {
       const done = (i.doneBy || []).includes(me),
         others = (i.doneBy || []).filter((u) => u !== me).map(nameOf);
-      return `<li class="check-row${done ? " done" : ""}"><label><input type="checkbox" data-check="${esc(i.id)}"${done ? " checked" : ""}><span>${esc(i.text)}</span></label>${ppl.length > 1 ? `<small>${others.length ? `✓ ${esc(others.join("、"))}` : ""}</small>` : ""}<button type="button" class="smallbtn" data-tg-del="checklist:${esc(i.id)}" aria-label="刪除 ${esc(i.text)}">×</button></li>`;
+      return `<li class="check-row${done ? " done" : ""}"><label><input type="checkbox" data-check="${esc(i.id)}"${done ? " checked" : ""}><span>${esc(i.text)}</span></label>${ppl.length > 1 ? `<small>${others.length ? `✓ ${esc(others.join("、"))}` : ""}</small>` : ""}${Kit.btn(`刪除 ${esc(i.text)}`, { icon: "x", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-tg-del": `checklist:${i.id}` } })}</li>`;
     };
     return `<div class="check-progress"><b>你已完成 ${mine}／${items.length}</b><div class="tg-progress"><div style="width:${Math.round((mine / items.length) * 100)}%"></div></div></div>${Object.entries(
       CHECK_GROUPS,
@@ -1150,7 +1156,7 @@ window.Together = (() => {
           ? `<section class="panel check-group"><h3>${label}</h3><ul>${list.map(row).join("")}</ul></section>`
           : "";
       })
-      .join("")}<button type="button" class="smallbtn" data-tg="checkSuggest">＋ 加入未有的建議項目</button>`;
+      .join("")}${Kit.btn("加入未有的建議項目", { size: "sm", variant: "ghost", icon: "plus", attrs: { "data-tg": "checkSuggest" } })}`;
   }
   function addSuggestions() {
     const have = new Set(state.checklist.map((i) => i.text.trim()));
@@ -1189,34 +1195,34 @@ window.Together = (() => {
           ].map(([k, label, ic]) => ({ label, icon: ic, active: state.noteKind === k, attrs: { "data-note-kind": k } })),
           { cls: "note-kind", label: "類型" },
         ),
-        photos = `<div class="note-photo-edit"><div id="notePhotoPreview">${notePhotoPreview()}</div><button type="button" class="action" data-tg="notePhoto">${icon("camera")} ${coupon ? "影優惠券／上載截圖" : "加相片"}（最多 ${NOTE_PHOTO_MAX} 張）</button><input type="file" accept="image/*" id="notePhotoInput" multiple hidden><div class="tg-progress tg-progress-busy" id="noteFillBar" hidden><div></div></div><p class="note" id="noteFillInfo">${coupon ? "加入優惠券相片或連結後，AI 會讀出店名、優惠、優惠碼及有效期，填入空白欄位。" : "加入相片或連結後，AI 會讀出重點，填入筆記。"}</p></div>`,
+        photos = `<div class="note-photo-edit"><div id="notePhotoPreview">${notePhotoPreview()}</div>${Kit.btn(`${coupon ? "影優惠券／上載截圖" : "加相片"}（最多 ${NOTE_PHOTO_MAX} 張）`, { icon: "camera", cls: "btn-block", attrs: { "data-tg": "notePhoto" } })}<input type="file" accept="image/*" id="notePhotoInput" multiple hidden><div class="tg-progress tg-progress-busy" id="noteFillBar" hidden><div></div></div><p class="note" id="noteFillInfo">${coupon ? "加入優惠券相片或連結後，AI 會讀出店名、優惠、優惠碼及有效期，填入空白欄位。" : "加入相片或連結後，AI 會讀出重點，填入筆記。"}</p></div>`,
         about = `<div class="tg-row"><label>日子<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><label>地點<select name="placeId"><option value="">（不指定）</option>${[...T().places]
           .sort((a, b) => a.v[1].localeCompare(b.v[1]))
           .map((p) => `<option value="${esc(p.id)}">${esc(p.v[1])}</option>`)
           .join("")}</select></label></div>`;
       return coupon
-        ? `<form class="tg-form" data-tg-form="note" data-kind="coupon">${kinds}<label>店舖／優惠名稱<input name="title" maxlength="80" required placeholder="例如：Bic Camera 免稅 10% + 5%"></label><label>優惠內容<textarea name="text" rows="2" maxlength="1000" placeholder="例如：滿 ¥5,000 用，需出示護照"></textarea></label><div class="tg-row"><label>優惠碼（可留空）<input name="code" maxlength="60" autocapitalize="characters" spellcheck="false"></label><label>有效期至<input name="until" type="date"></label></div><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></label>${photos}${about}<button type="submit" class="locate-button">加入優惠券</button></form>`
-        : `<form class="tg-form" data-tg-form="note">${kinds}<label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾；網址會變成連結"></textarea></label><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></label>${photos}${about}<button type="submit" class="locate-button">加入筆記</button></form>`;
+        ? `<form class="tg-form" data-tg-form="note" data-kind="coupon">${kinds}<label>店舖／優惠名稱<input name="title" maxlength="80" required placeholder="例如：Bic Camera 免稅 10% + 5%"></label><label>優惠內容<textarea name="text" rows="2" maxlength="1000" placeholder="例如：滿 ¥5,000 用，需出示護照"></textarea></label><div class="tg-row"><label>優惠碼（可留空）<input name="code" maxlength="60" autocapitalize="characters" spellcheck="false"></label><label>有效期至<input name="until" type="date"></label></div><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></label>${photos}${about}${Kit.btn("加入優惠券", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`
+        : `<form class="tg-form" data-tg-form="note">${kinds}<label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾；網址會變成連結"></textarea></label><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></label>${photos}${about}${Kit.btn("加入筆記", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
     }
     if (state.tab === "expenses") {
       const ps = people();
-      return `<form class="tg-form" data-tg-form="expense"><div class="tg-scan"><button type="button" class="action primary" data-tg="scan">${icon("camera")} 影收據／上載收據（可多張）</button><input type="file" accept="image/*" id="tgReceipt" multiple hidden><p class="note">AI 在背景讀出店名、金額、日期及物品，完成後在開支頁確認；可以關閉網頁。加入或捨棄後相片會刪除。</p></div><p class="form-divider"><span>或自己輸入</span></p><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><label>分類<select name="category"><option value="">未分類</option>${catOptions("")}</select></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div><button type="button" class="smallbtn" data-tg="itemAdd">＋ 加物品</button></fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency">${curOptions(tripCurrencies()[0])}</select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map((p) => `<option value="${esc(p.id)}"${p.id === state.user.uid ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map((p) => `<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join("")}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p><button type="submit" class="locate-button">記下開支</button></form>`;
+      return `<form class="tg-form" data-tg-form="expense"><div class="tg-scan">${Kit.btn("影收據／上載收據（可多張）", { variant: "secondary", icon: "camera", cls: "btn-block", attrs: { "data-tg": "scan" } })}<input type="file" accept="image/*" id="tgReceipt" multiple hidden><p class="note">AI 在背景讀出店名、金額、日期及物品，完成後在開支頁確認；可以關閉網頁。加入或捨棄後相片會刪除。</p></div><p class="form-divider"><span>或自己輸入</span></p><label>項目<input name="title" maxlength="80" required placeholder="例如：一蘭晚餐"></label><label>分類<select name="category"><option value="">未分類</option>${catOptions("")}</select></label><fieldset class="tg-lines-edit"><legend>物品（可留空）</legend><div id="tgItemRows">${itemRow()}</div>${Kit.btn("加物品", { size: "sm", icon: "plus", attrs: { "data-tg": "itemAdd" } })}</fieldset><div class="tg-row"><label>金額<input name="amount" type="number" inputmode="decimal" min="0.01" max="10000000" step="0.01" placeholder="留空＝物品合計"></label><label>貨幣<select name="currency">${curOptions(tripCurrencies()[0])}</select></label></div><div class="tg-row"><label>誰付款<select name="paidBy">${ps.map((p) => `<option value="${esc(p.id)}"${p.id === state.user.uid ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><label>日子<select name="day">${dayOptions(today())}</select></label></div><fieldset><legend>分給</legend>${ps.map((p) => `<label class="tg-check"><input type="checkbox" name="split" value="${esc(p.id)}" checked> ${esc(p.name)}</label>`).join("")}</fieldset><p class="note">旅伴第一次登入後，才會出現在名單中。</p>${Kit.btn("記下開支", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
     }
     return "";
   }
   function page() {
     const s = state.status;
     if (["idle", "loading", "checking"].includes(s))
-      return { sig: s, shell: '<div class="empty"><h2>正在連接…</h2><p>第一次載入需要數秒。</p></div>' };
+      return { sig: s, shell: Kit.empty("正在連接…", "第一次載入需要數秒。") };
     if (s === "error")
       return {
         sig: s + state.error,
-        shell: `<div class="empty"><h2>${esc(state.error || "發生錯誤")}</h2><button class="action primary" data-tg="retry">再試</button></div>`,
+        shell: Kit.empty(esc(state.error || "發生錯誤"), "", Kit.btn("再試", { variant: "primary", icon: "redo", attrs: { "data-tg": "retry" } })),
       };
     if (s === "signedOut")
       return {
         sig: s,
-        shell: `<section class="panel tg-login"><h2>旅伴專用</h2><p>行程、地點、住宿、筆記和開支只限旅伴登入查看，不會公開在網站上。</p><form class="tg-form" data-tg-form="login"><label>帳號<input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="60" required></label><label>密碼<input name="password" type="password" autocomplete="current-password" required></label><button type="submit" class="locate-button">登入</button></form><div class="tg-or">或</div><button class="action tg-google" data-tg="login">用 Google 帳戶登入</button><p class="note">這部手機會記住登入狀態，之後離線也可以查看。</p></section>`,
+        shell: `<section class="panel tg-login"><h2>旅伴專用</h2><p>行程、地點、住宿、筆記和開支只限旅伴登入查看，不會公開在網站上。</p><form class="tg-form" data-tg-form="login"><label>帳號<input name="id" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="60" required></label><label>密碼<input name="password" type="password" autocomplete="current-password" required></label>${Kit.btn("登入", { type: "submit", variant: "primary", cls: "btn-block" })}</form><div class="tg-or">或</div>${Kit.btn("用 Google 帳戶登入", { cls: "btn-block tg-google", icon: "globe", attrs: { "data-tg": "login" } })}<p class="note">這部手機會記住登入狀態，之後離線也可以查看。</p></section>`,
       };
     if (s === "notrip")
       return {
@@ -1226,9 +1232,9 @@ window.Together = (() => {
     if (s === "denied")
       return {
         sig: s + state.user?.uid,
-        shell: `<section class="panel tg-login"><h2>這個帳戶未加入任何旅程</h2><p>你已用 <b>${esc(state.user?.email)}</b> 登入，但未加入任何旅程。請旅程負責人把你加入旅伴名單，然後按再試。</p><div class="links"><button class="action primary" data-tg="retry">再試</button><button class="action" data-tg="logout">登出／換帳戶</button></div></section>`,
+        shell: `<section class="panel tg-login"><h2>這個帳戶未加入任何旅程</h2><p>你已用 <b>${esc(state.user?.email)}</b> 登入，但未加入任何旅程。請旅程負責人把你加入旅伴名單，然後按再試。</p><div class="links">${Kit.btn("再試", { variant: "primary", icon: "redo", attrs: { "data-tg": "retry" } })}${Kit.btn("登出／換帳戶", { icon: "logout", attrs: { "data-tg": "logout" } })}</div></section>`,
       };
-    if (!started) return { sig: "trip", shell: '<div class="empty"><h2>正在載入旅程資料…</h2></div>' };
+    if (!started) return { sig: "trip", shell: Kit.empty("正在載入旅程資料…") };
     const sig = [
       "ready",
       state.tab,
@@ -1357,7 +1363,7 @@ window.Together = (() => {
     const docs = x.docs || [],
       title = kind === "hotels" ? x.name : `${x.flightNo} ${x.from || ""} → ${x.to || ""}`;
     $("#detailBody").innerHTML =
-      `<div class="eyebrow" data-docs-for="${esc(kind)}:${esc(id)}">DOCUMENTS</div><h2 class="detailtitle">${esc(title)}</h2><p class="note">訂單確認、電子機票或截圖，只限這個旅程的旅伴登入查看。</p><div class="doc-list">${docs.length ? docs.map((d) => `<div class="doc-row" data-doc-path="${esc(d.path)}"><div class="doc-thumb">${d.type === "application/pdf" ? "PDF" : "…"}</div><div><b>${esc(d.name)}</b><small>${esc(d.byName || "")} · ${Math.max(1, Math.round(d.size / 1024))} KB</small></div><a class="action" data-doc-open hidden target="_blank" rel="noopener">打開</a><button type="button" class="smallbtn" data-doc-del="${esc(kind)}:${esc(id)}:${esc(d.path)}" aria-label="刪除 ${esc(d.name)}">刪除</button></div>`).join("") : '<div class="empty"><p>還沒有文件。</p></div>'}</div>${docs.length < DOC_MAX ? `<button type="button" class="action primary" data-doc-add>📎 上載文件（相片或 PDF）</button><input type="file" id="docInput" data-target="${esc(kind)}:${esc(id)}" accept="image/*,application/pdf" multiple hidden>` : `<p class="note">每項最多 ${DOC_MAX} 個文件。</p>`}`;
+      `<div class="eyebrow" data-docs-for="${esc(kind)}:${esc(id)}">文件</div><h2 class="detailtitle">${esc(title)}</h2><p class="note">訂單確認、電子機票或截圖，只限這個旅程的旅伴登入查看。</p><div class="doc-list">${docs.length ? docs.map((d) => `<div class="doc-row" data-doc-path="${esc(d.path)}"><div class="doc-thumb">${d.type === "application/pdf" ? "PDF" : "…"}</div><div><b>${esc(d.name)}</b><small>${esc(d.byName || "")} · ${Math.max(1, Math.round(d.size / 1024))} KB</small></div><a class="btn btn-outline btn-sm" data-doc-open hidden target="_blank" rel="noopener">打開</a>${Kit.btn(`刪除 ${esc(d.name)}`, { icon: "trash", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-doc-del": `${kind}:${id}:${d.path}` } })}</div>`).join("") : Kit.empty("還沒有文件", "可以上載訂單確認、電子機票或截圖。")}</div>${docs.length < DOC_MAX ? `${Kit.btn("上載文件（相片或 PDF）", { variant: "primary", icon: "clip", cls: "btn-block", attrs: { "data-doc-add": true } })}<input type="file" id="docInput" data-target="${esc(kind)}:${esc(id)}" accept="image/*,application/pdf" multiple hidden>` : `<p class="note">每項最多 ${DOC_MAX} 個文件。</p>`}`;
     if (!$("#detail").open) $("#detail").showModal();
     if (!docs.length) return;
     try {
@@ -1515,7 +1521,7 @@ window.Together = (() => {
         const st = jobState(j),
           fail = st === "fail",
           retry = canRetry(j);
-        return `<article class="tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta"><span class="badge">${fail ? "未能辨識" : STATUS[st]}</span><span>${esc(j.file)}</span></div>${fail ? `<p class="note">${esc(j.error || "未能辨識。")}</p>` : '<div class="tg-progress tg-progress-busy"><div></div></div>'}${fail || retry ? `<div class="links">${retry ? `<button type="button" class="smallbtn" data-draft-retry="${esc(j.id)}">重試</button>` : ""}<button type="button" class="smallbtn" data-draft-drop="${esc(j.id)}">捨棄</button></div>` : ""}</article>`;
+        return `<article class="tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta">${Kit.badge(fail ? "未能辨識" : STATUS[st])}<span>${esc(j.file)}</span></div>${fail ? `<p class="note">${esc(j.error || "未能辨識。")}</p>` : '<div class="tg-progress tg-progress-busy"><div></div></div>'}${fail || retry ? `<div class="links">${retry ? Kit.btn("重試", { size: "sm", icon: "redo", attrs: { "data-draft-retry": j.id } }) : ""}${Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": j.id } })}</div>` : ""}</article>`;
       })
       .join("")}</div>`;
   }
@@ -1529,7 +1535,7 @@ window.Together = (() => {
   const NOTE_PHOTO_MAX = 3;
   let notePhotoDraft = [];
   const notePhotoPreview = () =>
-    notePhotoDraft.map((p, i) => `<span class="note-photo-thumb"><img src="${photoSrc(p)}" alt=""><button type="button" class="smallbtn" data-note-photo-del="${i}" aria-label="移除相片">×</button></span>`).join("");
+    notePhotoDraft.map((p, i) => `<span class="note-photo-thumb"><img src="${photoSrc(p)}" alt="">${Kit.btn("移除相片", { icon: "x", iconOnly: true, size: "sm", cls: "thumb-del", attrs: { "data-note-photo-del": i } })}</span>`).join("");
   async function addNotePhotos(files) {
     for (const file of files.slice(0, NOTE_PHOTO_MAX - notePhotoDraft.length)) {
       try {
@@ -1612,30 +1618,30 @@ window.Together = (() => {
     const n = state.notes.find((x) => x.id === id),
       p = n?.photos?.[i];
     if (!p) return;
-    $("#detailBody").innerHTML = `<div class="eyebrow">${n.kind === "coupon" ? "COUPON" : "NOTE"}</div><h2 class="detailtitle">${esc(n.title || String(n.text || "").split("\n")[0].slice(0, 40))}</h2>${n.code ? `<p class="coupon-code big"><b>${esc(n.code)}</b></p>` : ""}<img class="note-photo-full" src="${photoSrc(p)}" alt="">`;
+    $("#detailBody").innerHTML = `${Kit.sheetHead(esc(n.title || String(n.text || "").split("\n")[0].slice(0, 40)), n.kind === "coupon" ? "優惠券" : "筆記")}${n.code ? `<p class="coupon-code big"><b>${esc(n.code)}</b></p>` : ""}<img class="note-photo-full" src="${photoSrc(p)}" alt="">`;
     if (!$("#detail").open) $("#detail").showModal();
   }
   const shopPreview = () =>
     shopPhoto
-      ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片"><button type="button" class="smallbtn" data-tg="shopPhotoClear">移除相片</button>`
+      ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片">${Kit.btn("移除相片", { size: "sm", icon: "x", attrs: { "data-tg": "shopPhotoClear" } })}`
       : "";
   function shopForm(x) {
     const v = (k) => esc(x?.[k] ?? "");
-    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div><button type="button" class="action" data-tg="shopPhoto">${icon("camera")} 加相片（AI 填寫空白欄位）</button><input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
+    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div>${Kit.btn("加相片（AI 填寫空白欄位）", { icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopPhoto" } })}<input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
       .map(([k, v]) => `<option value="${k}"${(x ? shopCat(x) : "food") === k ? " selected" : ""}>${v}</option>`)
       .join("")}</select></label><label>購買地點／地址<input name="place" maxlength="500" placeholder="店名、地址，或貼上 Google 地圖連結" value="${v("place")}"></label><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
       .map((p) => `<option value="${esc(p.id)}"${x?.placeId === p.id ? " selected" : ""}>${esc(p.v[1])}${p.v[0] ? ` · ${esc(p.v[0])}` : ""}</option>`)
-      .join("")}</select></label><p class="note" id="shopPlaceInfo"></p><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div><button type="submit" class="locate-button">${x ? "儲存修改" : "加入購物清單"}</button></form>`;
+      .join("")}</select></label><p class="note" id="shopPlaceInfo"></p><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
   }
   function shopItem(x) {
     const price = x.price != null ? `<b class="shop-price">${esc(S.format(S.toMinor(x.price, x.currency), x.currency))}</b>` : "";
-    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>` : ""}<div>${itemTop(x, `<span class="badge shop-cat">${SHOP_CATS[shopCat(x)]}</span>${x.ai ? '<span class="badge">AI 填寫</span>' : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}</h3>${price}</div>${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${matchPlace(x) ? `<p class="shop-place">${icon("compass")}探索：<button type="button" class="buy-item" data-place="${esc(matchPlace(x).id)}">${esc(matchPlace(x).v[1])}</button></p>` : ""}${x.place ? `<p class="shop-place">${icon("pin")}<span>${esc(x.place)}</span></p>` : ""}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.place ? Kit.btn("地圖", { size: "sm", external: true, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}` }) : ""}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
+    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}</h3>${price}</div>${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${matchPlace(x) ? `<p class="shop-place">${icon("compass")}探索：<button type="button" class="buy-item" data-place="${esc(matchPlace(x).id)}">${esc(matchPlace(x).v[1])}</button></p>` : ""}${x.place ? `<p class="shop-place">${icon("pin")}<span>${esc(x.place)}</span></p>` : ""}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.place ? Kit.btn("地圖", { size: "sm", external: true, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}` }) : ""}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
   }
   // Photo grid: one tile per item; tapping opens the item with a large photo in the detail dialog.
   function shopTile(x) {
     const price = x.price != null ? esc(S.format(S.toMinor(x.price, x.currency), x.currency)) : "";
-    return `<button type="button" class="shop-tile${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.photo ? `<img src="${photoSrc(x.photo)}" alt="" loading="lazy">` : '<span class="shop-tile-ph" aria-hidden="true">🛍</span>'}<span class="shop-tile-name">${x.bought ? "✓ " : ""}${esc(x.name)}</span>${price ? `<span class="shop-tile-price">${price}</span>` : ""}</button>`;
+    return `<button type="button" class="shop-tile${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.photo ? `<img src="${photoSrc(x.photo)}" alt="" loading="lazy">` : `<span class="shop-tile-ph" aria-hidden="true">${icon("bag")}</span>`}<span class="shop-tile-name">${x.bought ? "✓ " : ""}${esc(x.name)}</span>${price ? `<span class="shop-tile-price">${price}</span>` : ""}</button>`;
   }
   // Add / edit sheet: AI from photos or a link first, then the form for typing an item in.
   function openShopSheet(x = null) {
@@ -1657,7 +1663,7 @@ window.Together = (() => {
     if (!$("#detail").open) $("#detail").showModal();
   }
   function shopPage() {
-    if (state.status !== "ready") return { sig: "wait", shell: '<div class="empty"><h2>正在連接…</h2></div>' };
+    if (state.status !== "ready") return { sig: "wait", shell: Kit.empty("正在連接…") };
     const todo = state.shopping.filter((x) => !x.bought),
       q = norm(state.shopSearch),
       match = (x) => !q || norm([x.name, x.qty, x.detail, x.place].join(" ")).includes(q);
@@ -1667,18 +1673,12 @@ window.Together = (() => {
       shown = state.shopCat === "all" ? byStatus : byStatus.filter((x) => shopCat(x) === state.shopCat);
     const count = (k) => byStatus.filter((x) => shopCat(x) === k).length,
       cats = [["all", "全部分類", byStatus.length], ...Object.entries(SHOP_CATS).map(([k, v]) => [k, v, count(k)]).filter(([k, , n]) => n || state.shopCat === k)]
-        .map(([k, t, n]) => `<button class="chip ${state.shopCat === k ? "active" : ""}" data-shop-cat="${k}" aria-pressed="${state.shopCat === k}">${t} ${n}</button>`)
-        .join("");
+        .map(([k, t, n]) => ({ label: `${t} ${n}`, active: state.shopCat === k, attrs: { "data-shop-cat": k } }));
     const filters = [
       ["todo", "未買", todo.length],
       ["done", "已買", state.shopping.length - todo.length],
       ["all", "全部", state.shopping.length],
-    ]
-      .map(
-        ([k, t, n]) =>
-          `<button class="chip ${state.shopFilter === k ? "active" : ""}" data-shop-filter="${k}" aria-pressed="${state.shopFilter === k}">${t} ${n}</button>`,
-      )
-      .join("");
+    ].map(([k, t, n]) => ({ label: `${t} ${n}`, active: state.shopFilter === k, attrs: { "data-shop-filter": k } }));
     const sorted = [...shown].sort((a, b) => a.bought - b.bought || (b.at || 0) - (a.at || 0)),
       block = (xs) => (state.shopView === "grid" ? `<div class="shop-grid">${xs.map(shopTile).join("")}</div>` : xs.map(shopItem).join(""));
     // All categories: one heading per category, in the order of SHOP_CATS.
@@ -1703,8 +1703,14 @@ window.Together = (() => {
           { label: '<span class="sr-only">相片</span>', icon: "grid", active: state.shopView === "grid", attrs: { "data-shop-view": "grid", title: "相片" } },
         ],
         { cls: "view-toggle", label: "顯示方式" },
-      )}</div><div class="chips" role="group" aria-label="篩選" data-tg-live="filters"></div><div class="chips shop-cats" role="group" aria-label="分類" data-tg-live="cats"></div><div class="tg-list" data-tg-live="list"></div>${Kit.fab("加入物品", { "data-tg": "shopAdd" })}`,
-      live: { status: statusBar(), jobs: productJobsHtml(), filters, cats, list },
+      )}</div><div data-tg-live="filters"></div><div data-tg-live="cats"></div><div class="tg-list" data-tg-live="list"></div>${Kit.fab("加入物品", { "data-tg": "shopAdd" })}`,
+      live: {
+        status: statusBar(),
+        jobs: productJobsHtml(),
+        filters: Kit.chips(filters, { cls: "tabs", label: "篩選" }),
+        cats: Kit.chips(cats, { cls: "shop-cats", label: "分類" }),
+        list,
+      },
     };
   }
   // Match a 購買地點 to an explore shop: the whole name, or one distinctive word of it (島本, 唐十), compared without
@@ -1987,7 +1993,7 @@ window.Together = (() => {
       .join("");
   function tripForm(t) {
     const v = (k) => esc(t?.[k] ?? "");
-    return `<form class="tg-form" data-trip-form="${t ? "update" : "create"}"><label>旅程名稱<input name="name" required maxlength="60" placeholder="例如：2027 首爾" value="${v("name")}"></label><label>目的地<input name="destination" required maxlength="80" placeholder="例如：韓國首爾" value="${v("destination")}"></label><div class="tg-row"><label>開始日期<input name="startDate" type="date" required value="${v("startDate")}"></label><label>結束日期<input name="endDate" type="date" required value="${v("endDate")}"></label></div><div class="tg-row"><label>當地貨幣<select name="currency">${currencyOptions(t?.currency || "JPY")}</select></label><label>你們的貨幣<select name="homeCurrency">${currencyOptions(t?.homeCurrency || "HKD")}</select></label></div><button type="submit" class="locate-button">${t ? "儲存旅程資料" : "建立旅程"}</button><p class="note" data-trip-msg></p></form>`;
+    return `<form class="tg-form" data-trip-form="${t ? "update" : "create"}"><label>旅程名稱<input name="name" required maxlength="60" placeholder="例如：2027 首爾" value="${v("name")}"></label><label>目的地<input name="destination" required maxlength="80" placeholder="例如：韓國首爾" value="${v("destination")}"></label><div class="tg-row"><label>開始日期<input name="startDate" type="date" required value="${v("startDate")}"></label><label>結束日期<input name="endDate" type="date" required value="${v("endDate")}"></label></div><div class="tg-row"><label>當地貨幣<select name="currency">${currencyOptions(t?.currency || "JPY")}</select></label><label>你們的貨幣<select name="homeCurrency">${currencyOptions(t?.homeCurrency || "HKD")}</select></label></div>${Kit.btn(t ? "儲存旅程資料" : "建立旅程", { type: "submit", variant: "primary", cls: "btn-block" })}<p class="note" data-trip-msg></p></form>`;
   }
   const myEmail = () => String(state.user?.email || "").toLowerCase();
   function memberLabel(email) {
@@ -1998,29 +2004,29 @@ window.Together = (() => {
   function tripsPage() {
     const t = state.meta;
     if (!["ready", "notrip"].includes(state.status) || (t && !started))
-      return { sig: "wait", shell: '<div class="empty"><h2>正在連接…</h2></div>' };
+      return { sig: "wait", shell: Kit.empty("正在連接…") };
     const members = (t?.members || [])
       .map(
         (e) =>
-          `<div class="pp-row"><div><b>${esc(memberLabel(e))}</b>${e === myEmail() ? "<small>你</small>" : ""}</div>${e !== myEmail() ? `<button class="smallbtn" data-trip-remove="${esc(e)}">移除</button>` : ""}</div>`,
+          `<div class="pp-row"><div><b>${esc(memberLabel(e))}</b>${e === myEmail() ? "<small>你</small>" : ""}</div>${e !== myEmail() ? `${Kit.btn("移除", { size: "sm", attrs: { "data-trip-remove": e } })}` : ""}</div>`,
       )
       .join("");
     const trips =
       (state.trips || [])
         .map(
           (x) =>
-            `<div class="pp-row"><div><b>${esc(x.name)}</b><small>${esc(x.destination || "")} · ${esc(x.startDate || "")} → ${esc(x.endDate || "")}</small></div>${x.id === tripId ? '<span class="badge">目前</span>' : `<button class="action primary" data-trip-open="${esc(x.id)}">開啟</button>`}</div>`,
+            `<div class="pp-row"><div><b>${esc(x.name)}</b><small>${esc(x.destination || "")} · ${esc(x.startDate || "")} → ${esc(x.endDate || "")}</small></div>${x.id === tripId ? Kit.badge("目前") : Kit.btn("開啟", { variant: "secondary", size: "sm", attrs: { "data-trip-open": x.id } })}</div>`,
         )
         .join("") || '<p class="note">還沒有旅程。</p>';
     return {
       sig: ["trips", tripId || "", state.status].join("|"),
-      shell: `${t ? `<section class="panel trip-panel"><div class="eyebrow">目前旅程</div><h2>${esc(t.name)}</h2><p class="note">${esc(t.destination || "")} · ${esc(t.startDate || "")} → ${esc(t.endDate || "")} · ${esc(CURRENCY_NAMES[t.currency] || t.currency || "")}</p><details><summary>✎ 修改旅程資料</summary>${tripForm(t)}</details>${copyForm(t)}</section><section class="panel trip-panel"><h3>旅伴</h3><div class="pp-list" data-tg-live="members"></div><details><summary>＋ 邀請旅伴</summary><form class="tg-form" data-trip-invite><div class="chips" role="radiogroup" aria-label="帳戶類型"><label class="tg-check"><input type="radio" name="kind" value="account" checked> 建立帳號 ID</label><label class="tg-check"><input type="radio" name="kind" value="google"> Google 帳戶</label></div><div class="tg-row"><label>帳號 ID 或 Gmail<input name="who" required maxlength="80" autocapitalize="none" spellcheck="false" placeholder="例如：amy 或 amy@gmail.com"></label><label>顯示名稱（帳號 ID 用）<input name="name" maxlength="40"></label></div><button type="submit" class="locate-button">邀請</button><p class="note" data-trip-msg></p></form></details></section>` : ""}<section class="panel trip-panel"><h3>我的旅程</h3><div class="pp-list" data-tg-live="trips"></div></section><section class="panel trip-panel"><details${t ? "" : " open"}><summary>＋ 建立新旅程</summary>${tripForm(null)}</details></section>`,
+      shell: `${t ? `<section class="panel trip-panel"><div class="eyebrow">目前旅程</div><h2>${esc(t.name)}</h2><p class="note">${esc(t.destination || "")} · ${esc(t.startDate || "")} → ${esc(t.endDate || "")} · ${esc(CURRENCY_NAMES[t.currency] || t.currency || "")}</p><details><summary>${icon("edit")} 修改旅程資料</summary>${tripForm(t)}</details>${copyForm(t)}</section><section class="panel trip-panel"><h3>旅伴</h3><div class="pp-list" data-tg-live="members"></div><details><summary>${icon("plus")} 邀請旅伴</summary><form class="tg-form" data-trip-invite><div class="radio-row" role="radiogroup" aria-label="帳戶類型"><label class="tg-check"><input type="radio" name="kind" value="account" checked> 建立帳號 ID</label><label class="tg-check"><input type="radio" name="kind" value="google"> Google 帳戶</label></div><div class="tg-row"><label>帳號 ID 或 Gmail<input name="who" required maxlength="80" autocapitalize="none" spellcheck="false" placeholder="例如：amy 或 amy@gmail.com"></label><label>顯示名稱（帳號 ID 用）<input name="name" maxlength="40"></label></div>${Kit.btn("邀請", { type: "submit", variant: "primary", cls: "btn-block" })}<p class="note" data-trip-msg></p></form></details></section>` : ""}<section class="panel trip-panel"><h3>我的旅程</h3><div class="pp-list" data-tg-live="trips"></div></section><section class="panel trip-panel"><details${t ? "" : " open"}><summary>${icon("plus")} 建立新旅程</summary>${tripForm(null)}</details></section>`,
       live: { members, trips },
     };
   }
   // Copy the current trip as a new one (only you as companion): places, day plans (days that fit), checklist and shopping list.
   function copyForm(t) {
-    return `<details><summary>⧉ 複製為新旅程</summary><form class="tg-form" data-trip-copy><label>新旅程名稱<input name="name" required maxlength="60" value="${esc((t.name + "（複本）").slice(0, 60))}"></label><div class="tg-row"><label>開始日期<input name="startDate" type="date" required value="${esc(t.startDate || "")}"></label><label>結束日期<input name="endDate" type="date" required value="${esc(t.endDate || "")}"></label></div><fieldset><legend>一併複製</legend>${[
+    return `<details><summary>${icon("copy")} 複製為新旅程</summary><form class="tg-form" data-trip-copy><label>新旅程名稱<input name="name" required maxlength="60" value="${esc((t.name + "（複本）").slice(0, 60))}"></label><div class="tg-row"><label>開始日期<input name="startDate" type="date" required value="${esc(t.startDate || "")}"></label><label>結束日期<input name="endDate" type="date" required value="${esc(t.endDate || "")}"></label></div><fieldset><legend>一併複製</legend>${[
       ["places", "探索地點"],
       ["planDays", "每日行程"],
       ["checklist", "清單（不包括已剔選）"],
@@ -2029,7 +2035,7 @@ window.Together = (() => {
       .map(([k, v]) => `<label class="tg-check"><input type="checkbox" name="copy" value="${k}" checked> ${v}</label>`)
       .join(
         "",
-      )}</fieldset><p class="note">新旅程只有你一位旅伴；筆記、開支、住宿、機票及收藏不會複製。</p><button type="submit" class="locate-button">建立複本</button><p class="note" data-trip-msg></p></form></details>`;
+      )}</fieldset><p class="note">新旅程只有你一位旅伴；筆記、開支、住宿、機票及收藏不會複製。</p>${Kit.btn("建立複本", { type: "submit", variant: "primary", cls: "btn-block" })}<p class="note" data-trip-msg></p></form></details>`;
   }
   async function copyTrip(newId, what, days) {
     const { fs, db } = fb,

@@ -168,7 +168,13 @@ window.startTrip = (meta = {}) => {
   function renderNearby() {
     const coordinates = window.TRIP_GEO?.places || {},
       coverage = places.filter((p) => (coordinates[p.id] || []).length).length;
-    return `${header("附近", "只找已加入的地點，按直線距離由近至遠排序")}<section class="nearby-panel"><button class="locate-button" id="locateNow"${nearbyState.loading ? ' disabled aria-busy="true"' : ""}>${nearbyState.loading ? "正在取得位置…" : nearbyState.position ? `${icon("locate")} 重新定位` : `${icon("locate")} 定位看附近`}</button><button class="action map-pick-button" id="pickOnMap">${icon("pin")} 在地圖選位置</button><p class="nearby-help">手機定位：按下後請允許瀏覽器使用位置。你的位置只在這次網頁內計算，不會儲存或傳送到網站伺服器。</p><div class="chips" role="group" aria-label="附近距離範圍">${[100, 200, 500].map((r) => `<button class="chip ${nearbyState.radius === r ? "active" : ""}" data-radius="${r}" aria-pressed="${nearbyState.radius === r}">${r}米</button>`).join("")}</div><div class="chips" role="group" aria-label="附近地點分類">${["全部", ...exploreCats, "購物"].map((c) => `<button class="chip ${nearbyState.category === c ? "active" : ""}" data-near-category="${c}" aria-pressed="${nearbyState.category === c}">${c === "購物" ? `${icon("bag")} 購物` : c}</button>`).join("")}</div>${nearbyState.category === "購物" ? '<p class="note">按購物清單中未買物品的「購買地點」定位。</p>' : ""}<div id="nearbyStatus" role="status" aria-live="polite">${nearbyState.error ? `<div class="notice nearby-error">${esc(nearbyState.error)}</div>` : nearbyState.loading ? "<p>定位中，請稍候…</p>" : nearbyState.position && nearbyState.mode === "manual" ? '<p class="note">📍 以地圖選取的位置為中心 · 距離並非從手機目前位置計算</p>' : nearbyState.position ? `<p class="note">已取得位置 · 定位精度約 ±${Math.ceil(nearbyState.accuracy)}米${nearbyState.accuracy > nearbyState.radius ? "；誤差大於所選範圍，建議到室外重新定位或選較大範圍。" : ""}</p>` : '<p class="note">尚未選取位置。選擇範圍後，可用手機定位或在地圖選位置。</p>'}</div></section><div id="nearbyResults"></div><p class="note">距離為直線估算，並非步行路程；樓層、入口及河道可能影響實際路程。已建立座標 ${coverage}/${places.length} 個地點；未有可靠座標的項目暫不納入附近結果。</p><p class="note">座標來源：店方／場地地圖及公開地點資料。<button class="action" id="nearbyCoverage">查看座標覆蓋情況</button></p>`;
+    return `${header("附近", "只找已加入的地點，按直線距離由近至遠排序")}<section class="nearby-panel"><div class="links">${Kit.btn(nearbyState.loading ? "正在取得位置…" : nearbyState.position ? "重新定位" : "定位看附近", { variant: "primary", icon: "locate", attrs: { id: "locateNow", disabled: nearbyState.loading, "aria-busy": nearbyState.loading ? "true" : null } })}${Kit.btn("在地圖選位置", { icon: "pin", attrs: { id: "pickOnMap" } })}</div><p class="nearby-help">手機定位：按下後請允許瀏覽器使用位置。你的位置只在這次網頁內計算，不會儲存或傳送到網站伺服器。</p>${Kit.chips(
+      [100, 200, 500].map((r) => ({ label: `${r}米`, active: nearbyState.radius === r, attrs: { "data-radius": r } })),
+      { label: "附近距離範圍" },
+    )}${Kit.chips(
+      ["全部", ...exploreCats, "購物"].map((c) => ({ label: c, icon: c === "購物" ? "bag" : "", active: nearbyState.category === c, attrs: { "data-near-category": c } })),
+      { label: "附近地點分類" },
+    )}${nearbyState.category === "購物" ? '<p class="note">按購物清單中未買物品的「購買地點」定位。</p>' : ""}<div id="nearbyStatus" role="status" aria-live="polite">${nearbyState.error ? `<div class="notice nearby-error">${esc(nearbyState.error)}</div>` : nearbyState.loading ? "<p>定位中，請稍候…</p>" : nearbyState.position && nearbyState.mode === "manual" ? '<p class="note">以地圖選取的位置為中心 · 距離並非從手機目前位置計算</p>' : nearbyState.position ? `<p class="note">已取得位置 · 定位精度約 ±${Math.ceil(nearbyState.accuracy)}米${nearbyState.accuracy > nearbyState.radius ? "；誤差大於所選範圍，建議到室外重新定位或選較大範圍。" : ""}</p>` : '<p class="note">尚未選取位置。選擇範圍後，可用手機定位或在地圖選位置。</p>'}</div></section><div id="nearbyResults"></div><p class="note">距離為直線估算，並非步行路程；樓層、入口及河道可能影響實際路程。已建立座標 ${coverage}/${places.length} 個地點；未有可靠座標的項目暫不納入附近結果。</p><p class="note">座標來源：店方／場地地圖及公開地點資料。</p>${Kit.btn("查看座標覆蓋情況", { size: "sm", variant: "ghost", attrs: { id: "nearbyCoverage" } })}`;
   }
   function nearbyResults() {
     const target = $("#nearbyResults");
@@ -185,7 +191,7 @@ window.startTrip = (meta = {}) => {
       nearbyState.radius,
       nearbyState.category,
     );
-    target.innerHTML = `<div class="resultsbar"><span>${nearbyState.radius}米內 · ${rs.length} 個已加入地點</span></div>${rs.length ? `<div class="cardgrid">${rs.map((r) => placeCard(r.place, r)).join("")}</div>` : `<div class="empty"><h2>這個範圍內暫時沒有符合的地點</h2><p>可試試較大範圍、其他分類，或重新定位。</p><a class="action" href="#explore">查看全部地點 →</a></div>`}`;
+    target.innerHTML = `<div class="resultsbar"><span>${nearbyState.radius}米內 · ${rs.length} 個已加入地點</span></div>${rs.length ? `<div class="cardgrid">${rs.map((r) => placeCard(r.place, r)).join("")}</div>` : Kit.empty("這個範圍內暫時沒有符合的地點", "可試試較大範圍、其他分類，或重新定位。", Kit.btn("查看全部地點", { href: "#explore", size: "sm" }))}`;
   }
   // 附近 › 購物: shopping spots (explore shops or geocoded 購買地點) within the radius, nearest first.
   function shoppingNearby(target) {
@@ -199,10 +205,10 @@ window.startTrip = (meta = {}) => {
         ? `<div class="cardgrid">${spots
             .map((s) => {
               const p = s.placeId && places.find((x) => x.id === s.placeId);
-              return `<article class="card place"><div class="place-top"><span class="badge shop">購物</span></div><h3>${esc(s.name)}</h3><div class="distance-badge">距離約 ${Math.round(s.distance)} 米</div><p class="buy-here">🛍 可買：${s.items.map(esc).join("、")}</p>${s.address ? `<p class="note">${esc(s.address)}</p>` : ""}<div class="actions">${p ? `<button class="action primary" data-place="${esc(p.id)}">店舖資料</button>` : ""}${link(route(p ? `${p.v[1]} ${p.v[3]}` : s.address), "導航")}</div></article>`;
+              return `<article class="card place"><div class="place-top">${Kit.badge("購物", "shop")}</div><h3>${esc(s.name)}</h3><div class="distance-badge">距離約 ${Math.round(s.distance)} 米</div><p class="buy-here">${icon("bag")} 可買：${s.items.map(esc).join("、")}</p>${s.address ? `<p class="note">${esc(s.address)}</p>` : ""}<div class="actions">${p ? Kit.btn("店舖資料", { variant: "secondary", size: "sm", attrs: { "data-place": p.id } }) : ""}${link(route(p ? `${p.v[1]} ${p.v[3]}` : s.address), "導航")}</div></article>`;
             })
             .join("")}</div>`
-        : '<div class="empty"><h2>這個範圍內暫時沒有可買清單物品的地方</h2><p>購物清單中未買、而且有「購買地點」的物品才會顯示。可試試較大範圍。</p><a class="action" href="#shopping">查看購物清單 →</a></div>'
+        : Kit.empty("這個範圍內暫時沒有可買清單物品的地方", "購物清單中未買、而且有「購買地點」的物品才會顯示。可試試較大範圍。", Kit.btn("查看購物清單", { href: "#shopping", size: "sm" }))
     }`;
   }
   function refreshNearby() {
@@ -283,7 +289,7 @@ window.startTrip = (meta = {}) => {
     const geo = window.TRIP_GEO?.places || {},
       missing = places.filter((p) => !(geo[p.id] || []).length);
     openDialog(
-      `<div class="eyebrow">LOCATION COVERAGE</div><h2 class="detailtitle">座標覆蓋情況</h2><p>已建立 ${places.length - missing.length}/${places.length} 個地點座標。範圍較大的景點以標示位置計算；沒有可靠位置的項目不以區域中心代替。</p>${missing.length ? `<h3>尚未納入附近結果</h3><ul>${missing.map((p) => `<li>${esc(p.v[1])}</li>`).join("")}</ul>` : "<p>所有清單地點均已建立座標。</p>"}`,
+      `${Kit.sheetHead("座標覆蓋情況")}<p>已建立 ${places.length - missing.length}/${places.length} 個地點座標。範圍較大的景點以標示位置計算；沒有可靠位置的項目不以區域中心代替。</p>${missing.length ? `<h3>尚未納入附近結果</h3><ul>${missing.map((p) => `<li>${esc(p.v[1])}</li>`).join("")}</ul>` : "<p>所有清單地點均已建立座標。</p>"}`,
     );
   }
   // ---- 探索 (places): areas, filters, cards, details and the place form ----
@@ -348,7 +354,7 @@ window.startTrip = (meta = {}) => {
   // 🛍 購物清單 also lists 購買地點 that are not explore places yet, with 加入探索 to make them one.
   let buySpots = [];
   const spotCard = (s, k) =>
-    `<article class="card place shop-spot"><div class="place-top"><span class="badge shop">購物清單</span></div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
+    `<article class="card place shop-spot"><div class="place-top">${Kit.badge("購物清單", "shop")}</div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
   function renderResults() {
     let q = search.toLocaleLowerCase();
     const ps = places.filter(
@@ -362,7 +368,7 @@ window.startTrip = (meta = {}) => {
           )
         : [];
     const extra = buySpots.length
-      ? `<div class="sectionhead"><h2>未在探索清單的購買地點（${buySpots.length}）</h2></div><div class="cardgrid">${buySpots.map(spotCard).join("")}</div>`
+      ? `${Kit.sectionHead(`未在探索清單的購買地點（${buySpots.length}）`)}<div class="cardgrid">${buySpots.map(spotCard).join("")}</div>`
       : "";
     const filtered = category !== "全部" || region !== "全部區域" || onlySaved || q;
     $("#results").innerHTML =
@@ -386,7 +392,7 @@ window.startTrip = (meta = {}) => {
     const c0 = p.cats.find((x) => x !== "手信") || p.cats[0] || p.v[6],
       c = c0 === "手信" ? "手信店" : c0,
       on = saved.has(p.id);
-    return `<article class="card place" data-card-place="${esc(p.id)}"><div class="place-top"><span class="badge ${{ 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c] || ""}">${esc(c)}</span><span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: maps(p.v[1] + " " + p.v[3]), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button></h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
+    return `<article class="card place" data-card-place="${esc(p.id)}"><div class="place-top">${Kit.badge(esc(c), { 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c])}<span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: maps(p.v[1] + " " + p.v[3]), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button></h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
   }
   function placeDetail(id) {
     const p = places.find((p) => p.id === id);
@@ -411,7 +417,7 @@ window.startTrip = (meta = {}) => {
         .map((u, i) => link(u, "參考網站 " + (i + 1)))
         .join(
           "",
-        )}</div><p class="note">${esc(p.v[7])}</p></section>${(window.TRIP_GEO.places[p.id] || []).length > 1 ? `<section class="detail-section"><h3>分店／地址（${window.TRIP_GEO.places[p.id].length}）</h3><div class="links">${window.TRIP_GEO.places[p.id].map((g, k) => link(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]))).join("")}</div></section>` : ""}${((b) => (b.length ? `<section class="detail-section"><h3>購物清單（${b.length}）</h3><div class="links">${b.map((x) => `<button class="action${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.bought ? "✓ " : ""}${esc(x.name)}</button>`).join("")}</div></section>` : ""))(buysAt({ placeId: p.id }))}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>`,
+        )}</div><p class="note">${esc(p.v[7])}</p></section>${(window.TRIP_GEO.places[p.id] || []).length > 1 ? `<section class="detail-section"><h3>分店／地址（${window.TRIP_GEO.places[p.id].length}）</h3><div class="links">${window.TRIP_GEO.places[p.id].map((g, k) => link(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]))).join("")}</div></section>` : ""}${((b) => (b.length ? `<section class="detail-section"><h3>購物清單（${b.length}）</h3><div class="links">${b.map((x) => Kit.btn(esc(x.name), { size: "sm", icon: x.bought ? "check" : "", cls: x.bought ? "bought" : "", attrs: { "data-shop-open": x.id } })).join("")}</div></section>` : ""))(buysAt({ placeId: p.id }))}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>`,
     );
     window.Together?.refresh();
   }
@@ -455,7 +461,7 @@ window.startTrip = (meta = {}) => {
   ];
   // A place can have several pins (branches): the main one from 自動填寫, others added as 分店 rows.
   const branchRow = (b = {}) =>
-    `<div class="branch-row"><input name="bLabel" maxlength="60" placeholder="分店名稱" aria-label="分店名稱" value="${esc(b.label || "")}"><span class="searchrow"><input name="bUrl" class="search" inputmode="url" autocomplete="off" placeholder="Google 地圖連結" aria-label="分店 Google 地圖連結"><button type="button" class="smallbtn" data-branch-find>定位</button></span><small class="branch-at">${Number.isFinite(b.lat) ? "📍 已定位" : "未定位"}</small><input type="hidden" name="bLat" value="${b.lat ?? ""}"><input type="hidden" name="bLng" value="${b.lng ?? ""}"><button type="button" class="smallbtn" data-branch-del aria-label="移除分店">×</button></div>`;
+    `<div class="branch-row"><input name="bLabel" maxlength="60" placeholder="分店名稱" aria-label="分店名稱" value="${esc(b.label || "")}"><span class="searchrow"><input name="bUrl" class="search" inputmode="url" autocomplete="off" placeholder="Google 地圖連結" aria-label="分店 Google 地圖連結">${Kit.btn("定位", { icon: "pin", attrs: { "data-branch-find": true } })}</span><small class="branch-at">${Number.isFinite(b.lat) ? "已定位" : "未定位"}</small><input type="hidden" name="bLat" value="${b.lat ?? ""}"><input type="hidden" name="bLng" value="${b.lng ?? ""}">${Kit.btn("移除分店", { icon: "x", iconOnly: true, variant: "ghost", attrs: { "data-branch-del": true } })}</div>`;
   // plan={day,slot}: 行程「＋ 新增站點」 uses the same form, adds a time, and also saves the place to 探索.
   function placeForm(p, plan = null) {
     const v = (i) => esc(p?.v[i] || ""),
@@ -463,7 +469,7 @@ window.startTrip = (meta = {}) => {
       pin = pins[0],
       alt = plan && plan.slot != null ? stopsFor(plan.day)[plan.slot] : null;
     openDialog(
-      `<div class="eyebrow">${plan ? `ADD TO DAY ${plan.day}` : p ? "EDIT PLACE" : "NEW PLACE"}</div><h2 class="detailtitle">${plan ? (alt ? "加入同一時間的選擇" : "新增站點") : p ? "修改地點" : "新增地點"}</h2>${plan ? `<p class="note">${alt ? `與「${esc(alt.title)}」同在 ${esc(alt.time || "這個時段")}。` : `${esc(days[plan.day - 1].date)} · ${esc(days[plan.day - 1].region)}。`}地點會同時加入「探索」。</p>` : ""}<form class="tg-form" id="placeForm" data-id="${p ? esc(p.id) : ""}"${plan ? ` data-day="${plan.day}" data-slot="${plan.slot ?? ""}"` : ""}>${plan && !alt ? '<label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label>' : ""}<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結"><button type="button" class="action primary" id="placeLookup">自動填寫</button></span></label><p class="note" id="placeLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位。</p><label>名稱<input name="f1" required maxlength="80" value="${v(1)}"></label><fieldset><legend>分類</legend>${categories.map((c) => `<label class="tg-check"><input type="checkbox" name="cats" value="${c}"${p?.cats.includes(c) ? " checked" : ""}> ${c}</label>`).join("")}</fieldset><label>區域<input name="f0" list="placeRegions" maxlength="60" required value="${v(0)}"><datalist id="placeRegions">${[...new Set(places.map((x) => x.v[0]).filter(Boolean))].map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label>${placeFields.map(([i, label, max]) => `<label>${label}${max > 200 ? `<textarea name="f${i}" rows="3" maxlength="${max}">${v(i)}</textarea>` : `<input name="f${i}" maxlength="${max}" value="${v(i)}">`}</label>`).join("")}<input type="hidden" name="lat" value="${pin ? pin.lat : ""}"><input type="hidden" name="lng" value="${pin ? pin.lng : ""}"><input type="hidden" name="mainLabel" value="${esc(pin?.label || "")}"><fieldset class="branches"><legend>其他分店／地址</legend><div id="branchRows">${pins.slice(1).map(branchRow).join("")}</div><button type="button" class="smallbtn" data-branch-add>＋ 加入分店／地址</button><p class="note">每個分店貼上 Google 地圖連結後按「定位」。附近頁會用最近的分店計算距離。</p></fieldset><button type="submit" class="locate-button">${plan ? "加入行程及探索" : p ? "儲存修改" : "加入地點"}</button></form>`,
+      `${Kit.sheetHead(plan ? (alt ? "加入同一時間的選擇" : "新增站點") : p ? "修改地點" : "新增地點", plan ? `D${plan.day}` : "")}${plan ? `<p class="note">${alt ? `與「${esc(alt.title)}」同在 ${esc(alt.time || "這個時段")}。` : `${esc(days[plan.day - 1].date)} · ${esc(days[plan.day - 1].region)}。`}地點會同時加入「探索」。</p>` : ""}<form class="tg-form" id="placeForm" data-id="${p ? esc(p.id) : ""}"${plan ? ` data-day="${plan.day}" data-slot="${plan.slot ?? ""}"` : ""}>${plan && !alt ? '<label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label>' : ""}<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結">${Kit.btn("自動填寫", { variant: "secondary", icon: "sparkles", attrs: { id: "placeLookup" } })}</span></label><p class="note" id="placeLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位。</p><label>名稱<input name="f1" required maxlength="80" value="${v(1)}"></label><fieldset><legend>分類</legend>${categories.map((c) => `<label class="tg-check"><input type="checkbox" name="cats" value="${c}"${p?.cats.includes(c) ? " checked" : ""}> ${c}</label>`).join("")}</fieldset><label>區域<input name="f0" list="placeRegions" maxlength="60" required value="${v(0)}"><datalist id="placeRegions">${[...new Set(places.map((x) => x.v[0]).filter(Boolean))].map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label>${placeFields.map(([i, label, max]) => `<label>${label}${max > 200 ? `<textarea name="f${i}" rows="3" maxlength="${max}">${v(i)}</textarea>` : `<input name="f${i}" maxlength="${max}" value="${v(i)}">`}</label>`).join("")}<input type="hidden" name="lat" value="${pin ? pin.lat : ""}"><input type="hidden" name="lng" value="${pin ? pin.lng : ""}"><input type="hidden" name="mainLabel" value="${esc(pin?.label || "")}"><fieldset class="branches"><legend>其他分店／地址</legend><div id="branchRows">${pins.slice(1).map(branchRow).join("")}</div>${Kit.btn("加入分店／地址", { size: "sm", icon: "plus", attrs: { "data-branch-add": true } })}<p class="note">每個分店貼上 Google 地圖連結後按「定位」。附近頁會用最近的分店計算距離。</p></fieldset>${Kit.btn(plan ? "加入行程及探索" : p ? "儲存修改" : "加入地點", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
   async function findBranch(row) {
@@ -478,7 +484,7 @@ window.startTrip = (meta = {}) => {
       row.querySelector("[name=bLng]").value = r.lng;
       const lab = row.querySelector("[name=bLabel]");
       if (!lab.value.trim()) lab.value = r.name || "";
-      at.textContent = "📍 " + (r.address || "已定位");
+      at.textContent = r.address || "已定位";
     } catch (e) {
       at.textContent =
         fnError(e, "未能定位");
@@ -686,7 +692,7 @@ window.startTrip = (meta = {}) => {
       v = (k) => esc(s[k] || ""),
       own = !s.linked;
     openDialog(
-      `<div class="eyebrow">${esc(days[day - 1].date)} · DAY ${day}</div><h2 class="detailtitle">修改站點</h2><form class="tg-form" id="stopForm" data-day="${day}" data-index="${index}">${own ? `<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結"><button type="button" class="action primary" id="stopLookup">自動填寫</button></span></label><p class="note" id="stopLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位。</p>` : `<div class="notice">「${esc(s.title)}」的名稱、地址及介紹跟隨${s.linked === "place" ? "探索地點" : "住宿資料"}，修改後所有行程會一併更新。<div class="links">${s.linked === "place" ? `<button type="button" class="action" data-place-edit="${esc(s.placeId)}">✎ 修改地點資料</button>` : `<button type="button" class="action" data-hotel-edit="${esc(s.hotelId)}">✎ 修改住宿資料</button>`}</div></div>`}<div class="tg-row"><label>時間<input name="time" maxlength="30" placeholder="例如：14:00–15:30" value="${v("time")}"></label>${own ? `<label>區域<input name="area" maxlength="60" value="${v("area")}"></label>` : ""}</div>${own ? `<label>地點／活動<input name="title" required maxlength="80" value="${v("title")}"></label><label>內容<textarea name="detail" rows="3" maxlength="1000">${v("detail")}</textarea></label>` : ""}<label>交通<textarea name="transport" rows="2" maxlength="500">${v("transport")}</textarea></label>${own ? `<label>導航目的地（可留空）<input name="target" maxlength="200" value="${v("target")}"></label>` : ""}<button type="submit" class="locate-button">儲存修改</button></form>`,
+      `${Kit.sheetHead("修改站點", `D${day} · ${esc(days[day - 1].date)}`)}<form class="tg-form" id="stopForm" data-day="${day}" data-index="${index}">${own ? `<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結">${Kit.btn("自動填寫", { variant: "secondary", icon: "sparkles", attrs: { id: "stopLookup" } })}</span></label><p class="note" id="stopLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位。</p>` : `<div class="notice">「${esc(s.title)}」的名稱、地址及介紹跟隨${s.linked === "place" ? "探索地點" : "住宿資料"}，修改後所有行程會一併更新。<div class="links">${s.linked === "place" ? Kit.btn("修改地點資料", { size: "sm", icon: "edit", attrs: { "data-place-edit": s.placeId } }) : Kit.btn("修改住宿資料", { size: "sm", icon: "edit", attrs: { "data-hotel-edit": s.hotelId } })}</div></div>`}<div class="tg-row"><label>時間<input name="time" maxlength="30" placeholder="例如：14:00–15:30" value="${v("time")}"></label>${own ? `<label>區域<input name="area" maxlength="60" value="${v("area")}"></label>` : ""}</div>${own ? `<label>地點／活動<input name="title" required maxlength="80" value="${v("title")}"></label><label>內容<textarea name="detail" rows="3" maxlength="1000">${v("detail")}</textarea></label>` : ""}<label>交通<textarea name="transport" rows="2" maxlength="500">${v("transport")}</textarea></label>${own ? `<label>導航目的地（可留空）<input name="target" maxlength="200" value="${v("target")}"></label>` : ""}${Kit.btn("儲存修改", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
   // Sub-area name for a coordinate (same centres as the explore filter), else the nearest place's region.
@@ -752,7 +758,7 @@ window.startTrip = (meta = {}) => {
     const today = days.find((d) => d.iso === new Date().toLocaleDateString("en-CA").replaceAll("-", "/"))?.n,
       sel = current === "plan" ? selectedDay : today || selectedDay;
     openDialog(
-      `<div class="eyebrow">ADD TO PLAN</div><h2 class="detailtitle">把「${esc(p.v[1])}」加入行程</h2><form class="tg-form" id="placeToPlan" data-place="${esc(p.id)}"><label>日子<select name="day">${days.map((d) => `<option value="${d.n}"${d.n === sel ? " selected" : ""}>D${d.n} ${esc(d.date)} ${esc(d.region)}</option>`).join("")}</select></label><label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label><button type="submit" class="locate-button">加入行程</button></form>`,
+      `${Kit.sheetHead(`把「${esc(p.v[1])}」加入行程`)}<form class="tg-form" id="placeToPlan" data-place="${esc(p.id)}"><label>日子<select name="day">${days.map((d) => `<option value="${d.n}"${d.n === sel ? " selected" : ""}>D${d.n} ${esc(d.date)} ${esc(d.region)}</option>`).join("")}</select></label><label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label>${Kit.btn("加入行程", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
   // In-page picker: search explore places and add them to the selected day without leaving the plan.
@@ -783,10 +789,14 @@ window.startTrip = (meta = {}) => {
     ppCat = "全部";
     const s = slot != null ? stopsFor(day)[slot] : null;
     openDialog(
-      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點（不在探索）", { icon: "plus", attrs: { "data-stop-new": true } })}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點"><div class="chips" role="group" aria-label="分類">${["全部", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => `<button class="chip ${c === ppCat ? "active" : ""}" data-pp-cat="${c}">${c}</button>`).join("")}</div>${s ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}"></div>`,
+      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點（不在探索）", { icon: "plus", attrs: { "data-stop-new": true } })}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點">${Kit.chips(
+        ["全部", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
+        { label: "分類" },
+      )}${s ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}"></div>`,
     );
     ppResults();
   }
+  const addBtn = (attrs) => Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs });
   function ppResults() {
     const box = $("#ppList");
     if (!box) return;
@@ -816,7 +826,7 @@ window.startTrip = (meta = {}) => {
     const hotelRows = hs
       .map(
         (h) =>
-          `<div class="pp-row"><div><b>🏨 ${esc(h.name)}</b><small>${h.checkIn ? `${esc(h.checkIn.slice(5))} → ${esc((h.checkOut || "").slice(5))}` : "住宿"}${h.address ? ` · ${esc(h.address.slice(0, 40))}` : ""}</small></div>${hotelIn.get(h.id) ? `<span class="badge">✓ ${hotelIn.get(h.id)} 次</span>` : ""}<button class="action primary" data-pp-hotel="${esc(h.id)}">＋ 加入</button></div>`,
+          `<div class="pp-row"><div><b>${icon("bed")} ${esc(h.name)}</b><small>${h.checkIn ? `${esc(h.checkIn.slice(5))} → ${esc((h.checkOut || "").slice(5))}` : "住宿"}${h.address ? ` · ${esc(h.address.slice(0, 40))}` : ""}</small></div>${hotelIn.get(h.id) ? Kit.badge(`✓ ${hotelIn.get(h.id)} 次`) : ""}${addBtn({ "data-pp-hotel": h.id })}</div>`,
       )
       .join("");
     // 購物清單: where unbought list items are bought (explore places, or the item's own geocoded 購買地點).
@@ -829,7 +839,7 @@ window.startTrip = (meta = {}) => {
     const spotRows = ppSpots
       .map(
         (s, k) =>
-          `<div class="pp-row"><div><b>🛍 ${esc(s.name)}</b><small>要買：${s.items.map(esc).join("、")}</small></div>${s.placeId && inPlan.has(s.placeId) ? '<span class="badge">✓ 已加入</span>' : `<button class="action primary" data-pp-spot="${k}">＋ 加入</button>`}</div>`,
+          `<div class="pp-row"><div><b>${icon("bag")} ${esc(s.name)}</b><small>要買：${s.items.map(esc).join("、")}</small></div>${s.placeId && inPlan.has(s.placeId) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-spot": k })}</div>`,
       )
       .join("");
     box.innerHTML = hotelRows + spotRows + (ps.length || hotelRows || spotRows ? "" : '<p class="note">找不到符合的地點。</p>');
@@ -840,7 +850,7 @@ window.startTrip = (meta = {}) => {
         .slice(0, 40)
         .map(
           (p) =>
-            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${p.v[4] ? ` · ${esc(p.v[4].slice(0, 40))}` : ""}</small></div>${inPlan.has(p.id) ? '<span class="badge">✓ 已加入</span>' : `<button class="action primary" data-pp-add="${esc(p.id)}">＋ 加入</button>`}</div>`,
+            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${p.v[4] ? ` · ${esc(p.v[4].slice(0, 40))}` : ""}</small></div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
         )
         .join("")}${ps.length > 40 ? `<p class="note">還有 ${ps.length - 40} 個，請輸入更多字縮窄搜尋。</p>` : ""}`,
     );
@@ -1148,7 +1158,7 @@ window.startTrip = (meta = {}) => {
     routeCtx = { day, i, origins, mode: "TRANSIT" };
     const start = origins.find((o) => o.key === def)?.time || "";
     openDialog(
-      `<div class="eyebrow">GETTING THERE · DAY ${day}</div><h2 class="detailtitle" id="routeTitle">前往 ${esc(to.title)}</h2>${dests.length > 1 ? `<div class="tg-form route-form"><label>目的地（同一時間有 ${dests.length} 個選擇）<select id="routeTo">${dests.map((k) => `<option value="${k}"${k === i ? " selected" : ""}>${esc(list[k].title)}</option>`).join("")}</select></label></div>` : ""}${
+      `<div class="eyebrow">交通 · D${day}</div><h2 class="detailtitle" id="routeTitle">前往 ${esc(to.title)}</h2>${dests.length > 1 ? `<div class="tg-form route-form"><label>目的地（同一時間有 ${dests.length} 個選擇）<select id="routeTo">${dests.map((k) => `<option value="${k}"${k === i ? " selected" : ""}>${esc(list[k].title)}</option>`).join("")}</select></label></div>` : ""}${
         origins.length
           ? `<div class="tg-form route-form"><label>出發地<select id="routeFrom">${origins.map((o) => `<option value="${esc(o.key)}"${o.key === def ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</select></label><div class="tg-row"><label>出發時間<input id="routeTime" type="time" value="${esc(start || "09:00")}"></label><label>方式<select id="routeMode">${Object.entries(
               ROUTE_MODES,
@@ -1156,9 +1166,9 @@ window.startTrip = (meta = {}) => {
               .map(([k, [v]]) => `<option value="${k}">${v}</option>`)
               .join(
                 "",
-              )}</select></label></div><button type="button" class="locate-button" id="routeGo">查詢路線建議</button></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
+              )}</select></label></div>${Kit.btn("查詢路線建議", { variant: "primary", cls: "btn-block", attrs: { id: "routeGo" } })}</div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
           : '<p class="note">這天前面沒有站點，亦未有住宿資料，未能查詢路線；可以自行填寫。</p>'
-      }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label><button type="submit" class="action primary">儲存交通</button></form>`,
+      }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label>${Kit.btn("儲存交通", { type: "submit", variant: "secondary" })}</form>`,
     );
   }
   async function runRoutes() {
@@ -1172,7 +1182,7 @@ window.startTrip = (meta = {}) => {
       time = $("#routeTime").value || "09:00";
     c.mode = mode;
     const gm = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from.point.address || `${from.point.lat},${from.point.lng}`)}&destination=${encodeURIComponent(dest.address || `${dest.lat},${dest.lng}`)}&travelmode=${ROUTE_MODES[mode][1]}`;
-    const gmLink = `<a class="action" href="${gm}" target="_blank" rel="noopener">在 Google 地圖查看 ↗</a><button type="button" class="action primary" data-route-ai>✨ AI 分析</button>`;
+    const gmLink = `${Kit.btn("在 Google 地圖查看", { href: gm, external: true, size: "sm", icon: "map" })}${Kit.btn("AI 分析", { variant: "secondary", size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}`;
     c.ai = { from, to, dest, time };
     if (mode === "TRANSIT" && meta.country === "JP") {
       box.innerHTML = `<div class="notice">Google 不向其他網站提供日本的公共交通路線，只可以在 Google 地圖 App 內查看。請按下面按鈕查看，揀好路線後在下面「交通」填寫；步行和駕車可以直接在這裡查詢。</div><div class="links">${gmLink}</div>`;
@@ -1189,7 +1199,7 @@ window.startTrip = (meta = {}) => {
       });
       c.options = r.options;
       box.innerHTML = r.options.length
-        ? `${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol><button type="button" class="action primary" data-route-pick="${k}">選用這個</button></div>`).join("")}<div class="links">${gmLink}</div>`
+        ? `${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": k } })}</div>`).join("")}<div class="links">${gmLink}</div>`
         : `<p class="note">Google 地圖找不到${ROUTE_MODES[mode][0]}路線。</p><div class="links">${gmLink}</div>`;
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p><div class="links">${gmLink}</div>`;
@@ -1208,7 +1218,7 @@ window.startTrip = (meta = {}) => {
       box = $("#routeAi");
     if (!c?.ai || !box) return;
     const { from, to, dest, time } = c.ai;
-    box.innerHTML = '<div class="route-ai-wait"><b>✨ AI 正在考慮路線…</b><p class="note">大約需要 10–30 秒。</p></div>';
+    box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} AI 正在考慮路線…</b><p class="note">大約需要 10–30 秒。</p></div>`;
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     try {
       const r = await window.Together.aiRoutes({
@@ -1228,7 +1238,7 @@ window.startTrip = (meta = {}) => {
       });
       c.aiOptions = r.options;
       box.innerHTML = r.options.length
-        ? `<div class="route-ai-head"><b>✨ AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}<button type="button" class="action primary" data-route-ai-pick="${k}">選用這個</button></div>`).join("")}`
+        ? `<div class="route-ai-head"><b>${icon("sparkles")} AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-ai-pick": k } })}</div>`).join("")}`
         : '<p class="note">AI 未能提供路線建議。</p>';
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(fnError(e, "未能進行 AI 分析，請檢查網絡後再試。"))}</p>`;
@@ -1417,7 +1427,10 @@ window.startTrip = (meta = {}) => {
   }
   const notebookArea = (r) => r.region || "其他";
   function renderNotebook() {
-    return `${header("資料簿", "搜尋全部旅程資料，或按分類及區域篩選")}<div class="controls notebook-controls"><div class="searchrow"><input id="notebookSearch" class="search" type="search" aria-label="搜尋完整資料簿" placeholder="輸入店名、菜式、酒店、航班或日期…" value="${esc(notebookSearch)}"><select id="notebookRegion" aria-label="資料簿區域"><option>全部區域</option>${[...new Set(notebookRecords().map(notebookArea))].map((r) => `<option${r === notebookRegion ? " selected" : ""}>${esc(r)}</option>`).join("")}</select></div><div class="chips">${["全部", "餐廳", "景點", "商店", "行程", "酒店", "機票", "購物", "筆記"].map((t) => `<button class="chip ${t === notebookType ? "active" : ""}" data-notebook-type="${t}" aria-pressed="${t === notebookType}">${t}</button>`).join("")}</div></div><div id="notebookResults"></div><div class="sourcefooter">資料由旅伴在網站內輸入，所有旅伴即時同步。</div>`;
+    return `${header("資料簿", "搜尋全部旅程資料，或按分類及區域篩選")}<div class="controls notebook-controls"><div class="searchrow"><input id="notebookSearch" class="search" type="search" aria-label="搜尋完整資料簿" placeholder="輸入店名、菜式、酒店、航班或日期…" value="${esc(notebookSearch)}"><select id="notebookRegion" aria-label="資料簿區域"><option>全部區域</option>${[...new Set(notebookRecords().map(notebookArea))].map((r) => `<option${r === notebookRegion ? " selected" : ""}>${esc(r)}</option>`).join("")}</select></div>${Kit.chips(
+      ["全部", "餐廳", "景點", "商店", "行程", "酒店", "機票", "購物", "筆記"].map((t) => ({ label: t, active: t === notebookType, attrs: { "data-notebook-type": t } })),
+      { label: "類別" },
+    )}</div><div id="notebookResults"></div><p class="note">資料由旅伴在網站內輸入，所有旅伴即時同步。</p>`;
   }
   function notebookResults() {
     const all = notebookRecords(),
@@ -1433,7 +1446,7 @@ window.startTrip = (meta = {}) => {
               .includes(q)),
       );
     $("#notebookResults").innerHTML =
-      `<div class="resultsbar"><span>找到 ${rs.length} 項${notebookSearch ? " ·「" + esc(notebookSearch) + "」" : ""}</span><button id="notebookReset" class="smallbtn">清除篩選</button></div><div class="notebook-list">${rs.map((r) => `<article class="notebook-card"><div class="notebook-meta"><span class="badge">${esc(r.type)}</span><span>${esc(r.region)}</span></div><h2>${esc(r.title)}</h2><p class="notebook-summary">${esc(r.summary)}</p>${r.sub ? `<p class="notebook-sub">${esc(r.sub)}</p>` : ""}<div class="notebook-bottom"><small>${esc(r.source)}</small><button class="action primary" data-notebook-record="${r.id}">查看詳情 →</button></div></article>`).join("")}</div>${rs.length ? "" : '<div class="empty"><h2>找不到符合的資料</h2><p>試用較短的店名、菜式或日期，或按「清除篩選」。</p></div>'}`;
+      `<div class="resultsbar"><span>找到 ${rs.length} 項${notebookSearch ? " ·「" + esc(notebookSearch) + "」" : ""}</span>${Kit.btn("清除篩選", { variant: "ghost", size: "sm", attrs: { id: "notebookReset" } })}</div><div class="notebook-list">${rs.map((r) => `<article class="notebook-card"><div class="notebook-meta">${Kit.badge(esc(r.type))}<span>${esc(r.region)}</span></div><h2>${esc(r.title)}</h2><p class="notebook-summary">${esc(r.summary)}</p>${r.sub ? `<p class="notebook-sub">${esc(r.sub)}</p>` : ""}<div class="notebook-bottom"><small>${esc(r.source)}</small>${Kit.btn("查看詳情", { variant: "secondary", size: "sm", attrs: { "data-notebook-record": r.id } })}</div></article>`).join("")}</div>${rs.length ? "" : Kit.empty("找不到符合的資料", "試用較短的店名、菜式或日期，或按「清除篩選」。")}`;
   }
   function bindNotebook() {
     notebookResults();
@@ -1458,12 +1471,12 @@ window.startTrip = (meta = {}) => {
       return;
     }
     openDialog(
-      `<div class="eyebrow">${esc(r.type)} · ${esc(r.source)}</div><h2 class="detailtitle">${esc(r.title)}</h2>${(r.fields || [])
+      `${Kit.sheetHead(esc(r.title), `${esc(r.type)} · ${esc(r.source)}`)}${(r.fields || [])
         .filter((f) => f[1])
         .map((f) => `<section class="detail-section"><h3>${esc(f[0])}</h3><p>${esc(f[1])}</p></section>`)
         .join(
           "",
-        )}<div class="links">${r.day ? `<a class="action primary" href="#plan?day=${r.day}">在行程查看</a>` : ""}${r.placeId && places.some((p) => p.id === r.placeId) ? `<button class="action" data-place="${esc(r.placeId)}">地點資料</button>` : ""}${r.target ? link(route(r.target), "導航") : ""}${(r.urls || []).map((u, i) => link(u, "參考網站 " + (i + 1))).join("")}</div>`,
+        )}<div class="links">${r.day ? Kit.btn("在行程查看", { href: `#plan?day=${r.day}`, variant: "secondary", size: "sm", icon: "calendar" }) : ""}${r.placeId && places.some((p) => p.id === r.placeId) ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": r.placeId } }) : ""}${r.target ? link(route(r.target), "導航") : ""}${(r.urls || []).map((u, i) => link(u, "參考網站 " + (i + 1))).join("")}</div>`,
     );
   }
   // ---- 住宿 and 機票 (hotels and flights) ----
@@ -1482,7 +1495,7 @@ window.startTrip = (meta = {}) => {
       first = days[0] ? isoDash(days[0]) : "",
       last = days.at(-1) ? isoDash(days.at(-1)) : "";
     openDialog(
-      `<div class="eyebrow">STAY</div><h2 class="detailtitle">${h ? "修改住宿" : "新增住宿"}</h2><form class="tg-form" id="hotelForm" data-id="${h ? esc(h.id) : ""}"><label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上酒店的 Google 地圖分享連結" value="${v("mapsUrl")}"><button type="button" class="action primary" id="hotelLookup">自動填寫</button></span></label><p class="note" id="hotelLookupInfo"></p><label>酒店名稱<input name="name" required maxlength="100" value="${v("name")}"></label><label>地址<input name="address" maxlength="200" value="${v("address")}"></label><div class="tg-row"><label>入住<input name="checkIn" type="date" value="${h ? v("checkIn") : first}"></label><label>退房<input name="checkOut" type="date" value="${h ? v("checkOut") : last}"></label></div><label>備註（訂單、早餐、寄存行李…）<textarea name="note" rows="2" maxlength="500">${v("note")}</textarea></label><input type="hidden" name="lat" value="${h?.lat ?? ""}"><input type="hidden" name="lng" value="${h?.lng ?? ""}"><button type="submit" class="locate-button">${h ? "儲存修改" : "加入住宿"}</button></form>`,
+      `${Kit.sheetHead(h ? "修改住宿" : "新增住宿")}<form class="tg-form" id="hotelForm" data-id="${h ? esc(h.id) : ""}"><label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上酒店的 Google 地圖分享連結" value="${v("mapsUrl")}">${Kit.btn("自動填寫", { variant: "secondary", icon: "sparkles", attrs: { id: "hotelLookup" } })}</span></label><p class="note" id="hotelLookupInfo"></p><label>酒店名稱<input name="name" required maxlength="100" value="${v("name")}"></label><label>地址<input name="address" maxlength="200" value="${v("address")}"></label><div class="tg-row"><label>入住<input name="checkIn" type="date" value="${h ? v("checkIn") : first}"></label><label>退房<input name="checkOut" type="date" value="${h ? v("checkOut") : last}"></label></div><label>備註（訂單、早餐、寄存行李…）<textarea name="note" rows="2" maxlength="500">${v("note")}</textarea></label><input type="hidden" name="lat" value="${h?.lat ?? ""}"><input type="hidden" name="lng" value="${h?.lng ?? ""}">${Kit.btn(h ? "儲存修改" : "加入住宿", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
   async function lookupHotel() {
@@ -1533,7 +1546,7 @@ window.startTrip = (meta = {}) => {
   function flightForm(f) {
     const v = (k) => esc(f?.[k] ?? "");
     openDialog(
-      `<div class="eyebrow">FLIGHT</div><h2 class="detailtitle">${f ? "修改航班" : "新增航班"}</h2><form class="tg-form" id="flightForm" data-id="${f ? esc(f.id) : ""}"><div class="tg-row"><label>航班號<input name="flightNo" required maxlength="20" placeholder="例如：CX 410" value="${v("flightNo")}"></label><label>航空公司<input name="airline" maxlength="60" value="${v("airline")}"></label></div><div class="tg-row"><label>出發地<input name="from" maxlength="80" placeholder="例如：HKG T1" value="${v("from")}"></label><label>目的地<input name="to" maxlength="80" placeholder="例如：ICN T1" value="${v("to")}"></label></div><div class="tg-row"><label>出發（當地時間）<input name="depart" type="datetime-local" value="${v("depart")}"></label><label>到達（當地時間）<input name="arrive" type="datetime-local" value="${v("arrive")}"></label></div><label>備註（行李限額等，不要輸入訂單資料）<input name="note" maxlength="500" value="${v("note")}"></label><button type="submit" class="locate-button">${f ? "儲存修改" : "加入航班"}</button></form>`,
+      `${Kit.sheetHead(f ? "修改航班" : "新增航班")}<form class="tg-form" id="flightForm" data-id="${f ? esc(f.id) : ""}"><div class="tg-row"><label>航班號<input name="flightNo" required maxlength="20" placeholder="例如：CX 410" value="${v("flightNo")}"></label><label>航空公司<input name="airline" maxlength="60" value="${v("airline")}"></label></div><div class="tg-row"><label>出發地<input name="from" maxlength="80" placeholder="例如：HKG T1" value="${v("from")}"></label><label>目的地<input name="to" maxlength="80" placeholder="例如：ICN T1" value="${v("to")}"></label></div><div class="tg-row"><label>出發（當地時間）<input name="depart" type="datetime-local" value="${v("depart")}"></label><label>到達（當地時間）<input name="arrive" type="datetime-local" value="${v("arrive")}"></label></div><label>備註（行李限額等，不要輸入訂單資料）<input name="note" maxlength="500" value="${v("note")}"></label>${Kit.btn(f ? "儲存修改" : "加入航班", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
   function saveFlight(f) {
@@ -1700,7 +1713,10 @@ window.startTrip = (meta = {}) => {
     if (el.dataset.planPick !== undefined) pickPlaceForPlan(selectedDay);
     if (el.dataset.ppCat) {
       ppCat = el.dataset.ppCat;
-      document.querySelectorAll("[data-pp-cat]").forEach((b) => b.classList.toggle("active", b.dataset.ppCat === ppCat));
+      document.querySelectorAll("[data-pp-cat]").forEach((b) => {
+        b.classList.toggle("active", b.dataset.ppCat === ppCat);
+        b.setAttribute("aria-pressed", b.dataset.ppCat === ppCat);
+      });
       ppResults();
     }
     if (el.dataset.ppAdd) addPickedPlace(el.dataset.ppAdd);
