@@ -299,6 +299,7 @@ try {
   await page.click('#placeLookup'); await page.waitForFunction(() => document.querySelector('#placeForm [name=f4]').value);
   assert.equal(await page.inputValue('#placeForm [name=f4]'), '大燈籠必影；仲見世買人形燒；早上 8 時前人少');
   assert.equal(await page.inputValue('#placeForm [name=f1]'), '風雷神門', 'filled fields are kept');
+  assert.equal(await page.inputValue('#placeForm [name=f5]'), '價格：免費入場\n時間：24 小時開放');
   assert.equal((await page.evaluate(() => window.lookupRequest)).highlights, true);
   await page.click('#placeForm button[type=submit]');
   await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('[data-place]').click();

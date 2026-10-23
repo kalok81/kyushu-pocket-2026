@@ -765,3 +765,5 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .zh-name{display:block;margin-top:1px;font-size:14px;font-weight:500;line-height:1.45;color:var(--muted-foreground)}
 .detailtitle .zh-name{font-size:16px;margin-top:2px}
 .tg-lines .zh-name{font-size:13px}
+.detail-actions+.detail-links{margin-top:-8px}
+.detail-links>.btn{flex:1}

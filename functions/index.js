@@ -336,22 +336,26 @@ function parseMapsUrl(url) {
 // Hours and type label in Chinese; name and address in the language chosen by langFor.
 const SEARCH_FIELDS = ['id', 'displayName', 'formattedAddress', 'location', 'types', 'websiteUri', 'googleMapsUri', 'priceRange', 'addressComponents'].map(f => 'places.' + f).join(',');
 const DETAIL_FIELDS = 'regularOpeningHours.weekdayDescriptions,primaryTypeDisplayName';
-// For 必吃・必買・特色 (place form only): Google's summary and visitors' reviews, billed at the Atmosphere tier.
+// For 必吃・必買・特色 and a tidy 參考價格與營業時間 (place form only): Google's summary and visitors' reviews, billed at the Atmosphere tier.
 const HIGHLIGHT_FIELDS = ',editorialSummary,reviews';
-const highlightPrompt = (t, name, type, summary, reviews) => `A traveller is adding a place to a trip to ${tripInfo(t).place}: ${name}${type ? ` (${type})` : ''}.
-From Google's description and visitors' reviews below, write what to eat, buy or not miss there, in Traditional Chinese as used in Hong Kong.
-Reply with JSON only: {"highlights": string}
-- At most 120 Chinese characters, as short points joined by "、" or "；", e.g. "招牌豚骨拉麵、可加辣度；必試替玉；24 小時營業，晚上人少".
-- Only what the text supports: specific dishes, products, souvenirs, views, tips (queue times, best time to go). No ratings, no generic praise.
-- Empty string if the text says nothing specific.
+const highlightPrompt = (t, name, type, summary, reviews, hours, priceRange) => `A traveller is adding a place to a trip to ${tripInfo(t).place}: ${name}${type ? ` (${type})` : ''}.
+From Google's data and visitors' reviews below, fill two fields of their place note, in Traditional Chinese as used in Hong Kong.
+Reply with JSON only: {"type": string, "highlights": string, "priceHours": string}
+- type (類型): what kind of place it is in 2–6 Chinese characters, as specific as the text allows (e.g. 拉麵、咖啡店、居酒屋、甜品店、藥妝店、百貨公司、寺院、神社、展望台、溫泉), not just 餐廳 or 商店 when something more exact is known.
+- highlights (必吃・必買・特色): what to eat, buy or not miss, about 120 Chinese characters, short points joined by "、" or "；", e.g. "招牌豚骨拉麵、可加辣度；必試替玉；晚上人少". Only what the text supports: dishes, products, souvenirs, views, tips (queues, best time to go). No ratings, no generic praise.
+- priceHours (參考價格與營業時間): two short lines. Line 1 "價格：…" from the price range or prices mentioned in reviews (e.g. "價格：每人約 ¥1,000–2,000", "價格：免費入場", "價格：拉麵 ¥980 起"); leave the line out if nothing says. Line 2 "時間：…" summing up the opening hours compactly (e.g. "時間：每日 11:00–22:00；星期三休息", "時間：24 小時營業", "時間：平日 10:00–20:00，週末 9:00–21:00").
+- Empty string for a field the text says nothing about.
+Opening hours: ${JSON.stringify(hours)}
+Price range: ${JSON.stringify(priceRange || '')}
 Description: ${JSON.stringify(summary || '')}
 Reviews: ${JSON.stringify(reviews)}`;
-async function placeHighlights(t, name, type, detail) {
+async function placeHighlights(t, name, type, detail, priceRange) {
  const reviews = (detail.reviews || []).map(r => String(r.originalText?.text || r.text?.text || '').slice(0, 600)).filter(Boolean).slice(0, 5);
- const summary = detail.editorialSummary?.text || '';
- if (!reviews.length && !summary) return '';
- const r = await askDeepSeek(highlightPrompt(t, name, type, summary, reviews), [], { think: false });
- return typeof r?.highlights === 'string' ? r.highlights.trim().slice(0, 300) : '';
+ const summary = detail.editorialSummary?.text || '', hours = detail.regularOpeningHours?.weekdayDescriptions || [];
+ if (!reviews.length && !summary && !hours.length) return {};
+ const r = await askDeepSeek(highlightPrompt(t, name, type, summary, reviews, hours, priceRange), [], { think: false });
+ const field = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ return { type: field(r?.type, 20), highlights: field(r?.highlights, 300), priceHours: field(r?.priceHours, 300) };
 }
 async function placesApi(path, fields, body) {
  const res = await fetch(`https://places.googleapis.com/v1/${path}`, {
@@ -415,17 +419,18 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
  // highlights: the place form asks for 必吃・必買・特色 too (one AI use; left out when the day's AI uses are spent).
  const wantHighlights = req.data?.highlights === true;
  const detail = await placesApi(`places/${place.id}?languageCode=zh-TW`, DETAIL_FIELDS + (wantHighlights ? HIGHLIGHT_FIELDS : '')).catch(() => ({}));
- let highlights = '';
+ let ai = {};
  if (wantHighlights)
   try {
    await useQuota(req.auth.uid, 'ai');
    const trip = typeof req.data?.trip === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(req.data.trip) ? (await getFirestore().doc(`trips/${req.data.trip}`).get()).data() : null;
-   highlights = await placeHighlights(trip, place.displayName?.text || query || '', detail.primaryTypeDisplayName?.text || '', detail);
+   ai = await placeHighlights(trip, place.displayName?.text || query || '', detail.primaryTypeDisplayName?.text || '', detail, price(place.priceRange));
   } catch (e) {
    console.error('highlights', e?.message);
   }
  return {
-  highlights,
+  highlights: ai.highlights || '',
+  priceHours: ai.priceHours || '',
   name: place.displayName?.text || query || '',
   address: place.formattedAddress || '',
   lat: place.location?.latitude ?? at?.lat ?? null,
@@ -433,7 +438,7 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
   hours: (detail.regularOpeningHours?.weekdayDescriptions || []).join('\n'),
   price: price(place.priceRange),
   category: category(place.types),
-  type: detail.primaryTypeDisplayName?.text || '',
+  type: ai.type || detail.primaryTypeDisplayName?.text || '',
   website: place.websiteUri || '',
   mapsUrl: place.googleMapsUri || url.href,
   district: district(place),
