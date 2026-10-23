@@ -388,36 +388,47 @@ window.startTrip = (meta = {}) => {
     else if (current === "notebook" && $("#notebookResults")) notebookResults();
   }
   // Explore card: tap anywhere for the details; the map and the star are the only buttons.
-  function placeCard(p, near) {
+  // Card badge: the first category (手信 shops show as 手信店) and its colour.
+  function placeCat(p) {
     const c0 = p.cats.find((x) => x !== "手信") || p.cats[0] || p.v[6],
-      c = c0 === "手信" ? "手信店" : c0,
-      on = saved.has(p.id);
-    return `<article class="card place" data-card-place="${esc(p.id)}"><div class="place-top">${Kit.badge(esc(c), { 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c])}<span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: maps(p.v[1] + " " + p.v[3]), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button></h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
+      c = c0 === "手信" ? "手信店" : c0;
+    return [c, { 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c] || ""];
   }
+  function placeCard(p, near) {
+    const [c, cls] = placeCat(p),
+      on = saved.has(p.id);
+    return `<article class="card place" data-card-place="${esc(p.id)}"><div class="place-top">${Kit.badge(esc(c), cls)}<span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: maps(p.v[1] + " " + p.v[3]), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button></h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
+  }
+  // Place details: category and area, the main actions, then the facts as icon rows and the links as a list.
   function placeDetail(id) {
     const p = places.find((p) => p.id === id);
     if (!p) return;
-    const fields = [
-      [3, "地址／位置"],
-      [4, "必吃・必買・特色"],
-      [5, "參考價格與營業時間"],
-      [11, "備註與預約"],
-      [9, "核對狀態"],
-    ];
+    const [cat, catCls] = placeCat(p),
+      on = saved.has(p.id),
+      row = (ic, label, html, extra = "") =>
+        `<div class="info-row">${icon(ic)}<div><small>${label}</small><p>${html}</p></div>${extra}</div>`,
+      linkRow = (u, label, ic) =>
+        `<a class="info-row info-link" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${icon(ic)}<div><p>${esc(label)}</p></div>${icon("external")}</a>`,
+      pins = window.TRIP_GEO.places[p.id] || [],
+      refs = [...urlList(p.v[8]).map((u, i) => linkRow(u, `影片 ${i + 1}`, "image")), ...urlList(p.v[10]).map((u, i) => linkRow(u, `參考網站 ${i + 1}`, "link"))],
+      buys = buysAt({ placeId: p.id });
     openDialog(
-      `${Kit.sheetHead(esc(p.v[1]), esc(p.v[0]))}<div class="links place-admin">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}${Kit.btn("編輯", { icon: "edit", attrs: { "data-place-edit": p.id } })}${Kit.menu([
+      `<div class="detail-badges">${Kit.badge(esc(cat), catCls)}<span>${esc(areaOf(p) || p.v[0])}</span></div><h2 class="detailtitle">${esc(p.v[1])}</h2>${p.v[9]?.includes("已閉店") ? '<p class="closed">已結業 · 保留原有記錄</p>' : ""}<div class="detail-actions">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}${Kit.btn("導航", { href: route(p.v[1] + " " + p.v[3]), external: true, icon: "nav", iconOnly: true })}<button class="save btn btn-outline btn-icon${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"}" aria-pressed="${on}">${icon("star")}</button>${Kit.btn("編輯", { icon: "edit", iconOnly: true, attrs: { "data-place-edit": p.id } })}${Kit.menu([
+        { label: "Google 地圖", icon: "map", href: maps(p.v[1] + " " + p.v[3]), external: true },
         { label: "複製地址", icon: "copy", attrs: { "data-copy": p.v[3] || p.v[1] } },
         { label: "刪除地點", icon: "trash", danger: true, attrs: { "data-place-delete": p.id } },
-      ])}</div><div class="links">${link(maps(p.v[1] + " " + p.v[3]), "Google 地圖")}${link(route(p.v[1] + " " + p.v[3]), "導航前往")}</div>${fields
-        .filter(([i]) => p.v[i])
-        .map(([i, label]) => `<section class="detail-section"><h3>${label}</h3><p>${esc(p.v[i])}</p></section>`)
-        .join("")}<section class="detail-section"><h3>影片與參考來源</h3><div class="links">${urlList(p.v[8])
-        .map((u, i) => link(u, "影片 " + (i + 1)))
-        .join("")}${urlList(p.v[10])
-        .map((u, i) => link(u, "參考網站 " + (i + 1)))
-        .join(
-          "",
-        )}</div><p class="note">${esc(p.v[7])}</p></section>${(window.TRIP_GEO.places[p.id] || []).length > 1 ? `<section class="detail-section"><h3>分店／地址（${window.TRIP_GEO.places[p.id].length}）</h3><div class="links">${window.TRIP_GEO.places[p.id].map((g, k) => link(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]))).join("")}</div></section>` : ""}${((b) => (b.length ? `<section class="detail-section"><h3>購物清單（${b.length}）</h3><div class="links">${b.map((x) => Kit.btn(esc(x.name), { size: "sm", icon: x.bought ? "check" : "", cls: x.bought ? "bought" : "", attrs: { "data-shop-open": x.id } })).join("")}</div></section>` : ""))(buysAt({ placeId: p.id }))}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>`,
+      ])}</div><div class="info-list">${[
+        p.v[3] && row("pin", "地址", esc(p.v[3]), Kit.btn("複製地址", { icon: "copy", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-copy": p.v[3] } })),
+        p.v[4] && row("sparkles", "必吃・必買・特色", esc(p.v[4])),
+        p.v[5] && row("clock", "價錢及營業時間", esc(p.v[5])),
+        p.v[11] && row("note", "備註及預約", esc(p.v[11])),
+      ]
+        .filter(Boolean)
+        .join("")}</div>${
+        buys.length
+          ? `<section class="detail-section"><h3>購物清單（${buys.length}）</h3><div class="links">${buys.map((x) => Kit.btn(esc(x.name), { size: "sm", icon: x.bought ? "check" : "bag", cls: x.bought ? "bought" : "", attrs: { "data-shop-open": x.id } })).join("")}</div></section>`
+          : ""
+      }${pins.length > 1 ? `<section class="detail-section"><h3>分店／地址（${pins.length}）</h3><div class="info-list">${pins.map((g, k) => linkRow(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]), "pin")).join("")}</div></section>` : ""}${refs.length ? `<section class="detail-section"><h3>影片及參考</h3><div class="info-list">${refs.join("")}</div></section>` : ""}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>${p.v[9] || p.v[7] ? `<p class="note detail-foot">${esc([p.v[9], p.v[7]].filter(Boolean).join(" · "))}</p>` : ""}`,
     );
     window.Together?.refresh();
   }
@@ -1806,6 +1817,13 @@ window.startTrip = (meta = {}) => {
       if ($("#results")) renderResults();
       if ($("#notebookResults")) notebookResults();
       if (current === "nearby") nearbyResults();
+      // the star in an open place sheet follows too
+      $("#detailBody")
+        .querySelectorAll(`[data-save="${id}"]`)
+        .forEach((b) => {
+          b.classList.toggle("saved", saved.has(id));
+          b.setAttribute("aria-pressed", saved.has(id));
+        });
       if (!ok) toast("瀏覽器未允許儲存；收藏只保留至本次離開。");
     }
     if (el.dataset.cat) {

@@ -230,6 +230,13 @@
       if ($("#results")) renderResults();
       if ($("#notebookResults")) notebookResults();
       if (current === "nearby") nearbyResults();
+      // the star in an open place sheet follows too
+      $("#detailBody")
+        .querySelectorAll(`[data-save="${id}"]`)
+        .forEach((b) => {
+          b.classList.toggle("saved", saved.has(id));
+          b.setAttribute("aria-pressed", saved.has(id));
+        });
       if (!ok) toast("瀏覽器未允許儲存；收藏只保留至本次離開。");
     }
     if (el.dataset.cat) {
