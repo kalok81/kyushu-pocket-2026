@@ -139,7 +139,8 @@ service cloud.firestore {
           && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
       }
       function placeValid(d) {
-        return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'points', 'mapsUrl', 'deleted', 'zh', 'zhFor', 'by', 'byName', 'at', 'createdAt'])
+        return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'points', 'mapsUrl', 'deleted', 'zh', 'zhFor', 'photo', 'photoBy', 'by', 'byName', 'at', 'createdAt'])
+          && (!('photo' in d) || d.photo == null || text(d.photo, 400000)) && (!('photoBy' in d) || text(d.photoBy, 60))
           && zhValid(d)
         && (!('points' in d) || (d.points is list && d.points.size() <= 10))
           && (d.base == null || text(d.base, 20)) && d.fields is list && d.fields.size() == 12

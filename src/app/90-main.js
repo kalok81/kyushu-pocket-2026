@@ -205,6 +205,7 @@
     }
     if (el.dataset.placeEdit) placeForm(places.find((p) => p.id === el.dataset.placeEdit));
     if (el.id === "placeLookup") lookupPlaceForm();
+    if (el.dataset.placePhotoDel !== undefined) setPlacePhoto(null);
     if (el.dataset.branchAdd !== undefined) {
       $("#branchRows").insertAdjacentHTML("beforeend", branchRow());
       $("#branchRows").lastElementChild.querySelector("input").focus();

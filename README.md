@@ -72,7 +72,7 @@
 | 名稱 | 用途 | 服務 |
 |---|---|---|
 | `processReceipt` | 背景讀取收據及物品相片（Firestore `receiptJobs` 觸發） | DeepSeek `deepseek-flash` |
-| `lookupPlace` | Google 地圖自動填寫；探索的新增地點表格同時讀取 Google 簡介、營業時間及評論，由 AI 填寫類型、「必吃・必買・特色」及「參考價格與營業時間」（計 1 次 AI 分析） | Places API、DeepSeek |
+| `lookupPlace` | Google 地圖自動填寫；探索的新增地點表格同時讀取 Google 簡介、營業時間及評論，由 AI 填寫類型、「必吃・必買・特色」及「參考價格與營業時間」（計 1 次 AI 分析），並加入 Google 地圖上的地點相片（注明拍攝者） | Places API、DeepSeek |
 | `suggestRoutes` | 站點之間的路線建議 | Routes API |
 | `aiRoutes` | AI 路線建議 | DeepSeek |
 | `findBuyPlaces` | 購物「AI 找購買地點」：上網搜尋物品在旅程目的地的售賣地點 | DeepSeek Search、DeepSeek |

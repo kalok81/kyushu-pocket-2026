@@ -305,6 +305,8 @@ try {
   assert.equal(await page.inputValue('#placeForm [name=f1]'), '風雷神門', 'filled fields are kept');
   assert.equal(await page.inputValue('#placeForm [name=f5]'), '價格：免費入場\n時間：24 小時開放');
   assert.equal((await page.evaluate(() => window.lookupRequest)).highlights, true);
+  assert.equal((await page.evaluate(() => window.lookupRequest)).photo, true);
+  await page.waitForSelector('#placePhotoBox img'); assert.match(await page.locator('#placePhotoBox figcaption').innerText(), /Tester · Google 地圖/);
   await page.click('#placeForm button[type=submit]');
   await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('[data-place]').click();
   await page.click('#detail [data-place-edit]'); assert.equal(await page.inputValue('#placeForm [name=mapsUrl]'), link);
@@ -312,6 +314,7 @@ try {
   const saved = await page.evaluate(() => Object.values(globalThis.__fakeStore.places).find((d) => d.fields[1] === '風雷神門').mapsUrl);
   assert.equal(saved, link);
   assert.equal(await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator(`a[href="${link}"]`).count(), 1, 'the card map button opens the saved link');
+  assert.equal(await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('.place-thumb').count(), 1, 'the card shows the place photo');
  });
  await step('shopping: several 購買地點, AI finds where to buy', async () => {
   await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');

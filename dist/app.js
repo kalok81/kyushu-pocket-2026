@@ -400,7 +400,7 @@ window.startTrip = (meta = {}) => {
   function placeCard(p, near) {
     const [c, cls] = placeCat(p),
       on = saved.has(p.id);
-    return `<article class="card place" data-card-place="${esc(p.id)}"><div class="place-top">${Kit.badge(esc(c), cls)}<span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: placeMap(p), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button>${zhLine(p.zh)}</h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
+    return `<article class="card place${p.photo ? " has-photo" : ""}" data-card-place="${esc(p.id)}">${p.photo ? `<img class="place-thumb" src="data:image/jpeg;base64,${p.photo}" alt="" loading="lazy">` : ""}<div class="place-top">${Kit.badge(esc(c), cls)}<span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: placeMap(p), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button>${zhLine(p.zh)}</h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
   }
   // Place details: category and area, the main actions, then the facts as icon rows and the links as a list.
   function placeDetail(id) {
@@ -416,7 +416,7 @@ window.startTrip = (meta = {}) => {
       refs = [...urlList(p.v[8]).map((u, i) => linkRow(u, `影片 ${i + 1}`, "image")), ...urlList(p.v[10]).map((u, i) => linkRow(u, `參考網站 ${i + 1}`, "link"))],
       buys = buysAt({ placeId: p.id });
     openDialog(
-      `<div class="detail-badges">${Kit.badge(esc(cat), catCls)}<span>${esc(areaOf(p) || p.v[0])}</span></div><h2 class="detailtitle">${esc(p.v[1])}${zhLine(p.zh)}</h2>${p.v[9]?.includes("已閉店") ? '<p class="closed">已結業 · 保留原有記錄</p>' : ""}<div class="detail-actions">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}<button class="save btn btn-outline btn-icon${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"}" aria-pressed="${on}">${icon("star")}</button>${Kit.btn("編輯", { icon: "edit", iconOnly: true, attrs: { "data-place-edit": p.id } })}${Kit.menu([
+      `${p.photo ? `<figure class="place-photo detail-photo"><img src="data:image/jpeg;base64,${p.photo}" alt=""><figcaption>${p.photoBy ? `相片：${esc(p.photoBy)} · Google 地圖` : "相片：Google 地圖"}</figcaption></figure>` : ""}<div class="detail-badges">${Kit.badge(esc(cat), catCls)}<span>${esc(areaOf(p) || p.v[0])}</span></div><h2 class="detailtitle">${esc(p.v[1])}${zhLine(p.zh)}</h2>${p.v[9]?.includes("已閉店") ? '<p class="closed">已結業 · 保留原有記錄</p>' : ""}<div class="detail-actions">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}<button class="save btn btn-outline btn-icon${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"}" aria-pressed="${on}">${icon("star")}</button>${Kit.btn("編輯", { icon: "edit", iconOnly: true, attrs: { "data-place-edit": p.id } })}${Kit.menu([
         { label: "複製地址", icon: "copy", attrs: { "data-copy": p.v[3] || p.v[1] } },
         { label: "刪除地點", icon: "trash", danger: true, attrs: { "data-place-delete": p.id } },
       ])}</div><div class="info-list">${[
@@ -449,7 +449,7 @@ window.startTrip = (meta = {}) => {
         const c = clean(o);
         // zh: Traditional Chinese name from the translateNames function, while it still matches the name
         const zh = o.zh && o.zhFor === c.fields[1] ? String(o.zh) : "";
-        return { id: "u_" + o.id, overlayId: o.id, custom: true, v: c.fields, cats: c.cats, zh, mapsUrl: String(o.mapsUrl || "") };
+        return { id: "u_" + o.id, overlayId: o.id, custom: true, v: c.fields, cats: c.cats, zh, mapsUrl: String(o.mapsUrl || ""), photo: o.photo || null, photoBy: String(o.photoBy || "") };
       });
     for (const o of list) {
       if (o.deleted) continue;
@@ -485,7 +485,7 @@ window.startTrip = (meta = {}) => {
       pin = pins[0],
       alt = plan && plan.slot != null ? stopsFor(plan.day)[plan.slot] : null;
     openDialog(
-      `${Kit.sheetHead(plan ? (alt ? "加入同一時間的選擇" : "新增站點") : p ? "修改地點" : "新增地點", plan ? `D${plan.day}` : "")}${plan ? `<p class="note">${alt ? `與「${esc(alt.title)}」同在 ${esc(alt.time || "這個時段")}。` : `${esc(days[plan.day - 1].date)} · ${esc(days[plan.day - 1].region)}。`}地點會同時加入「探索」。</p>` : ""}<form class="tg-form" id="placeForm" data-id="${p ? esc(p.id) : ""}"${plan ? ` data-day="${plan.day}" data-slot="${plan.slot ?? ""}"` : ""}>${plan && !alt ? '<label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label>' : ""}<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結" value="${esc(p?.mapsUrl || "")}">${Kit.btn("自動填寫", { variant: "secondary", icon: "sparkles", attrs: { id: "placeLookup" } })}</span></label><p class="note" id="placeLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位；類型、「必吃・必買・特色」及「參考價格與營業時間」由 AI 按 Google 資料及評論整理。</p><label>名稱<input name="f1" required maxlength="80" value="${v(1)}"></label><fieldset><legend>分類</legend>${categories.map((c) => `<label class="tg-check"><input type="checkbox" name="cats" value="${c}"${p?.cats.includes(c) ? " checked" : ""}> ${c}</label>`).join("")}</fieldset><label>區域<input name="f0" list="placeRegions" maxlength="60" required value="${v(0)}"><datalist id="placeRegions">${[...new Set(places.map((x) => x.v[0]).filter(Boolean))].map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label>${placeFields.map(([i, label, max]) => `<label>${label}${max > 200 ? `<textarea name="f${i}" rows="3" maxlength="${max}">${v(i)}</textarea>` : `<input name="f${i}" maxlength="${max}" value="${v(i)}">`}</label>`).join("")}<input type="hidden" name="lat" value="${pin ? pin.lat : ""}"><input type="hidden" name="lng" value="${pin ? pin.lng : ""}"><input type="hidden" name="mainLabel" value="${esc(pin?.label || "")}"><fieldset class="branches"><legend>其他分店／地址</legend><div id="branchRows">${pins.slice(1).map(branchRow).join("")}</div>${Kit.btn("加入分店／地址", { size: "sm", icon: "plus", attrs: { "data-branch-add": true } })}<p class="note">每個分店貼上 Google 地圖連結後按「定位」。附近頁會用最近的分店計算距離。</p></fieldset>${Kit.btn(plan ? "加入行程及探索" : p ? "儲存修改" : "加入地點", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
+      `${Kit.sheetHead(plan ? (alt ? "加入同一時間的選擇" : "新增站點") : p ? "修改地點" : "新增地點", plan ? `D${plan.day}` : "")}${plan ? `<p class="note">${alt ? `與「${esc(alt.title)}」同在 ${esc(alt.time || "這個時段")}。` : `${esc(days[plan.day - 1].date)} · ${esc(days[plan.day - 1].region)}。`}地點會同時加入「探索」。</p>` : ""}<form class="tg-form" id="placeForm" data-id="${p ? esc(p.id) : ""}"${plan ? ` data-day="${plan.day}" data-slot="${plan.slot ?? ""}"` : ""}><div id="placePhotoBox">${placePhotoHtml(p?.photo, p?.photoBy)}</div>${plan && !alt ? '<label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label>' : ""}<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結" value="${esc(p?.mapsUrl || "")}">${Kit.btn("自動填寫", { variant: "secondary", icon: "sparkles", attrs: { id: "placeLookup" } })}</span></label><p class="note" id="placeLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位；類型、「必吃・必買・特色」及「參考價格與營業時間」由 AI 按 Google 資料及評論整理。</p><label>名稱<input name="f1" required maxlength="80" value="${v(1)}"></label><fieldset><legend>分類</legend>${categories.map((c) => `<label class="tg-check"><input type="checkbox" name="cats" value="${c}"${p?.cats.includes(c) ? " checked" : ""}> ${c}</label>`).join("")}</fieldset><label>區域<input name="f0" list="placeRegions" maxlength="60" required value="${v(0)}"><datalist id="placeRegions">${[...new Set(places.map((x) => x.v[0]).filter(Boolean))].map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label>${placeFields.map(([i, label, max]) => `<label>${label}${max > 200 ? `<textarea name="f${i}" rows="3" maxlength="${max}">${v(i)}</textarea>` : `<input name="f${i}" maxlength="${max}" value="${v(i)}">`}</label>`).join("")}<input type="hidden" name="photo" value="${esc(p?.photo || "")}"><input type="hidden" name="photoBy" value="${esc(p?.photoBy || "")}"><input type="hidden" name="lat" value="${pin ? pin.lat : ""}"><input type="hidden" name="lng" value="${pin ? pin.lng : ""}"><input type="hidden" name="mainLabel" value="${esc(pin?.label || "")}"><fieldset class="branches"><legend>其他分店／地址</legend><div id="branchRows">${pins.slice(1).map(branchRow).join("")}</div>${Kit.btn("加入分店／地址", { size: "sm", icon: "plus", attrs: { "data-branch-add": true } })}<p class="note">每個分店貼上 Google 地圖連結後按「定位」。附近頁會用最近的分店計算距離。</p></fieldset>${Kit.btn(plan ? "加入行程及探索" : p ? "儲存修改" : "加入地點", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
   async function findBranch(row) {
@@ -506,6 +506,18 @@ window.startTrip = (meta = {}) => {
         fnError(e, "未能定位");
     }
   }
+  // The place form's photo (from 自動填寫): kept in hidden fields, shown with its Google credit and a remove button.
+  const placePhotoHtml = (photo, by) =>
+    photo
+      ? `<figure class="place-photo"><img src="data:image/jpeg;base64,${photo}" alt=""><figcaption>${by ? `相片：${esc(by)} · Google 地圖` : "相片：Google 地圖"}</figcaption>${Kit.btn("移除相片", { icon: "x", iconOnly: true, size: "sm", cls: "place-photo-del", attrs: { "data-place-photo-del": true } })}</figure>`
+      : "";
+  function setPlacePhoto(photo, by = "") {
+    const f = $("#placeForm");
+    if (!f) return;
+    f.elements.photo.value = photo || "";
+    f.elements.photoBy.value = photo ? by : "";
+    $("#placePhotoBox").innerHTML = placePhotoHtml(photo, by);
+  }
   async function lookupPlaceForm() {
     const f = $("#placeForm"),
       btn = $("#placeLookup"),
@@ -519,7 +531,7 @@ window.startTrip = (meta = {}) => {
     info.textContent = wantHighlights ? "正在查詢 Google 地圖，並由 AI 整理評論…" : "正在查詢 Google 地圖…";
     const done = Kit.busy(info, { seconds: wantHighlights ? 12 : 5 });
     try {
-      const r = await window.Together.lookupPlace(url, { highlights: wantHighlights }),
+      const r = await window.Together.lookupPlace(url, { highlights: wantHighlights, photo: !el.photo.value }),
         put = (name, value) => {
           if (value && !el[name].value.trim()) el[name].value = value;
         };
@@ -527,6 +539,7 @@ window.startTrip = (meta = {}) => {
       put("f2", r.type);
       put("f3", r.address);
       put("f4", r.highlights);
+      if (r.photo && !el.photo.value) setPlacePhoto(r.photo, r.photoBy);
       put("f5", r.priceHours || [r.price && "價格：" + r.price, r.hours && "時間：\n" + r.hours].filter(Boolean).join("\n"));
       put("f10", [r.website, r.mapsUrl].filter(Boolean).join("\n"));
       if (r.category && ![...el.cats].some((c) => c.checked)) [...el.cats].forEach((c) => (c.checked = c.value === r.category));
@@ -586,6 +599,8 @@ window.startTrip = (meta = {}) => {
       mapsUrl: String(v.get("mapsUrl") || "")
         .trim()
         .slice(0, 500),
+      photo: String(v.get("photo") || "") || null,
+      photoBy: String(v.get("photoBy") || "").slice(0, 60),
     });
     if (f.dataset.linkShop && newId) window.Together.linkShopping(f.dataset.linkShop.split(","), newId);
     if (f.dataset.day && newId) {
@@ -1807,6 +1822,7 @@ window.startTrip = (meta = {}) => {
     }
     if (el.dataset.placeEdit) placeForm(places.find((p) => p.id === el.dataset.placeEdit));
     if (el.id === "placeLookup") lookupPlaceForm();
+    if (el.dataset.placePhotoDel !== undefined) setPlacePhoto(null);
     if (el.dataset.branchAdd !== undefined) {
       $("#branchRows").insertAdjacentHTML("beforeend", branchRow());
       $("#branchRows").lastElementChild.querySelector("input").focus();

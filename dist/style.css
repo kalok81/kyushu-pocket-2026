@@ -805,3 +805,12 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .choice-list img,.choice-ph{width:56px;height:56px;border-radius:8px;object-fit:cover;background:var(--muted-bg);display:grid;place-items:center;color:var(--muted-foreground)}
 .choice-list b{display:block;font-size:15px;line-height:1.4}
 .choice-list small{display:block;font-size:13px;color:var(--muted-foreground);line-height:1.45}
+/* Place photos (Google Maps, from 自動填寫): card thumbnail, sheet header, form preview; Google's credit under it */
+.place.has-photo{display:grid;grid-template-columns:minmax(0,1fr) 84px;column-gap:12px;align-content:start}
+.place.has-photo>*{grid-column:1}
+.place .place-thumb{grid-column:2;grid-row:1/span 4;width:84px;height:84px;margin-top:4px;border-radius:10px;object-fit:cover}
+.place-photo{position:relative;margin:0 0 12px}
+.place-photo img{display:block;width:100%;max-height:240px;object-fit:cover;border-radius:12px;background:var(--muted-bg)}
+.place-photo figcaption{margin-top:4px;font-size:12px;color:var(--muted-foreground)}
+.place-photo .place-photo-del{position:absolute;top:8px;right:8px;background:var(--card);border-radius:50%}
+.detail-photo{margin:4px 0 12px}

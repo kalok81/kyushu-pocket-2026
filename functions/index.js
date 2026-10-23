@@ -512,7 +512,22 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
  if (!place) throw new HttpsError('not-found', '找不到這個地點，請手動輸入。');
  // highlights: the place form asks for 必吃・必買・特色 too (one AI use; left out when the day's AI uses are spent).
  const wantHighlights = req.data?.highlights === true;
- const detail = await placesApi(`places/${place.id}?languageCode=zh-TW`, DETAIL_FIELDS + (wantHighlights ? HIGHLIGHT_FIELDS : '')).catch(() => ({}));
+ const wantPhoto = req.data?.photo === true;
+ const detail = await placesApi(`places/${place.id}?languageCode=zh-TW`, DETAIL_FIELDS + (wantHighlights ? HIGHLIGHT_FIELDS : '') + (wantPhoto ? ',photos' : '')).catch(() => ({}));
+ // photo: the place's first Google Maps photo as a 640px JPEG, with its author (Google asks for the credit to be shown).
+ let photo = null, photoBy = '';
+ if (wantPhoto && detail.photos?.length)
+  try {
+   const ph = detail.photos[0];
+   const media = await (await fetch(`https://places.googleapis.com/v1/${ph.name}/media?maxWidthPx=800&skipHttpRedirect=true`, { headers: { 'X-Goog-Api-Key': PLACES_API_KEY.value().trim() }, signal: AbortSignal.timeout(15_000) })).json();
+   if (media.photoUri) {
+    const buf = Buffer.from(await (await fetch(media.photoUri, { signal: AbortSignal.timeout(15_000) })).arrayBuffer());
+    photo = (await sharp(buf, { failOn: 'none' }).rotate().resize(640, 640, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64');
+    photoBy = String(ph.authorAttributions?.[0]?.displayName || '').slice(0, 60);
+   }
+  } catch (e) {
+   console.error('place photo', e?.message);
+  }
  let ai = {};
  if (wantHighlights)
   try {
@@ -523,6 +538,8 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
    console.error('highlights', e?.message);
   }
  return {
+  photo: photo && photo.length <= 300000 ? photo : null,
+  photoBy,
   highlights: ai.highlights || '',
   priceHours: ai.priceHours || '',
   name: place.displayName?.text || query || '',
