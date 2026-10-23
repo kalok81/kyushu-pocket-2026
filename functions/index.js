@@ -583,7 +583,7 @@ const ZH_SOURCES = {
 };
 const zhPrompt = (t, kind, names) => `Translate these ${kind} from a trip to ${tripInfo(t).place} into Traditional Chinese as used in Hong Kong.
 Reply with JSON only: {"names": [string, ...]} with exactly ${names.length} entries in the same order.
-- Use the usual Chinese name when there is one (e.g. ドン・キホーテ → 唐吉訶德, 一蘭 → 一蘭); otherwise translate the meaning naturally.
+- Use the name Hong Kong people use when there is one (e.g. ドン・キホーテ → 唐吉訶德, ファミリーマート → 全家便利店, セブンイレブン → 7-Eleven, 一蘭 → 一蘭); otherwise translate the meaning naturally in Hong Kong wording (e.g. 三文魚, not 鮭魚).
 - Keep brand names written in Latin letters that have no common Chinese name, and keep quantities and sizes (×2, 100g).
 - If an entry is already Traditional Chinese, return it unchanged.
 Names: ${JSON.stringify(names)}`;
