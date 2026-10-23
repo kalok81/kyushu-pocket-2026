@@ -336,6 +336,23 @@ function parseMapsUrl(url) {
 // Hours and type label in Chinese; name and address in the language chosen by langFor.
 const SEARCH_FIELDS = ['id', 'displayName', 'formattedAddress', 'location', 'types', 'websiteUri', 'googleMapsUri', 'priceRange', 'addressComponents'].map(f => 'places.' + f).join(',');
 const DETAIL_FIELDS = 'regularOpeningHours.weekdayDescriptions,primaryTypeDisplayName';
+// For 必吃・必買・特色 (place form only): Google's summary and visitors' reviews, billed at the Atmosphere tier.
+const HIGHLIGHT_FIELDS = ',editorialSummary,reviews';
+const highlightPrompt = (t, name, type, summary, reviews) => `A traveller is adding a place to a trip to ${tripInfo(t).place}: ${name}${type ? ` (${type})` : ''}.
+From Google's description and visitors' reviews below, write what to eat, buy or not miss there, in Traditional Chinese as used in Hong Kong.
+Reply with JSON only: {"highlights": string}
+- At most 120 Chinese characters, as short points joined by "、" or "；", e.g. "招牌豚骨拉麵、可加辣度；必試替玉；24 小時營業，晚上人少".
+- Only what the text supports: specific dishes, products, souvenirs, views, tips (queue times, best time to go). No ratings, no generic praise.
+- Empty string if the text says nothing specific.
+Description: ${JSON.stringify(summary || '')}
+Reviews: ${JSON.stringify(reviews)}`;
+async function placeHighlights(t, name, type, detail) {
+ const reviews = (detail.reviews || []).map(r => String(r.originalText?.text || r.text?.text || '').slice(0, 600)).filter(Boolean).slice(0, 5);
+ const summary = detail.editorialSummary?.text || '';
+ if (!reviews.length && !summary) return '';
+ const r = await askDeepSeek(highlightPrompt(t, name, type, summary, reviews), [], { think: false });
+ return typeof r?.highlights === 'string' ? r.highlights.trim().slice(0, 300) : '';
+}
 async function placesApi(path, fields, body) {
  const res = await fetch(`https://places.googleapis.com/v1/${path}`, {
   method: body ? 'POST' : 'GET',
@@ -374,7 +391,7 @@ function price(range) {
  return [amount(range.startPrice), amount(range.endPrice)].filter(Boolean).join('–');
 }
 
-export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
+export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY, DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 60, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
  await useQuota(req.auth.uid, 'maps');
@@ -395,8 +412,20 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
   ? await search('searchText', { textQuery: query, ...(bias && { locationBias: bias }) }, country)
   : at ? await search('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }, country) : null;
  if (!place) throw new HttpsError('not-found', '找不到這個地點，請手動輸入。');
- const detail = await placesApi(`places/${place.id}?languageCode=zh-TW`, DETAIL_FIELDS).catch(() => ({}));
+ // highlights: the place form asks for 必吃・必買・特色 too (one AI use; left out when the day's AI uses are spent).
+ const wantHighlights = req.data?.highlights === true;
+ const detail = await placesApi(`places/${place.id}?languageCode=zh-TW`, DETAIL_FIELDS + (wantHighlights ? HIGHLIGHT_FIELDS : '')).catch(() => ({}));
+ let highlights = '';
+ if (wantHighlights)
+  try {
+   await useQuota(req.auth.uid, 'ai');
+   const trip = typeof req.data?.trip === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(req.data.trip) ? (await getFirestore().doc(`trips/${req.data.trip}`).get()).data() : null;
+   highlights = await placeHighlights(trip, place.displayName?.text || query || '', detail.primaryTypeDisplayName?.text || '', detail);
+  } catch (e) {
+   console.error('highlights', e?.message);
+  }
  return {
+  highlights,
   name: place.displayName?.text || query || '',
   address: place.formattedAddress || '',
   lat: place.location?.latitude ?? at?.lat ?? null,

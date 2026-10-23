@@ -1299,9 +1299,10 @@ window.Together = (() => {
     if (!navigator.onLine) throw new Error("offline");
     return (await (await callable("suggestRoutes", 45000))(data)).data;
   }
-  async function lookupPlace(url) {
+  // highlights: also ask for 必吃・必買・特色 from Google's description and reviews (place form).
+  async function lookupPlace(url, { highlights = false } = {}) {
     if (!navigator.onLine) throw new Error("offline");
-    return (await (await callable("lookupPlace", 45000))({ url, country: state.meta?.country || "" })).data;
+    return (await (await callable("lookupPlace", 70000))({ url, country: state.meta?.country || "", ...(highlights ? { highlights: true, trip: tripId } : {}) })).data;
   }
   // Places: trips/{t}/places documents. A new one gets its id here so a plan stop can point at it straight away.
   function savePlace({ place, fields, cats, lat, lng, points = [], mapsUrl }) {
