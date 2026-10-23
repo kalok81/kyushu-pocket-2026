@@ -493,6 +493,18 @@ function price(range) {
  return [amount(range.startPrice), amount(range.endPrice)].filter(Boolean).join('–');
 }
 
+// The first search result that is a Tabelog restaurant page whose title shares a word with the place's name, as its
+// Japanese page (https://tabelog.com/{pref}/{area}/{sub}/{id}/).
+function tabelogPage(results, name) {
+ const n = t => String(t).toLowerCase().replace(/[\s（）()【】「」・･,，、.。:：\-－−&＆’'!！?？]/g, '');
+ const words = String(name).split(/[\s（）()【】「」・･,，、]+/).map(n).filter(w => w.length >= (/^[a-z0-9]+$/.test(w) ? 4 : 2));
+ for (const r of results) {
+  const m = String(r.url).match(/^https:\/\/tabelog\.com\/(?:[a-z]{2}\/)?([a-z]+\/A\d+\/A\d+\/\d+)\//);
+  if (m && words.some(w => n(r.title).includes(w))) return `https://tabelog.com/${m[1]}/`;
+ }
+ return '';
+}
+tabelogPage.wait = p => Promise.race([p, new Promise(r => setTimeout(() => r(''), 20_000))]);
 export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY, DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 60, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
@@ -532,6 +544,12 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
   } catch (e) {
    console.error('place photo', e?.message);
   }
+ // Restaurants and cafés in Japan: their Tabelog page (reviews and table booking), found with DeepSeek Search and
+ // kept only when the page is one restaurant whose name matches (list and review pages are skipped).
+ const placeName = place.displayName?.text || query || '';
+ const tabelogP = wantHighlights && country === 'JP' && /restaurant|cafe|coffee|bakery|bar\b|food|meal|ramen|sushi|izakaya|dessert|confectionery/.test((place.types || []).join(' '))
+  ? deepseekTool('search', { query: `site:tabelog.com ${placeName} ${district(place)}`.slice(0, 128), count: 6 }).then(r => tabelogPage(r?.results || [], placeName), () => '')
+  : Promise.resolve('');
  let ai = {};
  if (wantHighlights)
   try {
@@ -541,7 +559,9 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
   } catch (e) {
    console.error('highlights', e?.message);
   }
+ const tabelog = await tabelogPage.wait(tabelogP);
  return {
+  tabelog,
   photo: photo && photo.length <= 300000 ? photo : null,
   photoBy,
   highlights: ai.highlights || '',

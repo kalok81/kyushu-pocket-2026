@@ -118,7 +118,23 @@
       linkRow = (u, label, ic) =>
         `<a class="info-row info-link" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${icon(ic)}<div><p>${esc(label)}</p></div>${icon("external")}</a>`,
       pins = window.TRIP_GEO.places[p.id] || [],
-      refs = [...urlList(p.v[8]).map((u, i) => linkRow(u, `影片 ${i + 1}`, "image")), ...urlList(p.v[10]).map((u, i) => linkRow(u, `參考網站 ${i + 1}`, "link"))],
+      // 網站／參考連結: the place's own website first (its own row, named by its address), Google Maps links named as such.
+      isMaps = (u) => /(^|\.)google\.[a-z.]+\/maps|maps\.google\.|maps\.app\.goo\.gl|goo\.gl\/maps/i.test(u),
+      host = (u) => {
+        try {
+          return new URL(u).hostname.replace(/^www\./, "");
+        } catch {
+          return u;
+        }
+      },
+      linkName = (u) => (/tabelog\.com/.test(u) ? "Tabelog（食評及訂座）" : host(u)),
+      webs = urlList(p.v[10]),
+      tabelog = webs.find((u) => /tabelog\.com/.test(u)),
+      site = webs.find((u) => !isMaps(u) && u !== tabelog),
+      refs = [
+        ...urlList(p.v[8]).map((u, i) => linkRow(u, `影片 ${i + 1}`, "image")),
+        ...webs.filter((u) => u !== site && u !== tabelog).map((u) => (isMaps(u) ? linkRow(u, "Google 地圖", "map") : linkRow(u, linkName(u), "link"))),
+      ],
       buys = buysAt({ placeId: p.id });
     openDialog(
       `${p.photo ? `<figure class="place-photo detail-photo"><img src="data:image/jpeg;base64,${p.photo}" alt=""><figcaption>${p.photoBy ? `相片：${esc(p.photoBy)} · Google 地圖` : "相片：Google 地圖"}</figcaption></figure>` : ""}<div class="detail-badges">${Kit.badge(esc(cat), catCls)}<span>${esc(areaOf(p) || p.v[0])}</span></div><h2 class="detailtitle">${esc(p.v[1])}${zhLine(p.zh)}</h2>${p.v[9]?.includes("已閉店") ? '<p class="closed">已結業 · 保留原有記錄</p>' : ""}<div class="detail-actions">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}<button class="save btn btn-outline btn-icon${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"}" aria-pressed="${on}">${icon("star")}</button>${Kit.btn("編輯", { icon: "edit", iconOnly: true, attrs: { "data-place-edit": p.id } })}${Kit.menu([
@@ -129,6 +145,8 @@
         row("pin", "地址", esc(p.v[3] || "未有地址"), `<span class="row-tools">${Kit.btn("Google 地圖", { href: placeMap(p), external: true, icon: "map", iconOnly: true, variant: "ghost", size: "sm" })}${Kit.btn("導航", { href: route(p.v[1] + " " + p.v[3]), external: true, icon: "nav", iconOnly: true, variant: "ghost", size: "sm" })}${p.v[3] ? Kit.btn("複製地址", { icon: "copy", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-copy": p.v[3] } }) : ""}</span>`),
         p.v[4] && row("sparkles", "必吃・必買・特色", esc(p.v[4])),
         p.v[5] && row("clock", "價錢及營業時間", esc(p.v[5])),
+        site && linkRow(site, linkName(site), "globe").replace("<div><p>", "<div><small>網站</small><p>"),
+        tabelog && linkRow(tabelog, "Tabelog", "calendar").replace("<div><p>", "<div><small>食評及訂座</small><p>"),
         p.v[11] && row("note", "備註及預約", esc(p.v[11])),
       ]
         .filter(Boolean)
@@ -136,7 +154,7 @@
         buys.length
           ? `<section class="detail-section"><h3>購物清單（${buys.length}）</h3><div class="links">${buys.map((x) => Kit.btn(esc(x.name), { size: "sm", icon: x.bought ? "check" : "bag", cls: x.bought ? "bought" : "", attrs: { "data-shop-open": x.id } })).join("")}</div></section>`
           : ""
-      }${pins.length > 1 ? `<section class="detail-section"><h3>分店／地址（${pins.length}）</h3><div class="info-list">${pins.map((g, k) => linkRow(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]), "pin")).join("")}</div></section>` : ""}${refs.length ? `<section class="detail-section"><h3>影片及參考</h3><div class="info-list">${refs.join("")}</div></section>` : ""}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>${p.v[9] || p.v[7] ? `<p class="note detail-foot">${esc([p.v[9], p.v[7]].filter(Boolean).join(" · "))}</p>` : ""}`,
+      }${pins.length > 1 ? `<section class="detail-section"><h3>分店／地址（${pins.length}）</h3><div class="info-list">${pins.map((g, k) => linkRow(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]), "pin")).join("")}</div></section>` : ""}${refs.length ? `<section class="detail-section"><h3>其他連結</h3><div class="info-list">${refs.join("")}</div></section>` : ""}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>${p.v[9] || p.v[7] ? `<p class="note detail-foot">${esc([p.v[9], p.v[7]].filter(Boolean).join(" · "))}</p>` : ""}`,
     );
     window.Together?.refresh();
   }
@@ -246,7 +264,7 @@
       put("f4", r.highlights);
       if (r.photo && !el.photo.value) setPlacePhoto(r.photo, r.photoBy);
       put("f5", r.priceHours || [r.price && "價格：" + r.price, r.hours && "時間：\n" + r.hours].filter(Boolean).join("\n"));
-      put("f10", [r.website, r.mapsUrl].filter(Boolean).join("\n"));
+      put("f10", [r.website, r.tabelog, r.mapsUrl].filter(Boolean).join("\n"));
       if (r.category && ![...el.cats].some((c) => c.checked)) [...el.cats].forEach((c) => (c.checked = c.value === r.category));
       if (Number.isFinite(r.lat) && Number.isFinite(r.lng)) {
         el.lat.value = r.lat;

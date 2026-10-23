@@ -315,6 +315,9 @@ try {
   assert.equal(saved, link);
   assert.equal(await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator(`a[href="${link}"]`).count(), 1, 'the card map button opens the saved link');
   assert.equal(await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('.place-thumb').count(), 1, 'the card shows the place photo');
+  await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('[data-place]').click();
+  assert.match(await page.locator('#detail .info-list').first().innerText(), /網站\s*kaminarimon\.example\.jp[\s\S]*食評及訂座\s*Tabelog/);
+  await page.keyboard.press('Escape');
  });
  await step('shopping: several 購買地點, AI finds where to buy', async () => {
   await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
