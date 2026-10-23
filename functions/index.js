@@ -142,7 +142,10 @@ async function safeFetch(link, maxBytes = 3e6) {
   });
   const next = res.status >= 300 && res.status < 400 && res.headers.get('location');
   if (next) { url = new URL(next, url); continue; }
-  if (!res.ok) throw new HttpsError('not-found', `網頁未能開啟（${res.status}）。`);
+  if (!res.ok)
+   throw new HttpsError('not-found', [401, 403, 429].includes(res.status) || res.headers.get('server') === 'cloudflare'
+    ? `這個網站不讓程式讀取（${res.status}）。請在手機截圖後直接貼上，AI 會讀截圖。`
+    : `網頁未能開啟（${res.status}）。可以截圖後直接貼上。`);
   const chunks = []; let size = 0;
   for await (const c of res.body) { size += c.length; if (size > maxBytes) throw new HttpsError('invalid-argument', '網頁或圖片太大。'); chunks.push(c); }
   return { url, type: res.headers.get('content-type') || '', buf: Buffer.concat(chunks) };
