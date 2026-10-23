@@ -66,7 +66,9 @@ function clean(r, t) {
 
 const readReceipt = (images, t) => askDeepSeek(receiptPrompt(t), images).then(r => clean(r, t));
 
-async function askDeepSeek(prompt, images) {
+// think: false turns off the model's reasoning, for plain tasks such as translating names (it can otherwise spend its
+// whole token budget thinking and return nothing).
+async function askDeepSeek(prompt, images, { think = true } = {}) {
  // DeepSeek's JSON mode can return empty content (or run out of tokens on long replies): log why and retry once.
  for (let attempt = 1; attempt <= 2; attempt++) {
   const res = await fetch('https://api.deepseek.com/chat/completions', {
@@ -76,6 +78,7 @@ async function askDeepSeek(prompt, images) {
     model: 'deepseek-flash',
     response_format: { type: 'json_object' },
     max_tokens: 8000,
+    ...(think ? {} : { thinking: { type: 'disabled' } }),
     messages: [{ role: 'user', content: [{ type: 'text', text: prompt }, ...images.map(image => ({ type: 'image_url', image_url: { url: `data:image/jpeg;base64,${image}`, detail: 'high' } }))] }],
    }),
    signal: AbortSignal.timeout(80_000),
@@ -603,7 +606,7 @@ cloudEvent('translateNames', async event => {
  const tripDoc = (await getFirestore().doc(`trips/${m[1]}`).get()).data();
  let got;
  try {
-  got = (await askDeepSeek(zhPrompt(tripDoc, kind, names), [])).names;
+  got = (await askDeepSeek(zhPrompt(tripDoc, kind, names), [], { think: false })).names;
  } catch (e) {
   console.error('translate', path, e?.message);
   return;

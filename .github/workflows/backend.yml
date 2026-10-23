@@ -61,7 +61,7 @@ jobs:
           gcloud functions deploy translateNames $COMMON --entry-point=translateNames --trigger-location=asia-northeast1 \
             --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' \
             --trigger-event-filters-path-pattern=document='trips/{trip}/{col}/{id}' \
-            --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=60s
+            --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=180s
           gcloud functions deploy aiRoutes $COMMON --entry-point=aiRoutes --trigger-http --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=120s
           for f in lookupPlace suggestRoutes manageTrip; do
             gcloud functions deploy $f $COMMON --entry-point=$f --trigger-http --set-secrets=PLACES_API_KEY=places-api-key:latest --timeout=40s
