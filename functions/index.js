@@ -258,10 +258,26 @@ async function articleItems(url, t, pics) {
  const r = await askDeepSeek(articlePrompt(t, page, pics), [], { think: false });
  const items = (Array.isArray(r?.items) ? r.items : []).slice(0, 15).map(x => ({ ...cleanProduct({ ...x, confidence: 'high' }, t), image: pics?.[Number(x?.image) - 1]?.url || '' }))
   .filter(x => x.name);
- // Pictures: 480px JPEGs, fetched in parallel (the job document stays well under Firestore's 1 MB).
+ // Pictures: 480px JPEGs, fetched in parallel (the job document stays well under Firestore's 1 MB). The article's own
+ // picture when it has one; else the main picture of a product page found by searching the product's name.
+ const thumb = async u => {
+  const g = await safeFetch(u);
+  return g.type.startsWith('image/') ? (await sharp(g.buf, { failOn: 'none' }).rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64') : null;
+ };
+ const own = new URL(url).hostname;
+ const searched = async name => {
+  const found = await deepseekTool('search', { query: name.replace(/[（(].*?[)）]/g, ' ').trim().slice(0, 100), count: 5 });
+  for (const r of (found?.results || []).filter(r => { try { return new URL(r.url).hostname !== own; } catch { return false; } }).slice(0, 3)) {
+   const pic = await safeFetch(r.url).then(g => (/html/.test(g.type) ? pageFacts(decodeHtml(g), g.url).picture : ''), () => '');
+   const got = pic && (await thumb(pic).catch(() => null));
+   if (got) return got;
+  }
+  return null;
+ };
+ const within = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
  const choices = await Promise.all(items.map(async ({ image, confidence: _c, ...x }) => ({
   ...x,
-  photo: image ? await safeFetch(image).then(async g => (g.type.startsWith('image/') ? (await sharp(g.buf, { failOn: 'none' }).rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64') : null), () => null) : null,
+  photo: (image && (await thumb(image).catch(() => null))) || (await within(searched(x.name).catch(() => null), 30_000)),
  })));
  let size = 0;
  for (const c of choices) if (c.photo && (size += c.photo.length) > 700000) c.photo = null;
