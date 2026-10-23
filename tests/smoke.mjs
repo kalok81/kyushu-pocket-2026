@@ -349,6 +349,15 @@ try {
   await page.waitForFunction(() => !document.querySelector('.article-choices'));
   await page.waitForSelector('.shop-item:has-text("二◯加煎餅")'); assert.equal(await page.locator('.shop-item:has-text("博多通饅頭")').count(), 0);
  });
+ await step('the page still scrolls after deleting from a sheet', async () => {
+  await page.keyboard.press('Escape'); await page.goto(base + '/#explore'); await page.click('[data-place-new]');
+  await page.fill('#placeForm [name=f1]', '刪除測試'); await page.fill('#placeForm [name=f0]', '淺草'); await page.locator('#placeForm [name=cats]').first().check();
+  await page.click('#placeForm button[type=submit]');
+  await page.locator('#results .card.place', { hasText: '刪除測試' }).locator('[data-place]').click();
+  await page.click('#detail .more summary'); await page.click('[data-place-delete]:visible'); await page.click('.ui-pop .btn-danger');
+  await page.waitForFunction(() => !document.querySelector('#detail').open);
+  await page.waitForFunction(() => getComputedStyle(document.body).overflowY !== 'hidden' && !document.querySelector('.swal2-container'));
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }
