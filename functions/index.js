@@ -181,7 +181,10 @@ function pageFacts(html, base) {
  }
  const offer = [].concat(product?.offers || [])[0] || {};
  const image = [].concat(product?.image || [])[0];
- const picture = meta('og:image') || meta('twitter:image') || (typeof image === 'string' ? image : image?.url) || '';
+ // Pages without image tags: the first product-looking <img> (not logos, icons or banners).
+ const imgs = [...html.matchAll(/<img[^>]+(?:data-src|src)=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)].map(m => decodeEntities(m[1])).filter(u => !/logo|icon|sprite|banner|btn|button|common|header|footer|sns|badge|loading|blank/i.test(u));
+ const firstImg = imgs.find(u => /product|item|goods|upload|img\/|images\//i.test(u)) || imgs[0] || '';
+ const picture = meta('og:image') || meta('twitter:image') || (typeof image === 'string' ? image : image?.url) || firstImg;
  const text = html.replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
  return {
   site: meta('og:site_name') || base.hostname,
@@ -692,6 +695,14 @@ Reply with JSON only: {"places": [{"name": string, "why": string}], "note": stri
 - Only places the results support; do not invent shops. No places if the results show none near the destination.
 - note: at most 60 Traditional Chinese characters (Hong Kong usage) for anything important, e.g. that it is mainly sold elsewhere (北海道限定) or only at the airport; empty otherwise.
 Search results: ${JSON.stringify(results)}`;
+// full: the traveller only typed a name; also identify the product (name, spec, detail, category, usual price).
+const productInfoPrompt = (t, typed, results) => `${productPrompt(t)}
+This time there is no photo: the traveller typed ${JSON.stringify(typed)}. Identify the product from the web search results below.
+- price: the usual retail price in ${tripInfo(t).cur} (tax included) if the results show one, else null.
+- place: empty (where to buy is worked out separately).
+- confidence: low if the results do not clearly show which product this is.
+- Also add "page": the url of the result that best shows this exact product with a picture (the maker's product page or a shop's product page; not a blog, list or search page); empty if none.
+Search results: ${JSON.stringify(results)}`;
 export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 90, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
@@ -701,11 +712,26 @@ export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck
  await useQuota(req.auth.uid, 'ai');
  const trip = typeof d.trip === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(d.trip) ? (await getFirestore().doc(`trips/${d.trip}`).get()).data() : null;
  const where = tripInfo(trip).place, name = item.name.replace(/[（(].*?[)）]/g, ' ').trim().slice(0, 60);
- const searches = await Promise.all([`${name} 販売店 ${where}`, `${name} 哪裡買 ${where}`].map(q => deepseekTool('search', { query: q.slice(0, 128), count: 6 })));
- const results = searches.flatMap(r => r?.results || []).filter((r, i, all) => all.findIndex(x => x.url === r.url) === i)
-  .slice(0, 10).map(r => ({ title: String(r.title || '').slice(0, 120), url: r.url, summary: String(r.summary || r.snippet || '').slice(0, 700) }));
- if (!results.length) throw new HttpsError('not-found', '網上找不到這件物品的購買地點。');
- const r = await askDeepSeek(buyPrompt(trip, item, results), [], { think: false });
+ const full = d.full === true;
+ const queries = [`${name} 販売店 ${where}`, `${name} 哪裡買 ${where}`, ...(full ? [name, `${name} 価格 内容量`] : [])];
+ const searches = await Promise.all(queries.map(q => deepseekTool('search', { query: q.slice(0, 128), count: 6 })));
+ const tidy = rs => rs.filter((r, i, all) => all.findIndex(x => x.url === r.url) === i).map(r => ({ title: String(r.title || '').slice(0, 120), url: r.url, summary: String(r.summary || r.snippet || '').slice(0, 700) }));
+ const results = tidy(searches.slice(0, 2).flatMap(r => r?.results || [])).slice(0, 10), about = tidy(searches.slice(2).flatMap(r => r?.results || [])).slice(0, 8);
+ if (!results.length && !about.length) throw new HttpsError('not-found', '網上找不到這件物品。');
+ const [r, info] = await Promise.all([
+  results.length ? askDeepSeek(buyPrompt(trip, item, results), [], { think: false }) : {},
+  full && about.length ? askDeepSeek(productInfoPrompt(trip, item.name, about), [], { think: false }).catch(() => null) : null,
+ ]);
+ const product = info && info.confidence !== 'low' ? cleanProduct(info, trip) : null;
+ // A picture for the item: the main image of the product page the model chose, else of the next product results.
+ let photo = null;
+ if (product && d.photo === true) {
+  const pages = [info.page, ...about.map(r => r.url)].filter((u, i, all) => typeof u === 'string' && /^https?:\/\//.test(u) && all.indexOf(u) === i).slice(0, 3);
+  for (const u of pages) {
+   photo = await readProductLink(u).then(g => g.image, () => null);
+   if (photo) break;
+  }
+ }
  const places = (Array.isArray(r?.places) ? r.places : []).slice(0, 4).map(p => ({ name: text(p?.name, 100), why: text(p?.why, 40) })).filter(p => p.name);
- return { places, note: text(r?.note, 120), sources: [...new Set(results.slice(0, 3).map(x => new URL(x.url).hostname))] };
+ return { places, note: text(r?.note, 120), product, photo: photo && photo.length <= 400000 ? photo : null, sources: [...new Set([...results, ...about].slice(0, 3).map(x => new URL(x.url).hostname))] };
 });

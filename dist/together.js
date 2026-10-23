@@ -1634,18 +1634,42 @@ window.Together = (() => {
   const placeRow = (t) =>
     `<input name="place" maxlength="200" placeholder="店名、地址，或貼上 Google 地圖連結" aria-label="購買地點" value="${esc(t)}">`;
   // 購物 › AI 找購買地點: web search for where the item in the form is sold; fills empty address rows (adds rows as needed).
-  async function findBuyPlaces() {
+  // full (AI 按名稱填寫): also the product itself — a fuller name, spec, detail, category and usual price for empty fields.
+  async function findBuyPlaces(full = false) {
     const f = $('[data-tg-form="shop"]'),
       info = $("#shopPlaceInfo"),
-      btn = f?.querySelector('[data-tg="shopFindPlaces"]'),
+      btn = f?.querySelector(full ? '[data-tg="shopFindAll"]' : '[data-tg="shopFindPlaces"]'),
       name = f?.elements.name.value.trim();
     if (!f) return;
     if (!name) return toast("請先輸入物品名稱。");
     if (!navigator.onLine) return toast("離線中，未能搜尋。");
     btn.disabled = true;
     info.textContent = "AI 正在上網搜尋購買地點…";
+    if (full) fillStatus("AI 正在上網搜尋產品資料…", true);
     try {
-      const r = (await (await callable("findBuyPlaces", 95000))({ name, qty: f.elements.qty.value, detail: f.elements.detail.value, trip: tripId })).data;
+      const r = (await (await callable("findBuyPlaces", 95000))({ name, qty: f.elements.qty.value, detail: f.elements.detail.value, trip: tripId, full, photo: full && !shopPhoto })).data;
+      if (full) {
+        const p = r.product,
+          el = f.elements,
+          put = (k, v) => {
+            if (v != null && v !== "" && !String(el[k].value).trim()) el[k].value = v;
+          };
+        if (p) {
+          // a fuller name of the same product (brand, original name) replaces what was typed
+          if (p.name && norm(p.name).includes(norm(name))) el.name.value = p.name;
+          put("qty", p.qty);
+          put("detail", p.detail);
+          put("price", p.price);
+          if (p.cat && SHOP_CATS[p.cat]) el.cat.value = p.cat;
+          if (p.price != null && p.currency) el.currency.value = p.currency;
+        }
+        if (r.photo && !shopPhoto) {
+          shopPhoto = r.photo;
+          const pv = $("#shopPreview");
+          if (pv) pv.innerHTML = shopPreview();
+        }
+        fillStatus(p ? `AI 已按網上資料填入空白欄位${r.photo ? "，並加入網上的產品相片" : ""}，請檢查。` : "網上找不到這件產品的資料，請自行填寫。", false);
+      }
       const rows = $("#shopPlaceRows"),
         have = new Set([...rows.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean));
       for (const p of r.places.filter((p) => !have.has(p.name))) {
@@ -1658,13 +1682,14 @@ window.Together = (() => {
         : r.note || "網上找不到目的地有售的地方。";
     } catch (e) {
       info.textContent = fnError(e, "未能搜尋購買地點，請稍後再試。");
+      if (full) fillStatus(fnError(e, "未能搜尋產品資料，請稍後再試。"), false);
     } finally {
       btn.disabled = false;
     }
   }
   function shopForm(x) {
     const v = (k) => esc(x?.[k] ?? "");
-    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div>${Kit.btn("加相片（AI 填寫空白欄位）", { icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopPhoto" } })}<input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
+    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div>${Kit.btn("加相片（AI 填寫空白欄位）", { icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopPhoto" } })}<input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片，或輸入物品名稱後按「AI 按名稱填寫」，AI 會把資料填入空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label>${Kit.btn("AI 按名稱填寫", { size: "sm", variant: "secondary", icon: "sparkles", cls: "shop-find-all", attrs: { "data-tg": "shopFindAll" } })}<div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
       .map(([k, v]) => `<option value="${k}"${(x ? shopCat(x) : "food") === k ? " selected" : ""}>${v}</option>`)
       .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div><div class="links">${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}${Kit.btn("AI 找購買地點", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-tg": "shopFindPlaces" } })}</div><p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。「AI 找購買地點」會上網搜尋目的地有售的地方。</p></fieldset><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
@@ -2490,6 +2515,7 @@ window.Together = (() => {
       }
     }
     if (d.tg === "shopFindPlaces") findBuyPlaces();
+    if (d.tg === "shopFindAll") findBuyPlaces(true);
     if (d.tg === "shopPhotoAgain" && shopPhoto) requestFill(shopPhoto);
     if (d.tg === "newEntry") openForm();
     if (d.shopFilter) {

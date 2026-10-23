@@ -339,6 +339,7 @@
       }
     }
     if (d.tg === "shopFindPlaces") findBuyPlaces();
+    if (d.tg === "shopFindAll") findBuyPlaces(true);
     if (d.tg === "shopPhotoAgain" && shopPhoto) requestFill(shopPhoto);
     if (d.tg === "newEntry") openForm();
     if (d.shopFilter) {
