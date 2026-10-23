@@ -767,3 +767,14 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .tg-lines .zh-name{font-size:13px}
 .row-tools{display:flex;gap:2px;margin:-4px -6px 0 0}
 .row-tools .btn-icon{color:var(--primary)}
+/* × clear button inside text fields (kit.js wraps each field); hidden while the field is empty */
+.field{position:relative;display:block;min-width:0}
+.field>input,.field>textarea{width:100%;padding-right:40px}
+.field-clear{position:absolute;top:50%;right:4px;transform:translateY(-50%);display:grid;place-items:center;width:32px;height:32px;min-height:0;padding:0;border:0;border-radius:50%;background:transparent;box-shadow:none;color:var(--muted-foreground)}
+.field-area>.field-clear{top:6px;transform:none}
+.field-clear .icon{width:16px;height:16px}
+.field-clear:hover{background:var(--accent);color:var(--foreground)}
+.field:has(>:placeholder-shown)>.field-clear{display:none}
+.field>input[type=number]{-moz-appearance:textfield}
+.field>input[type=number]::-webkit-inner-spin-button{display:none}
+.searchrow>.field,.searchrow .field{flex:1 1 auto}

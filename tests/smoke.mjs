@@ -296,6 +296,8 @@ try {
   const link = 'https://maps.app.goo.gl/abc123';
   await page.keyboard.press('Escape'); await page.goto(base + '/#explore'); await page.click('[data-place-new]');
   await page.fill('#placeForm [name=mapsUrl]', link); await page.fill('#placeForm [name=f1]', '風雷神門'); await page.fill('#placeForm [name=f0]', '淺草'); await page.locator('#placeForm [name=cats]').nth(1).check();
+  await page.fill('#placeForm [name=f2]', '舊類型');
+  await page.locator('#placeForm [name=f2] + .field-clear').click(); assert.equal(await page.inputValue('#placeForm [name=f2]'), '', 'the × empties the field');
   await page.click('#placeLookup'); await page.waitForFunction(() => document.querySelector('#placeForm [name=f4]').value);
   assert.equal(await page.inputValue('#placeForm [name=f4]'), '大燈籠必影；仲見世買人形燒；早上 8 時前人少');
   assert.equal(await page.inputValue('#placeForm [name=f1]'), '風雷神門', 'filled fields are kept');
