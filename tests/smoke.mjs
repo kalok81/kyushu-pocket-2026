@@ -292,6 +292,18 @@ try {
   assert.equal(await page.locator('#results .card.place').count(), 1);
   await page.fill('#search', '');
  });
+ await step('a place keeps its Google Maps link when edited', async () => {
+  const link = 'https://maps.app.goo.gl/abc123';
+  await page.keyboard.press('Escape'); await page.goto(base + '/#explore'); await page.click('[data-place-new]');
+  await page.fill('#placeForm [name=mapsUrl]', link); await page.fill('#placeForm [name=f1]', '風雷神門'); await page.fill('#placeForm [name=f0]', '淺草'); await page.locator('#placeForm [name=cats]').nth(1).check();
+  await page.click('#placeForm button[type=submit]');
+  await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('[data-place]').click();
+  await page.click('#detail [data-place-edit]'); assert.equal(await page.inputValue('#placeForm [name=mapsUrl]'), link);
+  await page.fill('#placeForm [name=f2]', '寺院'); await page.click('#placeForm button[type=submit]');
+  const saved = await page.evaluate(() => Object.values(globalThis.__fakeStore.places).find((d) => d.fields[1] === '風雷神門').mapsUrl);
+  assert.equal(saved, link);
+  assert.equal(await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator(`a[href="${link}"]`).count(), 1, 'the card map button opens the saved link');
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }
