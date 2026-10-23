@@ -260,9 +260,13 @@ async function articleItems(url, t, pics) {
   .filter(x => x.name);
  // Pictures: 480px JPEGs, fetched in parallel (the job document stays well under Firestore's 1 MB). The article's own
  // picture when it has one; else the main picture of a product page found by searching the product's name.
+ // (pictures smaller than 240×180 are logos and icons, not product photos)
  const thumb = async u => {
   const g = await safeFetch(u);
-  return g.type.startsWith('image/') ? (await sharp(g.buf, { failOn: 'none' }).rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64') : null;
+  if (!g.type.startsWith('image/')) return null;
+  const { width = 0, height = 0 } = await sharp(g.buf, { failOn: 'none' }).metadata();
+  if (width < 240 || height < 180) return null;
+  return (await sharp(g.buf, { failOn: 'none' }).rotate().resize(480, 480, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64');
  };
  const own = new URL(url).hostname;
  const searched = async name => {
