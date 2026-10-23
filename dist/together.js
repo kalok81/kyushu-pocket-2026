@@ -147,6 +147,9 @@ window.Together = (() => {
     at ? new Date(at).toLocaleString("zh-HK", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
   const meta = (x, extra = "") =>
     `<div class="tg-meta">${extra}<span>${esc(x.byName || "旅伴")} · ${esc(when(x.at))}</span>${x.pending ? '<span class="tg-pending">未同步</span>' : ""}</div>`;
+  // Traditional Chinese name from the translateNames function, shown under the original while it still matches it.
+  const zhName = (x, text) => (x.zh && String(x.zhFor || "").split("\n")[0] === text ? x.zh : ""),
+    zhLine = (z) => (z ? `<span class="zh-name">${esc(z)}</span>` : "");
   // Top row of every list item: badges and author on the left, the item's "⋯" menu on the right.
   const itemTop = (x, extra, items) => `<div class="item-top">${meta(x, extra)}${Kit.menu(items)}</div>`;
   // Menu entry that deletes an item (with undo).
@@ -969,7 +972,9 @@ window.Together = (() => {
     `${dayLabel(e.day)}「${e.title}」${S.format(S.toMinor(e.amount, e.currency), e.currency)}（${e.byName || "旅伴"} 記錄）`;
   function expenseItem(e) {
     const h = e.currency !== home() && toHome(e);
-    return `<article class="tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i) => `<li><span>${esc(i.name)}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
+    // Receipt lines are translated with the title: only while all of them are unchanged.
+    const itemsZh = e.zhFor === [e.title, ...(e.items || []).map((i) => i.name)].join("\n") ? e.itemsZh || [] : [];
+    return `<article class="tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}${zhLine(zhName(e, e.title))}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i, k) => `<li><span>${esc(i.name)}${zhLine(itemsZh[k])}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
   }
   // Spending overview in the home currency: total, per companion, per day and per category, and the rates used.
   function stats() {
@@ -1636,12 +1641,12 @@ window.Together = (() => {
   }
   function shopItem(x) {
     const price = x.price != null ? `<b class="shop-price">${esc(S.format(S.toMinor(x.price, x.currency), x.currency))}</b>` : "";
-    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}</h3>${price}</div>${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${matchPlace(x) ? `<p class="shop-place">${icon("compass")}探索：<button type="button" class="buy-item" data-place="${esc(matchPlace(x).id)}">${esc(matchPlace(x).v[1])}</button></p>` : ""}${x.place ? `<p class="shop-place">${icon("pin")}<span>${esc(x.place)}</span></p>` : ""}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.place ? Kit.btn("地圖", { size: "sm", external: true, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}` }) : ""}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
+    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}${zhLine(zhName(x, x.name))}</h3>${price}</div>${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${matchPlace(x) ? `<p class="shop-place">${icon("compass")}探索：<button type="button" class="buy-item" data-place="${esc(matchPlace(x).id)}">${esc(matchPlace(x).v[1])}</button></p>` : ""}${x.place ? `<p class="shop-place">${icon("pin")}<span>${esc(x.place)}</span></p>` : ""}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.place ? Kit.btn("地圖", { size: "sm", external: true, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}` }) : ""}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
   }
   // Photo grid: one tile per item; tapping opens the item with a large photo in the detail dialog.
   function shopTile(x) {
     const price = x.price != null ? esc(S.format(S.toMinor(x.price, x.currency), x.currency)) : "";
-    return `<button type="button" class="shop-tile${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.photo ? `<img src="${photoSrc(x.photo)}" alt="" loading="lazy">` : `<span class="shop-tile-ph" aria-hidden="true">${icon("bag")}</span>`}<span class="shop-tile-name">${x.bought ? "✓ " : ""}${esc(x.name)}</span>${price ? `<span class="shop-tile-price">${price}</span>` : ""}</button>`;
+    return `<button type="button" class="shop-tile${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.photo ? `<img src="${photoSrc(x.photo)}" alt="" loading="lazy">` : `<span class="shop-tile-ph" aria-hidden="true">${icon("bag")}</span>`}<span class="shop-tile-name">${x.bought ? "✓ " : ""}${esc(zhName(x, x.name) || x.name)}</span>${price ? `<span class="shop-tile-price">${price}</span>` : ""}</button>`;
   }
   // Add / edit sheet: AI from photos or a link first, then the form for typing an item in.
   function openShopSheet(x = null) {
@@ -1666,7 +1671,7 @@ window.Together = (() => {
     if (state.status !== "ready") return { sig: "wait", shell: Kit.empty("正在連接…") };
     const todo = state.shopping.filter((x) => !x.bought),
       q = norm(state.shopSearch),
-      match = (x) => !q || norm([x.name, x.qty, x.detail, x.place].join(" ")).includes(q);
+      match = (x) => !q || norm([x.name, zhName(x, x.name), x.qty, x.detail, x.place].join(" ")).includes(q);
     const byStatus = (
         state.shopFilter === "todo" ? todo : state.shopFilter === "done" ? state.shopping.filter((x) => x.bought) : state.shopping
       ).filter(match),

@@ -67,6 +67,16 @@ test('shopping: valid items, explore place link, shared updates', async () => {
  await assertFails(updateDoc(doc(db(bob), `${T}/shopping/s1`), { by: 'bob' }));
 });
 
+test('translated names (written by translateNames) stay when items and places are edited', async () => {
+ await env.withSecurityRulesDisabled(async (c) => {
+  await setDoc(doc(c.firestore(), `${T}/shopping/z1`), { name: 'じゃがポックル', qty: '', detail: '', place: '', price: null, currency: 'JPY', photo: null, bought: false, boughtBy: null, boughtAt: null, zh: '薯條三兄弟', zhFor: 'じゃがポックル', ...owned('amy', 'Amy') });
+  await setDoc(doc(c.firestore(), `${T}/places/z2`), { base: null, fields: Array(12).fill('ドン・キホーテ'), cats: [], lat: null, lng: null, points: [], mapsUrl: '', deleted: false, zh: '唐吉訶德', zhFor: 'ドン・キホーテ', ...owned('amy', 'Amy') });
+ });
+ await assertSucceeds(updateDoc(doc(db(bob), `${T}/shopping/z1`), { bought: true, boughtBy: 'Bob', boughtAt: 3 }));
+ await assertSucceeds(updateDoc(doc(db(bob), `${T}/places/z2`), { cats: ['商店'] }));
+ await assertFails(updateDoc(doc(db(bob), `${T}/shopping/z1`), { zh: 'x'.repeat(121) }));
+});
+
 test('expenses: only the category can change afterwards', async () => {
  await assertSucceeds(updateDoc(doc(db(bob), `${T}/expenses/e1`), { category: 'food' }));
  await assertFails(updateDoc(doc(db(bob), `${T}/expenses/e1`), { category: 'snacks' }));

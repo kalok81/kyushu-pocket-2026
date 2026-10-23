@@ -142,6 +142,9 @@
     at ? new Date(at).toLocaleString("zh-HK", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
   const meta = (x, extra = "") =>
     `<div class="tg-meta">${extra}<span>${esc(x.byName || "旅伴")} · ${esc(when(x.at))}</span>${x.pending ? '<span class="tg-pending">未同步</span>' : ""}</div>`;
+  // Traditional Chinese name from the translateNames function, shown under the original while it still matches it.
+  const zhName = (x, text) => (x.zh && String(x.zhFor || "").split("\n")[0] === text ? x.zh : ""),
+    zhLine = (z) => (z ? `<span class="zh-name">${esc(z)}</span>` : "");
   // Top row of every list item: badges and author on the left, the item's "⋯" menu on the right.
   const itemTop = (x, extra, items) => `<div class="item-top">${meta(x, extra)}${Kit.menu(items)}</div>`;
   // Menu entry that deletes an item (with undo).

@@ -273,6 +273,25 @@ try {
   assert.equal(await page.locator('.page-head h1').innerText(), '機票'); assert.equal(await page.locator('#detail[open]').count(), 0);
   assert.equal(await page.locator('.bottomnav a.active').innerText(), '總覽');
  });
+ await step('translated names show under the original', async () => {
+  // stands in for translateNames: writes zh / zhFor on the item and the place
+  const translate = (c, name, zh) => page.evaluate(async ([c, name, zh]) => {
+   const fs = await import('./vendor/firebase/firebase-firestore.js'), docs = globalThis.__fakeStore[c] || {};
+   const id = Object.keys(docs).find((k) => (docs[k].name || docs[k].fields?.[1]) === name);
+   await fs.updateDoc({ c, id }, { zh, zhFor: name });
+  }, [c, name, zh]);
+  await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await addShop('じゃがポックル', '新千歳空港');
+  await translate('shopping', 'じゃがポックル', '薯條三兄弟');
+  await page.waitForFunction(() => /じゃがポックル\s*薯條三兄弟/.test(document.querySelector('.tg-list').innerText));
+  await page.fill('#shopSearch', '薯條'); await page.waitForFunction(() => document.querySelectorAll('.shop-item').length === 1);
+  await page.fill('#shopSearch', '');
+  await translate('places', '仲見世通り', '仲見世商店街');
+  await page.goto(base + '/#explore'); await page.waitForSelector('#results .card.place');
+  assert.match(await page.locator('#results .card.place', { hasText: '仲見世通り' }).innerText(), /仲見世商店街/);
+  await page.fill('#search', '商店街'); await page.waitForTimeout(400);
+  assert.equal(await page.locator('#results .card.place').count(), 1);
+  await page.fill('#search', '');
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

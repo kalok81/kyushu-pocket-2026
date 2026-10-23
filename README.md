@@ -76,10 +76,11 @@
 | `suggestRoutes` | 站點之間的路線建議 | Routes API |
 | `aiRoutes` | AI 路線建議 | DeepSeek |
 | `manageTrip` | 建立及修改旅程、管理旅伴 | — |
+| `translateNames` | 探索地點、購物物品及開支（連收據物品）名稱不是繁中時，加上繁中譯名（`zh`、`zhFor`、開支物品 `itemsZh`），原名不變（Firestore 觸發） | DeepSeek |
 
 API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`）。
 
-費用保護：網頁呼叫的 function 要求 Firebase App Check（reCAPTCHA Enterprise，網站金鑰在 `src/together/00-core.js` 的 `APP_CHECK_KEY`）；每位旅伴每日最多 80 次 AI 分析及 300 次地圖查詢（`usage/{uid}_{日期}`，網頁不可讀寫）；Google Cloud 預算「口袋旅伴 每月預算」HK$80，用量達 50%、90%、100% 時電郵通知帳單帳戶管理員。
+費用保護：網頁呼叫的 function 要求 Firebase App Check（reCAPTCHA Enterprise，網站金鑰在 `src/together/00-core.js` 的 `APP_CHECK_KEY`）；每位旅伴每日最多 80 次 AI 分析、300 次地圖查詢及 300 次名稱翻譯（`usage/{uid}_{日期}`，網頁不可讀寫）；Google Cloud 預算「口袋旅伴 每月預算」HK$80，用量達 50%、90%、100% 時電郵通知帳單帳戶管理員。
 
 權限規則及 Cloud Functions 由 GitHub Actions（`.github/workflows/backend.yml`）部署：`firestore.rules`、`storage.rules`、`functions/` 等有改動並 push 到 `main` 時，先在 Firebase 模擬器執行 `tests/rules/` 的權限測試（需要 Java），通過後用 `scripts/deploy-rules.mjs` 發佈規則，`functions/` 有改動時再部署所有 function。GitHub 以 Workload Identity Federation 登入（`github-deploy` 服務帳戶，只限這個 repo 的 `main`，毋須在 GitHub 存放金鑰）；部署工作由 repo 變數 `BACKEND_DEPLOY=on` 開啟。
 

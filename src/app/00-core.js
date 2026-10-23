@@ -1,6 +1,7 @@
   // ---- Shared helpers, trip days, favourites and page state ----
   const Kit = window.Kit,
-    { icon } = Kit;
+    { icon } = Kit,
+    zhLine = (z) => (z ? `<span class="zh-name">${esc(z)}</span>` : "");
   const $ = (s) => document.querySelector(s),
     esc = (s) =>
       String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);

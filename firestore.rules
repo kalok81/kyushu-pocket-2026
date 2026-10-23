@@ -30,8 +30,11 @@ service cloud.firestore {
         && text(d.flightNo, 20) && d.flightNo.size() > 0 && text(d.airline, 60) && text(d.from, 80) && text(d.to, 80)
         && text(d.depart, 20) && text(d.arrive, 20) && text(d.note, 500);
     }
+    // Traditional Chinese translation of a name, written by the translateNames function (kept when the item is edited).
+    function zhValid(d) { return (!('zh' in d) || text(d.zh, 120)) && (!('zhFor' in d) || text(d.zhFor, 4000)); }
     function shopValid(d) {
-      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'placeId', 'cat', 'url', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'by', 'byName', 'at', 'createdAt'])
+      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'placeId', 'cat', 'url', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'zh', 'zhFor', 'by', 'byName', 'at', 'createdAt'])
+        && zhValid(d)
         && (!('ai' in d) || d.ai is bool) && (!('placeId' in d) || text(d.placeId, 40))
         && (!('url' in d) || (text(d.url, 500) && d.url.matches('^https?://.*')))
         && (!('cat' in d) || d.cat in ['drug', 'food', 'fashion', 'home', 'stationery', 'toys', 'electronics', 'other'])
@@ -135,7 +138,8 @@ service cloud.firestore {
           && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
       }
       function placeValid(d) {
-        return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'points', 'mapsUrl', 'deleted', 'by', 'byName', 'at', 'createdAt'])
+        return d.keys().hasOnly(['base', 'fields', 'cats', 'lat', 'lng', 'points', 'mapsUrl', 'deleted', 'zh', 'zhFor', 'by', 'byName', 'at', 'createdAt'])
+          && zhValid(d)
         && (!('points' in d) || (d.points is list && d.points.size() <= 10))
           && (d.base == null || text(d.base, 20)) && d.fields is list && d.fields.size() == 12
           && d.cats is list && d.cats.size() <= 4

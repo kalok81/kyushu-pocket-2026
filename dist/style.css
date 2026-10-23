@@ -761,3 +761,7 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .detail-section{margin-top:20px;padding:0;border-top:0}
 .detail-section h3{margin:0 0 8px;font-size:15px;font-weight:650;letter-spacing:0;color:var(--foreground)}
 .detail-foot{margin-top:20px}
+/* Traditional Chinese translation under a name in another language */
+.zh-name{display:block;margin-top:1px;font-size:14px;font-weight:500;line-height:1.45;color:var(--muted-foreground)}
+.detailtitle .zh-name{font-size:16px;margin-top:2px}
+.tg-lines .zh-name{font-size:13px}

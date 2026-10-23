@@ -14,10 +14,11 @@ const DEEPSEEK_API_KEY = defineSecret('DEEPSEEK_API_KEY');
 const PLACES_API_KEY = defineSecret('PLACES_API_KEY');
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 // Daily limits per companion, so a leaked login cannot run up the AI or Google Maps bill.
-const DAILY = { ai: 80, maps: 300 };
+const DAILY = { ai: 80, maps: 300, tr: 300 };
 
 // Counts one use in usage/{uid}_{UTC date} (no client access: firestore.rules has no match for it).
 async function useQuota(uid, kind) {
+ if (!uid) throw new HttpsError('failed-precondition', 'no user');
  const ref = getFirestore().doc(`usage/${uid}_${new Date().toISOString().slice(0, 10)}`);
  const n = await getFirestore().runTransaction(async tx => {
   const v = ((await tx.get(ref)).get(kind) || 0) + 1;
@@ -568,4 +569,51 @@ Reply with JSON only:
   steps: (Array.isArray(o.steps) ? o.steps : []).slice(0, 10).map(s => ({ mode: ['WALK', 'TRANSIT', 'TAXI', 'DRIVE'].includes(s.mode) ? s.mode : 'TRANSIT', vehicle: text(s.vehicle, 30), line: text(s.line, 60), from: text(s.from, 60), to: text(s.to, 60), minutes: num(s.minutes, 1440) })),
  })).filter(o => o.steps.length);
  return { options, advice: text(r?.advice, 300) };
+});
+
+// Names in another language (explore places, shopping items, expenses and their receipt lines) get a Traditional
+// Chinese translation next to the original: zh (and itemsZh for expense lines), with zhFor holding the text it
+// translates, so an edited name is translated again and an unchanged one never is. Runs on every write to those
+// collections; names already in Traditional Chinese are left alone without asking the model.
+const NEEDS_ZH = /[\u3040-\u30ff\u31f0-\u31ff\uac00-\ud7af]|[A-Za-z]{3,}|[駅鉄県広沢気楽売焼円区国学会黒済渋豊発対応関観館変図価産専続薬単営転徳様総帯処鶏麺団湯]/;
+const ZH_SOURCES = {
+ places: d => ({ kind: 'shops and places', names: [String(d.fields?.[1] || '')] }),
+ shopping: d => ({ kind: 'products on a shopping list', names: [String(d.name || '')] }),
+ expenses: d => ({ kind: 'shop names and receipt lines', names: [String(d.title || ''), ...(Array.isArray(d.items) ? d.items : []).map(i => String(i?.name || ''))] }),
+};
+const zhPrompt = (t, kind, names) => `Translate these ${kind} from a trip to ${tripInfo(t).place} into Traditional Chinese as used in Hong Kong.
+Reply with JSON only: {"names": [string, ...]} with exactly ${names.length} entries in the same order.
+- Use the usual Chinese name when there is one (e.g. ドン・キホーテ → 唐吉訶德, 一蘭 → 一蘭); otherwise translate the meaning naturally.
+- Keep brand names written in Latin letters that have no common Chinese name, and keep quantities and sizes (×2, 100g).
+- If an entry is already Traditional Chinese, return it unchanged.
+Names: ${JSON.stringify(names)}`;
+cloudEvent('translateNames', async event => {
+ const path = String(event.subject || '').replace(/^documents\//, '');
+ const m = path.match(/^trips\/([A-Za-z0-9_-]+)\/(places|shopping|expenses)\/[A-Za-z0-9_-]+$/);
+ if (!m) return;
+ const ref = getFirestore().doc(path), snap = await ref.get();
+ if (!snap.exists || snap.get('deleted')) return;
+ const d = snap.data(), { kind, names } = ZH_SOURCES[m[2]](d), key = names.join('\n');
+ if (!names[0].trim() || d.zhFor === key || !names.some(n => NEEDS_ZH.test(n))) return;
+ try {
+  await useQuota(d.by, 'tr');
+ } catch {
+  return;
+ }
+ const tripDoc = (await getFirestore().doc(`trips/${m[1]}`).get()).data();
+ let got;
+ try {
+  got = (await askDeepSeek(zhPrompt(tripDoc, kind, names), [])).names;
+ } catch (e) {
+  console.error('translate', path, e?.message);
+  return;
+ }
+ if (!Array.isArray(got) || got.length !== names.length) return console.error('translate: wrong reply', path);
+ const zh = got.map((z, i) => (typeof z === 'string' && z.trim() && z.trim() !== names[i].trim() ? z.trim().slice(0, 120) : ''));
+ // The name may have changed while the model was answering: only the matching text is written.
+ await getFirestore().runTransaction(async tx => {
+  const now = await tx.get(ref);
+  if (!now.exists || ZH_SOURCES[m[2]](now.data()).names.join('\n') !== key) return;
+  tx.update(ref, { zh: zh[0], zhFor: key, ...(m[2] === 'expenses' ? { itemsZh: zh.slice(1) } : {}) });
+ });
 });
