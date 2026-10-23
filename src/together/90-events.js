@@ -165,7 +165,8 @@
         name: str("name").slice(0, 80),
         qty: str("qty").slice(0, 30),
         detail: str("detail").slice(0, 500),
-        place: str("place").slice(0, 200),
+        // several addresses, one per line (empty and repeated rows dropped)
+        place: [...new Set(v.getAll("place").map((t) => String(t).trim().slice(0, 200)).filter(Boolean))].slice(0, 6).join("\n"),
         placeId: str("placeId").slice(0, 40),
         cat: SHOP_CATS[str("cat")] ? str("cat") : "other",
         price: price == null ? null : Math.round(price * 100) / 100,
@@ -329,6 +330,16 @@
       $("#shopPreview").innerHTML = "";
     }
     if (d.tg === "shopAdd") openShopSheet();
+    if (d.tg === "shopPlaceAdd") {
+      const rows = $("#shopPlaceRows");
+      if (rows.querySelectorAll("input").length >= 6) toast("最多 6 個購買地點。");
+      else {
+        rows.insertAdjacentHTML("beforeend", placeRow(""));
+        rows.lastElementChild.querySelector("input")?.focus();
+      }
+    }
+    if (d.tg === "shopFindPlaces") findBuyPlaces();
+    if (d.tg === "shopPhotoAgain" && shopPhoto) requestFill(shopPhoto);
     if (d.tg === "newEntry") openForm();
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
@@ -407,10 +418,6 @@
     },
     true,
   );
-  document.addEventListener("click", (e) => {
-    const img = e.target.closest("[data-shop-zoom]");
-    if (img) img.classList.toggle("zoom");
-  });
   const placeField = (t) => t.name === "place" && t.closest('[data-tg-form="shop"]');
   document.addEventListener("change", (e) => {
     if (placeField(e.target)) placeFromMaps(e.target);

@@ -33,14 +33,15 @@ service cloud.firestore {
     // Traditional Chinese translation of a name, written by the translateNames function (kept when the item is edited).
     function zhValid(d) { return (!('zh' in d) || text(d.zh, 120)) && (!('zhFor' in d) || text(d.zhFor, 4000)); }
     function shopValid(d) {
-      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'placeId', 'cat', 'url', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'zh', 'zhFor', 'by', 'byName', 'at', 'createdAt'])
+      return d.keys().hasOnly(['name', 'qty', 'detail', 'place', 'placeId', 'cat', 'url', 'price', 'currency', 'photo', 'bought', 'boughtBy', 'boughtAt', 'ai', 'lat', 'lng', 'geoFor', 'pins', 'zh', 'zhFor', 'by', 'byName', 'at', 'createdAt'])
         && zhValid(d)
         && (!('ai' in d) || d.ai is bool) && (!('placeId' in d) || text(d.placeId, 40))
         && (!('url' in d) || (text(d.url, 500) && d.url.matches('^https?://.*')))
         && (!('cat' in d) || d.cat in ['drug', 'food', 'fashion', 'home', 'stationery', 'toys', 'electronics', 'other'])
         && (!('lat' in d) || d.lat == null || d.lat is number) && (!('lng' in d) || d.lng == null || d.lng is number)
-        && (!('geoFor' in d) || text(d.geoFor, 200))
-        && text(d.name, 80) && d.name.size() > 0 && text(d.qty, 30) && text(d.detail, 500) && text(d.place, 200)
+        && (!('geoFor' in d) || text(d.geoFor, 1300))
+        && text(d.name, 80) && d.name.size() > 0 && text(d.qty, 30) && text(d.detail, 500) && text(d.place, 1300)
+        && (!('pins' in d) || (d.pins is list && d.pins.size() <= 6))
         && (d.price == null || (d.price is number && d.price >= 0 && d.price <= 10000000))
         && d.currency in ['JPY', 'HKD', 'KRW', 'TWD', 'THB', 'CNY', 'SGD', 'MYR', 'USD', 'EUR', 'GBP', 'AUD', 'CAD', 'VND', 'PHP', 'IDR']
         && (d.photo == null || text(d.photo, 400000))

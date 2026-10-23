@@ -154,20 +154,51 @@
   }
   const shopPreview = () =>
     shopPhoto
-      ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片">${Kit.btn("移除相片", { size: "sm", icon: "x", attrs: { "data-tg": "shopPhotoClear" } })}`
+      ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片"><span class="links">${Kit.btn("用相片重新 AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-tg": "shopPhotoAgain" } })}${Kit.btn("移除相片", { size: "sm", icon: "x", attrs: { "data-tg": "shopPhotoClear" } })}</span>`
       : "";
+  const placeRow = (t) =>
+    `<input name="place" maxlength="200" placeholder="店名、地址，或貼上 Google 地圖連結" aria-label="購買地點" value="${esc(t)}">`;
+  // 購物 › AI 找購買地點: web search for where the item in the form is sold; fills empty address rows (adds rows as needed).
+  async function findBuyPlaces() {
+    const f = $('[data-tg-form="shop"]'),
+      info = $("#shopPlaceInfo"),
+      btn = f?.querySelector('[data-tg="shopFindPlaces"]'),
+      name = f?.elements.name.value.trim();
+    if (!f) return;
+    if (!name) return toast("請先輸入物品名稱。");
+    if (!navigator.onLine) return toast("離線中，未能搜尋。");
+    btn.disabled = true;
+    info.textContent = "AI 正在上網搜尋購買地點…";
+    try {
+      const r = (await (await callable("findBuyPlaces", 95000))({ name, qty: f.elements.qty.value, detail: f.elements.detail.value, trip: tripId })).data;
+      const rows = $("#shopPlaceRows"),
+        have = new Set([...rows.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean));
+      for (const p of r.places.filter((p) => !have.has(p.name))) {
+        const empty = [...rows.querySelectorAll("input")].find((i) => !i.value.trim());
+        if (empty) empty.value = p.name;
+        else if (rows.querySelectorAll("input").length < 6) rows.insertAdjacentHTML("beforeend", placeRow(p.name));
+      }
+      info.textContent = r.places.length
+        ? `AI 建議：${r.places.map((p) => `${p.name}${p.why ? `（${p.why}）` : ""}`).join("；")}${r.note ? `。${r.note}` : ""}　來源：${r.sources.join("、")}`
+        : r.note || "網上找不到目的地有售的地方。";
+    } catch (e) {
+      info.textContent = fnError(e, "未能搜尋購買地點，請稍後再試。");
+    } finally {
+      btn.disabled = false;
+    }
+  }
   function shopForm(x) {
     const v = (k) => esc(x?.[k] ?? "");
     return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div>${Kit.btn("加相片（AI 填寫空白欄位）", { icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopPhoto" } })}<input type="file" accept="image/*" id="shopPhotoInput" hidden><div class="tg-progress tg-progress-busy" id="shopFillBar" hidden><div></div></div><p class="note" id="shopFillInfo">加相片後，AI 會把物品資料填入下面的空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
       .map(([k, v]) => `<option value="${k}"${(x ? shopCat(x) : "food") === k ? " selected" : ""}>${v}</option>`)
-      .join("")}</select></label><label>購買地點／地址<input name="place" maxlength="500" placeholder="店名、地址，或貼上 Google 地圖連結" value="${v("place")}"></label><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
+      .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div><div class="links">${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}${Kit.btn("AI 找購買地點", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-tg": "shopFindPlaces" } })}</div><p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。「AI 找購買地點」會上網搜尋目的地有售的地方。</p></fieldset><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
       .map((p) => `<option value="${esc(p.id)}"${x?.placeId === p.id ? " selected" : ""}>${esc(p.v[1])}${p.v[0] ? ` · ${esc(p.v[0])}` : ""}</option>`)
-      .join("")}</select></label><p class="note" id="shopPlaceInfo"></p><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
+      .join("")}</select></label><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
   }
   function shopItem(x) {
     const price = x.price != null ? `<b class="shop-price">${esc(S.format(S.toMinor(x.price, x.currency), x.currency))}</b>` : "";
-    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<img class="shop-thumb" src="${photoSrc(x.photo)}" alt="${esc(x.name)}" data-shop-zoom>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}${zhLine(zhName(x, x.name))}</h3>${price}</div>${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${matchPlace(x) ? `<p class="shop-place">${icon("compass")}探索：<button type="button" class="buy-item" data-place="${esc(matchPlace(x).id)}">${esc(matchPlace(x).v[1])}</button></p>` : ""}${x.place ? `<p class="shop-place">${icon("pin")}<span>${esc(x.place)}</span></p>` : ""}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.place ? Kit.btn("地圖", { size: "sm", external: true, href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(x.place)}` }) : ""}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
+    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<button type="button" class="shop-thumb" data-shop-open="${esc(x.id)}" aria-label="放大 ${esc(x.name)} 的相片"><img src="${photoSrc(x.photo)}" alt=""></button>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}${zhLine(zhName(x, x.name))}</h3>${price}</div>${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${matchPlaces(x).length ? `<p class="shop-place">${icon("compass")}探索：${matchPlaces(x).map((p) => `<button type="button" class="buy-item" data-place="${esc(p.id)}">${esc(p.v[1])}</button>`).join("、")}</p>` : ""}${placesOf(x).map((t) => `<p class="shop-place">${icon("pin")}<span>${esc(t)}</span>${Kit.btn(`${esc(t)} 地圖`, { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t)}`, external: true, icon: "map", iconOnly: true, variant: "ghost", size: "sm" })}</p>`).join("")}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
   }
   // Photo grid: one tile per item; tapping opens the item with a large photo in the detail dialog.
   function shopTile(x) {
@@ -190,7 +221,7 @@
     const x = state.shopping.find((i) => i.id === id);
     if (!x) return;
     $("#detailBody").innerHTML =
-      `${x.photo ? `<img class="shop-detail-photo" src="${photoSrc(x.photo)}" alt="${esc(x.name)}">` : ""}${shopItem(x).replace(/<img class="shop-thumb"[^>]*>/, "")}`;
+      `${x.photo ? `<img class="shop-detail-photo" src="${photoSrc(x.photo)}" alt="${esc(x.name)}">` : ""}${shopItem(x).replace(/<button type="button" class="shop-thumb"[\s\S]*?<\/button>/, "")}`;
     if (!$("#detail").open) $("#detail").showModal();
   }
   function shopPage() {
@@ -289,8 +320,25 @@
     );
   };
   // The explore place an item is bought at: the one chosen on the item ("-" = none), else matched from 購買地點.
-  const matchPlace = (x) =>
-    x.placeId === "-" ? null : (x.placeId && T().places.find((p) => p.id === x.placeId)) || (x.place ? placeFor(x.place) : null);
+  // 購買地點 can hold several addresses, one per line (the first is the main one); pins[i] are their coordinates.
+  const placesOf = (x) =>
+    String(x.place || "")
+      .split("\n")
+      .map((t) => t.trim())
+      .filter(Boolean);
+  // (only while the coordinates still belong to the current addresses: geoFor)
+  const pinOf = (x, i) => {
+    if (x.geoFor !== x.place) return null;
+    const p = x.pins?.[i] ?? (i === 0 && { lat: x.lat, lng: x.lng });
+    return p && Number.isFinite(p.lat) && Number.isFinite(p.lng) ? p : null;
+  };
+  // The explore place of address i: the one chosen on the item (for the first address; "-" = none), else matched by name.
+  const linePlace = (x, i) =>
+    x.placeId === "-"
+      ? null
+      : (i === 0 && x.placeId && T().places.find((p) => p.id === x.placeId)) || placeFor(placesOf(x)[i] || "") || null;
+  const matchPlaces = (x) => [...new Set(placesOf(x).map((_, i) => linePlace(x, i)).filter(Boolean))];
+  const matchPlace = (x) => matchPlaces(x)[0] || null;
   // Set when 加入探索 turns a 購買地點 into an explore place: its items point at the new place.
   function linkShopping(ids, placeId) {
     for (const id of ids) if (state.shopping.some((x) => x.id === id)) update("shopping", id, { placeId });
@@ -308,11 +356,8 @@
     const ps = T().places;
     if (buyMemo && buyMemo.list === state.shopping && buyMemo.n === ps.length) return buyMemo.map;
     const map = new Map();
-    for (const x of state.shopping) {
-      if (!x.place) continue;
-      const p = matchPlace(x);
-      if (p) (map.get(p.id) || map.set(p.id, []).get(p.id)).push({ id: x.id, name: x.name, bought: !!x.bought });
-    }
+    for (const x of state.shopping)
+      for (const p of matchPlaces(x)) (map.get(p.id) || map.set(p.id, []).get(p.id)).push({ id: x.id, name: x.name, bought: !!x.bought });
     buyMemo = { list: state.shopping, n: ps.length, map };
     return map;
   }
@@ -330,38 +375,44 @@
   // Places to buy unbought items, for adding to the plan (coordinates not needed): explore place, else the 購買地點 text.
   function shoppingPlaces() {
     const spots = {};
-    for (const x of state.shopping.filter((x) => !x.bought && x.place)) {
-      const p = matchPlace(x),
-        key = p ? "p:" + p.id : "t:" + norm(shopLabel(x.place));
-      const spot = (spots[key] ??= {
-        name: p ? p.v[1] : shopLabel(x.place),
-        placeId: p ? p.id : null,
-        address: p ? p.v[3] : x.place,
-        ...(Number.isFinite(x.lat) && Number.isFinite(x.lng) ? { lat: x.lat, lng: x.lng } : {}),
-        items: [],
-        ids: [],
+    for (const x of state.shopping.filter((x) => !x.bought))
+      placesOf(x).forEach((line, i) => {
+        const p = linePlace(x, i),
+          pin = pinOf(x, i),
+          key = p ? "p:" + p.id : "t:" + norm(shopLabel(line));
+        const spot = (spots[key] ??= {
+          name: p ? p.v[1] : shopLabel(line),
+          placeId: p ? p.id : null,
+          address: p ? p.v[3] : line,
+          ...(pin ? { lat: pin.lat, lng: pin.lng } : {}),
+          items: [],
+          ids: [],
+        });
+        if (spot.ids.includes(x.id)) return;
+        spot.items.push(x.name);
+        spot.ids.push(x.id);
       });
-      spot.items.push(x.name);
-      spot.ids.push(x.id);
-    }
     return Object.values(spots);
   }
   function shoppingSpots() {
     const spots = {},
       geo = window.TRIP_GEO?.places || {};
-    for (const x of state.shopping.filter((x) => !x.bought && x.place)) {
-      const p = matchPlace(x),
-        pin = p && geo[p.id]?.[0];
-      let key, spot;
-      if (pin) {
-        key = "p:" + p.id;
-        spot = { name: p.v[1], lat: pin.lat, lng: pin.lng, placeId: p.id, address: p.v[3] };
-      } else if (Number.isFinite(x.lat) && Number.isFinite(x.lng)) {
-        key = `${x.lat.toFixed(4)},${x.lng.toFixed(4)}`;
-        spot = { name: shopLabel(x.place), lat: x.lat, lng: x.lng, placeId: null, address: x.place };
-      } else continue;
-      (spots[key] ??= { ...spot, items: [] }).items.push(x.name);
-    }
+    for (const x of state.shopping.filter((x) => !x.bought))
+      placesOf(x).forEach((line, i) => {
+        const p = linePlace(x, i),
+          pin = p && geo[p.id]?.[0],
+          own = pinOf(x, i);
+        let key, spot;
+        if (pin) {
+          key = "p:" + p.id;
+          spot = { name: p.v[1], lat: pin.lat, lng: pin.lng, placeId: p.id, address: p.v[3] };
+        } else if (own) {
+          key = `${own.lat.toFixed(4)},${own.lng.toFixed(4)}`;
+          spot = { name: shopLabel(line), lat: own.lat, lng: own.lng, placeId: null, address: line };
+        } else return;
+        const s = (spots[key] ??= { ...spot, items: [] });
+        if (!s.items.includes(x.name)) s.items.push(x.name);
+      });
     return Object.values(spots);
   }
   // Geocode 購買地點 once per text (geoFor remembers which text the coordinates belong to); one at a time.
@@ -375,19 +426,20 @@
       const call = await callable("lookupPlace", 45000);
       for (const x of todo) {
         try {
-          const r = (await call({ query: x.place, country: state.meta?.country || "" })).data;
-          await fb.fs.updateDoc(tdoc("shopping", x.id), {
-            lat: Number.isFinite(r.lat) ? r.lat : null,
-            lng: Number.isFinite(r.lng) ? r.lng : null,
-            geoFor: x.place,
-          });
+          // one lookup per address; an address Google cannot find gets no pin
+          const pins = [];
+          for (const line of placesOf(x).slice(0, 6))
+            try {
+              const r = (await call({ query: line, country: state.meta?.country || "" })).data;
+              pins.push(Number.isFinite(r.lat) && Number.isFinite(r.lng) ? { lat: r.lat, lng: r.lng } : null);
+            } catch (e) {
+              if (!String(e?.code || "").endsWith("not-found")) throw e;
+              pins.push(null);
+            }
+          await fb.fs.updateDoc(tdoc("shopping", x.id), { lat: pins[0]?.lat ?? null, lng: pins[0]?.lng ?? null, pins, geoFor: x.place });
         } catch (e) {
-          if (String(e?.code || "").endsWith("not-found"))
-            await fb.fs.updateDoc(tdoc("shopping", x.id), { lat: null, lng: null, geoFor: x.place }).catch(() => {});
-          else {
-            console.error("geocode", e);
-            break;
-          }
+          console.error("geocode", e);
+          break;
         }
       }
     } finally {
@@ -470,7 +522,8 @@
           const el = f.elements,
             r = j.result || {},
             put = (n, v) => {
-              if (v != null && v !== "" && !String(el[n].value).trim()) el[n].value = v;
+              const input = f.querySelector(`[name="${n}"]`);
+              if (v != null && v !== "" && input && !String(input.value).trim()) input.value = v;
             };
           put("name", r.name);
           put("qty", r.qty);

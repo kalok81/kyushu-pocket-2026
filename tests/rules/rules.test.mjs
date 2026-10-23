@@ -65,6 +65,8 @@ test('shopping: valid items, explore place link, shared updates', async () => {
  await assertFails(setDoc(doc(db(amy), `${T}/shopping/s5`), { ...item, cat: 'weapons', ...owned('amy', 'Amy') }));
  await assertSucceeds(updateDoc(doc(db(bob), `${T}/shopping/s1`), { bought: true, boughtBy: 'Bob', boughtAt: 2 }));
  await assertFails(updateDoc(doc(db(bob), `${T}/shopping/s1`), { by: 'bob' }));
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/shopping/s6`), { ...item, place: '博多駅 マイング\n福岡空港 国内線', pins: [{ lat: 33.59, lng: 130.42 }, null], ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/shopping/s7`), { ...item, pins: Array(7).fill(null), ...owned('amy', 'Amy') }));
 });
 
 test('translated names (written by translateNames) stay when items and places are edited', async () => {

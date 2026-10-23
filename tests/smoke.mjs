@@ -311,6 +311,20 @@ try {
   assert.equal(saved, link);
   assert.equal(await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator(`a[href="${link}"]`).count(), 1, 'the card map button opens the saved link');
  });
+ await step('shopping: several 購買地點, AI finds where to buy', async () => {
+  await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
+  await page.fill('[data-tg-form=shop] [name=name]', '雷門せんべい'); await page.fill('[data-tg-form=shop] [name=place] >> nth=0', '仲見世通り');
+  await page.click('[data-tg=shopFindPlaces]'); await page.waitForFunction(() => /AI 建議/.test(document.querySelector('#shopPlaceInfo').textContent));
+  assert.deepEqual(await page.locator('[data-tg-form=shop] [name=place]').evaluateAll((els) => els.map((e) => e.value)), ['仲見世通り', '淺草寺 本堂', '東京駅 一番街']);
+  assert.equal((await page.evaluate(() => window.buyRequest)).name, '雷門せんべい');
+  await page.click('[data-tg=shopPlaceAdd]'); await page.fill('[data-tg-form=shop] [name=place] >> nth=3', '仲見世通り');
+  await page.click('[data-tg-form=shop] button[type=submit]'); await page.waitForFunction(() => !document.querySelector('#detail').open);
+  const item = page.locator('.shop-item', { hasText: '雷門せんべい' });
+  assert.equal(await item.locator('.shop-place:has(.btn-icon)').count(), 3, 'one line per address, repeats dropped');
+  assert.match(await item.innerText(), /探索：[\s\S]*仲見世通り[\s\S]*淺草寺（雷門）/);
+  await page.goto(base + '/#explore'); await page.waitForSelector('#results .card.place');
+  for (const name of ['仲見世通り', '淺草寺（雷門）']) assert.match(await page.locator('#results .card.place', { hasText: name }).first().locator('.buy-here').innerText(), /雷門せんべい/);
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

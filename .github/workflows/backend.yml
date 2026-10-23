@@ -62,6 +62,7 @@ jobs:
             --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' \
             --trigger-event-filters-path-pattern=document='trips/{trip}/{col}/{id}' \
             --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=180s
+          gcloud functions deploy findBuyPlaces $COMMON --entry-point=findBuyPlaces --trigger-http --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=90s
           gcloud functions deploy aiRoutes $COMMON --entry-point=aiRoutes --trigger-http --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=120s
           gcloud functions deploy lookupPlace $COMMON --entry-point=lookupPlace --trigger-http \
             --set-secrets=PLACES_API_KEY=places-api-key:latest,DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=60s

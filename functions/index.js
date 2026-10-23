@@ -97,6 +97,21 @@ async function askDeepSeek(prompt, images, { think = true } = {}) {
  }
  throw new HttpsError('internal', '未能讀取收據內容，可以重試或手動輸入。');
 }
+// DeepSeek's own web tools (https://api-docs.deepseek.com/guides/search): search results with summaries, and a page as
+// Markdown (it can read sites that turn away cloud servers).
+async function deepseekTool(tool, body) {
+ const res = await fetch(`https://api.deepseek.com/v1/tools/${tool}`, {
+  method: 'POST',
+  headers: { Authorization: `Bearer ${DEEPSEEK_API_KEY.value().trim()}`, 'Content-Type': 'application/json' },
+  body: JSON.stringify(body),
+  signal: AbortSignal.timeout(30_000),
+ });
+ if (!res.ok) {
+  console.error(`DeepSeek ${tool} failed`, res.status, (await res.text()).slice(0, 300));
+  return null;
+ }
+ return res.json();
+}
 const productPrompt = t => { const { place, cur, home } = tripInfo(t); return `You identify products that travellers in ${place} photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
 Reply with JSON only, in this shape:
 {"name": string, "spec": string, "detail": string, "category": "drug" | "food" | "fashion" | "home" | "stationery" | "toys" | "electronics" | "other", "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
@@ -185,7 +200,17 @@ const decodeHtml = ({ buf, type }) => {
 };
 // Returns { image (base64 JPEG or null), facts (page facts or null) } for a product page or picture link.
 async function readProductLink(link) {
- const got = await safeFetch(link);
+ let got;
+ try {
+  got = await safeFetch(link);
+ } catch (e) {
+  // Sites that block cloud servers (Cloudflare and the like): ask DeepSeek's Fetch for the page text instead.
+  if (!/不讓程式讀取/.test(e?.message || '')) throw e;
+  const page = await deepseekTool('fetch', { url: link });
+  if (!page?.content) throw e;
+  const base = new URL(link);
+  return { image: null, facts: { site: base.hostname, title: String(page.title || '').slice(0, 200), description: '', brand: '', price: '', currency: '', picture: '', text: String(page.content).replace(/\s+/g, ' ').slice(0, 3000) }, link };
+ }
  if (got.type.startsWith('image/')) return { image: await smallJpeg(got.buf), facts: null, link: got.url.href };
  if (!/html|xml/.test(got.type)) throw new HttpsError('invalid-argument', '這個連結不是網頁或圖片。');
  const facts = pageFacts(decodeHtml(got), got.url);
@@ -656,4 +681,31 @@ cloudEvent('translateNames', async event => {
   if (!now.exists || ZH_SOURCES[m[2]](now.data()).names.join('\n') !== key) return;
   tx.update(ref, { zh: zh[0], zhFor: key, ...(m[2] === 'expenses' ? { itemsZh: zh.slice(1) } : {}) });
  });
+});
+
+// 購物 › 購買地點: search the web (DeepSeek Search) for where an item is sold, then let the model pick the places at
+// or near the trip's destination. Returns up to 4 places as shop name + area (as on local signs) with a short reason.
+const buyPrompt = (t, item, results) => `Hong Kong travellers on a trip to ${tripInfo(t).place} want to buy this item: ${JSON.stringify(item)}.
+From the web search results below, list where they can buy it at or near the destination of the trip.
+Reply with JSON only: {"places": [{"name": string, "why": string}], "note": string}
+- places: up to 4, best first (shops at main stations, airports and popular shopping areas first). name: the shop or counter name and its area or building as written locally, short enough to search on Google Maps (e.g. "ふくや 博多デイトス売店", "福岡空港 国内線 ANA FESTA"). why: at most 20 Traditional Chinese characters (e.g. "博多站內，營業至 21:00").
+- Only places the results support; do not invent shops. No places if the results show none near the destination.
+- note: at most 60 Traditional Chinese characters (Hong Kong usage) for anything important, e.g. that it is mainly sold elsewhere (北海道限定) or only at the airport; empty otherwise.
+Search results: ${JSON.stringify(results)}`;
+export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 90, maxInstances: 3 }, async req => {
+ if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
+ if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
+ const d = req.data || {}, text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ const item = { name: text(d.name, 80), spec: text(d.qty, 30), detail: text(d.detail, 200) };
+ if (!item.name) throw new HttpsError('invalid-argument', '請先輸入物品名稱。');
+ await useQuota(req.auth.uid, 'ai');
+ const trip = typeof d.trip === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(d.trip) ? (await getFirestore().doc(`trips/${d.trip}`).get()).data() : null;
+ const where = tripInfo(trip).place, name = item.name.replace(/[（(].*?[)）]/g, ' ').trim().slice(0, 60);
+ const searches = await Promise.all([`${name} 販売店 ${where}`, `${name} 哪裡買 ${where}`].map(q => deepseekTool('search', { query: q.slice(0, 128), count: 6 })));
+ const results = searches.flatMap(r => r?.results || []).filter((r, i, all) => all.findIndex(x => x.url === r.url) === i)
+  .slice(0, 10).map(r => ({ title: String(r.title || '').slice(0, 120), url: r.url, summary: String(r.summary || r.snippet || '').slice(0, 700) }));
+ if (!results.length) throw new HttpsError('not-found', '網上找不到這件物品的購買地點。');
+ const r = await askDeepSeek(buyPrompt(trip, item, results), [], { think: false });
+ const places = (Array.isArray(r?.places) ? r.places : []).slice(0, 4).map(p => ({ name: text(p?.name, 100), why: text(p?.why, 40) })).filter(p => p.name);
+ return { places, note: text(r?.note, 120), sources: [...new Set(results.slice(0, 3).map(x => new URL(x.url).hostname))] };
 });
