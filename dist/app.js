@@ -3,6 +3,8 @@
 // Generated from src/app/*.js by scripts/build.mjs — edit those files, not this one.
 window.startTrip = (meta = {}) => {
   // ---- Shared helpers, trip days, favourites and page state ----
+  const Kit = window.Kit,
+    { icon } = Kit;
   const $ = (s) => document.querySelector(s),
     esc = (s) =>
       String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -14,8 +16,7 @@ window.startTrip = (meta = {}) => {
           return false;
         }
       }),
-    link = (u, label, cls = "action") =>
-      `<a class="${cls}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`,
+    link = (u, label) => Kit.btn(esc(label), { href: u, external: true, size: "sm" }),
     maps = (s) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s),
     route = (s) => "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(s);
   const categories = ["餐廳", "景點", "商店", "手信"];
@@ -74,13 +75,8 @@ window.startTrip = (meta = {}) => {
   function toast(s) {
     window.UI.toast(s);
   }
-  function openDialog(html) {
-    $("#detailBody").innerHTML = html;
-    $("#detail").showModal();
-  }
-  function header(k, t, p = "") {
-    return `<div class="pagehead"><div class="eyebrow">${k}</div><h1>${t}</h1>${p ? `<p>${p}</p>` : ""}</div>`;
-  }
+  const openDialog = Kit.open,
+    header = (title, sub = "", aside = "") => Kit.pageHead(title, { sub, aside });
   function footer() {
     return '<div class="sourcefooter">旅程資料由旅伴在網站內輸入 · 班次、營業時間及訂位請以出發前公告為準。</div>';
   }
@@ -125,13 +121,46 @@ window.startTrip = (meta = {}) => {
   }
   const nights = (h) => (h.checkIn && h.checkOut ? Math.round((Date.parse(h.checkOut) - Date.parse(h.checkIn)) / 864e5) : 0);
   const fmtTime = (t) => (t ? t.replace("T", " ") : "");
-  // ---- 總覽 (home) ----
-  const art = `<svg class="hero-art" viewBox="0 0 380 300" aria-hidden="true"><circle cx="267" cy="73" r="44" fill="#d98456"/><path d="M5 224L100 105L177 192L235 111L376 227Z" fill="#6f8977"/><path d="M11 245L113 156L190 234L276 164L385 249Z" fill="#a2b297"/><path d="M0 265Q80 230 153 267T380 255V300H0Z" fill="#cbd1b2"/><path d="M0 280Q88 252 177 282T380 273" fill="none" stroke="#f1e7c9" stroke-width="3"/><path d="M195 150V257M210 150V257M185 160H221M181 146H226" stroke="#bf6749" stroke-width="8"/><rect x="48" y="242" width="94" height="32" rx="8" fill="#e6dfc5"/><rect x="57" y="249" width="18" height="12" rx="3" fill="#486953"/><rect x="82" y="249" width="18" height="12" rx="3" fill="#486953"/><rect x="107" y="249" width="22" height="12" rx="3" fill="#486953"/><circle cx="65" cy="275" r="6" fill="#183e39"/><circle cx="123" cy="275" r="6" fill="#183e39"/><path d="M293 203q-10-13 0-25t0-24M310 211q-10-13 0-25t0-24M327 203q-10-13 0-25t0-24" fill="none" stroke="#ece6ce" stroke-width="3" stroke-linecap="round"/><text x="52" y="228" fill="#e6dfc5" font-size="10" letter-spacing="3">TAKE IT SLOW</text></svg>`;
+  // ---- 總覽 (home): the trip at a glance, today's stops, shortcuts and every day ----
+  const todayIso = () => {
+    const n = new Date();
+    return `${n.getFullYear()}/${String(n.getMonth() + 1).padStart(2, "0")}/${String(n.getDate()).padStart(2, "0")}`;
+  };
   function renderHome() {
     const hs = lists().hotels,
       first = days[0],
-      last = days.at(-1);
-    return `<section class="hero"><div><div class="eyebrow">${esc(meta.destination || "OUR JOURNEY")}</div><h1>${esc(meta.name || "我們的旅程")}</h1><p>${days.length} 天的旅程。<br>把想去的地方，都放進口袋裡。</p><a href="#plan" class="herobtn">打開我們的行程 →</a>${first ? `<div class="stamp" style="margin-bottom:25px">${esc(first.iso.replaceAll("/", "."))} — ${esc(last.iso.slice(5).replace("/", "."))}</div>` : ""}</div>${art}</section><div class="stats"><div class="stat"><b>${days.length}</b><small>天的旅程</small></div><div class="stat"><b>${hs.length}</b><small>間住宿</small></div><div class="stat"><b>${places.length}</b><small>個口袋地點</small></div><div class="stat"><b>${places.filter((p) => saved.has(p.id)).length}</b><small>個我的收藏</small></div></div><section class="nearby-entry"><div><b>附近有甚麼？</b><small>100米・200米・500米，找到清單中的地點</small></div><button class="locate-button" data-locate>◎ 定位</button></section><div class="homegrid"><section><div class="sectionhead"><h2>旅程一覽</h2></div><div class="panel">${days.map((d) => `<a class="dayrow" href="#plan?day=${d.n}"><span class="daynum">D${d.n}</span><div><strong>${esc(d.region)}</strong><small>${esc(d.date)} · ${esc(d.weekday)}${d.hotel ? ` · ${esc(d.hotel)}` : ""}</small></div><span class="arrow">↗</span></a>`).join("")}</div></section><section><div class="sectionhead"><h2>隨手查一查</h2></div><div class="quicklinks"><a class="quick" href="#explore"><span class="ico">⌕</span><b>口袋地點</b><small>${places.length} 個地點</small></a><a class="quick" href="#shopping"><span class="ico">☑</span><b>購物清單</b><small>要買的東西</small></a><a class="quick" href="#flights"><span class="ico">✈</span><b>機票</b><small>${lists().flights.length} 個航班</small></a><a class="quick" href="#hotels"><span class="ico">▥</span><b>住宿</b><small>${hs.length} 間住宿</small></a></div></section></div>`;
+      last = days.at(-1),
+      iso = todayIso(),
+      now = days.find((d) => d.iso === iso),
+      until = first ? Math.round((Date.parse(first.iso) - Date.parse(iso)) / 864e5) : 0;
+    const when = now
+      ? `今天是第 ${now.n} 天`
+      : !first
+        ? ""
+        : until > 0
+          ? `還有 ${until} 天出發`
+          : "旅程已完結";
+    const todayStops = now ? stopsFor(now.n) : [];
+    const today = now
+      ? `${Kit.sectionHead(`今天 · ${esc(now.region)}`, Kit.btn("全日行程", { href: `#plan?day=${now.n}`, size: "sm", icon: "calendar" }))}<div class="panel today-list">${
+          todayStops.length
+            ? todayStops
+                .map((s) => `<a class="today-row" href="#plan?day=${now.n}"><time>${esc(s.time || "—")}</time><span>${esc(s.title)}</span></a>`)
+                .join("")
+            : '<p class="note">這天還沒有安排。</p>'
+        }</div>`
+      : "";
+    const tile = (href, ic, title, sub) => `<a class="quick" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span></a>`;
+    return `<section class="hero trip-card"><div class="eyebrow">${esc(meta.destination || "我們的旅程")}</div><h1>${esc(meta.name || "我們的旅程")}</h1>${
+      first
+        ? `<p class="trip-dates">${esc(first.iso.replaceAll("/", "."))} – ${esc(last.iso.slice(5).replace("/", "."))} · ${days.length} 天</p>`
+        : ""
+    }${when ? `<p class="trip-when">${when}</p>` : ""}${Kit.btn(now ? "今天的行程" : "打開行程", { href: `#plan?day=${now ? now.n : 1}`, variant: "primary", icon: "calendar", cls: "herobtn" })}</section>${today}<div class="quicklinks">${tile("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${tile("#hotels", "bed", "住宿", `${hs.length} 間`)}${tile("#nearby", "locate", "附近", "定位找地點")}${tile("#notebook", "book", "資料簿", "搜尋全部")}</div>${Kit.sectionHead("旅程一覽")}<div class="panel">${days
+      .map(
+        (d) =>
+          `<a class="dayrow${now && d.n === now.n ? " today" : ""}" href="#plan?day=${d.n}"><span class="daynum">D${d.n}</span><div><strong>${esc(d.region)}</strong><small>${esc(d.date)} · ${esc(d.weekday)}${d.hotel ? ` · ${esc(d.hotel)}` : ""}</small></div>${icon("chevron")}</a>`,
+      )
+      .join("")}</div>`;
   }
   // ---- 附近 (nearby places and shops within 100/200/500 m) ----
   let nearbyRequest = 0;
@@ -139,7 +168,7 @@ window.startTrip = (meta = {}) => {
   function renderNearby() {
     const coordinates = window.TRIP_GEO?.places || {},
       coverage = places.filter((p) => (coordinates[p.id] || []).length).length;
-    return `${header("NEAR ME", "看看附近，有甚麼？", "只找你已加入清單的地點 · 按直線距離由近至遠排序")}<section class="nearby-panel"><button class="locate-button" id="locateNow"${nearbyState.loading ? ' disabled aria-busy="true"' : ""}>${nearbyState.loading ? "正在取得位置…" : nearbyState.position ? "◎ 重新定位" : "◎ 定位看附近"}</button><button class="action map-pick-button" id="pickOnMap">📍 在地圖選位置</button><p class="nearby-help">手機定位：按下後請允許瀏覽器使用位置。你的位置只在這次網頁內計算，不會儲存或傳送到網站伺服器。</p><div class="chips" role="group" aria-label="附近距離範圍">${[100, 200, 500].map((r) => `<button class="chip ${nearbyState.radius === r ? "active" : ""}" data-radius="${r}" aria-pressed="${nearbyState.radius === r}">${r}米</button>`).join("")}</div><div class="chips" role="group" aria-label="附近地點分類">${["全部", ...exploreCats, "購物"].map((c) => `<button class="chip ${nearbyState.category === c ? "active" : ""}" data-near-category="${c}" aria-pressed="${nearbyState.category === c}">${c === "購物" ? "🛍 購物" : c}</button>`).join("")}</div>${nearbyState.category === "購物" ? '<p class="note">按購物清單中未買物品的「購買地點」定位。</p>' : ""}<div id="nearbyStatus" role="status" aria-live="polite">${nearbyState.error ? `<div class="notice nearby-error">${esc(nearbyState.error)}</div>` : nearbyState.loading ? "<p>定位中，請稍候…</p>" : nearbyState.position && nearbyState.mode === "manual" ? '<p class="note">📍 以地圖選取的位置為中心 · 距離並非從手機目前位置計算</p>' : nearbyState.position ? `<p class="note">已取得位置 · 定位精度約 ±${Math.ceil(nearbyState.accuracy)}米${nearbyState.accuracy > nearbyState.radius ? "；誤差大於所選範圍，建議到室外重新定位或選較大範圍。" : ""}</p>` : '<p class="note">尚未選取位置。選擇範圍後，可用手機定位或在地圖選位置。</p>'}</div></section><div id="nearbyResults"></div><p class="note">距離為直線估算，並非步行路程；樓層、入口及河道可能影響實際路程。已建立座標 ${coverage}/${places.length} 個地點；未有可靠座標的項目暫不納入附近結果。</p><p class="note">座標來源：店方／場地地圖及公開地點資料。<button class="action" id="nearbyCoverage">查看座標覆蓋情況</button></p>`;
+    return `${header("附近", "只找已加入的地點，按直線距離由近至遠排序")}<section class="nearby-panel"><button class="locate-button" id="locateNow"${nearbyState.loading ? ' disabled aria-busy="true"' : ""}>${nearbyState.loading ? "正在取得位置…" : nearbyState.position ? `${icon("locate")} 重新定位` : `${icon("locate")} 定位看附近`}</button><button class="action map-pick-button" id="pickOnMap">${icon("pin")} 在地圖選位置</button><p class="nearby-help">手機定位：按下後請允許瀏覽器使用位置。你的位置只在這次網頁內計算，不會儲存或傳送到網站伺服器。</p><div class="chips" role="group" aria-label="附近距離範圍">${[100, 200, 500].map((r) => `<button class="chip ${nearbyState.radius === r ? "active" : ""}" data-radius="${r}" aria-pressed="${nearbyState.radius === r}">${r}米</button>`).join("")}</div><div class="chips" role="group" aria-label="附近地點分類">${["全部", ...exploreCats, "購物"].map((c) => `<button class="chip ${nearbyState.category === c ? "active" : ""}" data-near-category="${c}" aria-pressed="${nearbyState.category === c}">${c === "購物" ? `${icon("bag")} 購物` : c}</button>`).join("")}</div>${nearbyState.category === "購物" ? '<p class="note">按購物清單中未買物品的「購買地點」定位。</p>' : ""}<div id="nearbyStatus" role="status" aria-live="polite">${nearbyState.error ? `<div class="notice nearby-error">${esc(nearbyState.error)}</div>` : nearbyState.loading ? "<p>定位中，請稍候…</p>" : nearbyState.position && nearbyState.mode === "manual" ? '<p class="note">📍 以地圖選取的位置為中心 · 距離並非從手機目前位置計算</p>' : nearbyState.position ? `<p class="note">已取得位置 · 定位精度約 ±${Math.ceil(nearbyState.accuracy)}米${nearbyState.accuracy > nearbyState.radius ? "；誤差大於所選範圍，建議到室外重新定位或選較大範圍。" : ""}</p>` : '<p class="note">尚未選取位置。選擇範圍後，可用手機定位或在地圖選位置。</p>'}</div></section><div id="nearbyResults"></div><p class="note">距離為直線估算，並非步行路程；樓層、入口及河道可能影響實際路程。已建立座標 ${coverage}/${places.length} 個地點；未有可靠座標的項目暫不納入附近結果。</p><p class="note">座標來源：店方／場地地圖及公開地點資料。<button class="action" id="nearbyCoverage">查看座標覆蓋情況</button></p>`;
   }
   function nearbyResults() {
     const target = $("#nearbyResults");
@@ -306,12 +335,20 @@ window.startTrip = (meta = {}) => {
     );
   }
   function renderExplore() {
-    return `${header("POCKET PLACES", "把喜歡的地方，收好。", "旅伴加入的地點 · 按「＋ 新增地點」貼上 Google 地圖連結")}<div class="nearby-inline"><a class="action primary" href="#nearby">◎ 查看附近地點（100／200／500米）</a><button class="action" data-place-new>＋ 新增地點</button></div><div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋店名、美食、地址…" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div><div class="chips">${["全部", ...exploreCats].map((c) => `<button class="chip ${category === c ? "active" : ""}" data-cat="${c}">${c}</button>`).join("")}<button class="chip ${category === "購物清單" ? "active" : ""}" data-cat="購物清單">🛍 購物清單</button><button class="chip ${onlySaved ? "active" : ""}" id="savedToggle">☆ 我的收藏</button></div></div><div id="results"></div>`;
+    const chip = (c, label, ic) => ({ label, icon: ic, active: category === c, attrs: { "data-cat": c } });
+    return `${header("探索", "", Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" }))}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋店名、美食、地址…" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
+      [
+        ...["全部", ...exploreCats].map((c) => chip(c, c)),
+        chip("購物清單", "購物清單", "bag"),
+        { label: "收藏", icon: "star", active: onlySaved, attrs: { id: "savedToggle" } },
+      ],
+      { label: "分類" },
+    )}</div><div id="results"></div>${Kit.fab("新增地點", { "data-place-new": true })}`;
   }
   // 🛍 購物清單 also lists 購買地點 that are not explore places yet, with 加入探索 to make them one.
   let buySpots = [];
   const spotCard = (s, k) =>
-    `<article class="card place shop-spot"><div class="place-top"><span class="badge shop">購物清單</span></div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">🛍 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions"><button class="action primary" data-spot-explore="${k}">＋ 加入探索</button>${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
+    `<article class="card place shop-spot"><div class="place-top"><span class="badge shop">購物清單</span></div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
   function renderResults() {
     let q = search.toLocaleLowerCase();
     const ps = places.filter(
@@ -327,15 +364,16 @@ window.startTrip = (meta = {}) => {
     const extra = buySpots.length
       ? `<div class="sectionhead"><h2>未在探索清單的購買地點（${buySpots.length}）</h2></div><div class="cardgrid">${buySpots.map(spotCard).join("")}</div>`
       : "";
+    const filtered = category !== "全部" || region !== "全部區域" || onlySaved || q;
     $("#results").innerHTML =
-      `<div class="resultsbar"><span>${ps.length} 個地點${onlySaved ? " · 我的收藏" : ""}${buySpots.length ? ` · 另有 ${buySpots.length} 個購買地點` : ""}</span><button class="smallbtn" id="resetFilters">重設篩選</button></div><div class="cardgrid">${ps.map((p) => placeCard(p)).join("")}</div>${extra}${ps.length || buySpots.length ? "" : `<div class="empty"><h2>暫時沒有符合的地點</h2><p>${onlySaved ? "按地點卡上的 ☆，建立這部手機的收藏。" : "試試其他關鍵字，或清除篩選。"}</p></div>`}`;
+      `<div class="resultsbar"><span>${ps.length} 個地點${onlySaved ? " · 我的收藏" : ""}${buySpots.length ? ` · 另有 ${buySpots.length} 個購買地點` : ""}</span>${filtered ? Kit.btn("清除篩選", { variant: "ghost", size: "sm", attrs: { id: "resetFilters" } }) : ""}</div><div class="cardgrid">${ps.map((p) => placeCard(p)).join("")}</div>${extra}${ps.length || buySpots.length ? "" : Kit.empty("暫時沒有符合的地點", onlySaved ? "按地點卡上的星號，建立這部手機的收藏。" : "試試其他關鍵字，或清除篩選。")}`;
   }
   // Shopping list items bought at a place (unbought first), shown on explore cards, place details and plan stops.
   const buysAt = (q) => [...(window.Together?.shoppingAt?.(q) || [])].sort((a, b) => a.bought - b.bought);
   const buyLine = (items) => {
     const todo = items.filter((x) => !x.bought);
     return todo.length
-      ? `<p class="buy-here">🛍 要買：${todo.map((x) => `<button type="button" class="buy-item" data-shop-open="${esc(x.id)}">${esc(x.name)}</button>`).join("、")}</p>`
+      ? `<p class="buy-here">${icon("bag")} 要買：${todo.map((x) => `<button type="button" class="buy-item" data-shop-open="${esc(x.id)}">${esc(x.name)}</button>`).join("、")}</p>`
       : "";
   };
   function shoppingChanged() {
@@ -343,10 +381,12 @@ window.startTrip = (meta = {}) => {
     else if (current === "explore" && $("#results")) renderResults();
     else if (current === "notebook" && $("#notebookResults")) notebookResults();
   }
+  // Explore card: tap anywhere for the details; the map and the star are the only buttons.
   function placeCard(p, near) {
     const c0 = p.cats.find((x) => x !== "手信") || p.cats[0] || p.v[6],
-      c = c0 === "手信" ? "手信店" : c0;
-    return `<article class="card place"><div class="place-top"><span class="badge ${{ 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c] || ""}">${esc(c)}</span><button class="save ${saved.has(p.id) ? "saved" : ""}" data-save="${p.id}" aria-label="${saved.has(p.id) ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${saved.has(p.id)}">${saved.has(p.id) ? "★" : "☆"}</button></div><h3>${esc(p.v[1])}</h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}<div class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</div>${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}<p class="feature">${esc(p.v[4])}</p>${p.v[5] ? `<p class="hours">${esc(p.v[5])}</p>` : ""}${buyLine(buysAt({ placeId: p.id }))}<div class="actions"><button class="action primary" data-place="${p.id}">詳細資料</button>${link(maps(p.v[1] + " " + p.v[3]), "地圖")}</div></article>`;
+      c = c0 === "手信" ? "手信店" : c0,
+      on = saved.has(p.id);
+    return `<article class="card place" data-card-place="${esc(p.id)}"><div class="place-top"><span class="badge ${{ 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c] || ""}">${esc(c)}</span><span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: maps(p.v[1] + " " + p.v[3]), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button></h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
   }
   function placeDetail(id) {
     const p = places.find((p) => p.id === id);
@@ -359,7 +399,10 @@ window.startTrip = (meta = {}) => {
       [9, "核對狀態"],
     ];
     openDialog(
-      `<div class="eyebrow">${esc(p.v[0])}</div><h2 class="detailtitle">${esc(p.v[1])}</h2><div class="links place-admin"><button class="action primary" data-place-plan="${esc(p.id)}">＋ 加入行程</button><button class="action" data-place-edit="${esc(p.id)}">✎ 編輯</button><button class="action" data-place-delete="${esc(p.id)}">刪除</button></div><div class="links">${link(maps(p.v[1] + " " + p.v[3]), "Google 地圖")}${link(route(p.v[1] + " " + p.v[3]), "從目前位置前往")}<button class="action" data-copy="${esc(p.v[3] || p.v[1])}">複製地址</button></div>${fields
+      `${Kit.sheetHead(esc(p.v[1]), esc(p.v[0]))}<div class="links place-admin">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}${Kit.btn("編輯", { icon: "edit", attrs: { "data-place-edit": p.id } })}${Kit.menu([
+        { label: "複製地址", icon: "copy", attrs: { "data-copy": p.v[3] || p.v[1] } },
+        { label: "刪除地點", icon: "trash", danger: true, attrs: { "data-place-delete": p.id } },
+      ])}</div><div class="links">${link(maps(p.v[1] + " " + p.v[3]), "Google 地圖")}${link(route(p.v[1] + " " + p.v[3]), "導航前往")}</div>${fields
         .filter(([i]) => p.v[i])
         .map(([i, label]) => `<section class="detail-section"><h3>${label}</h3><p>${esc(p.v[i])}</p></section>`)
         .join("")}<section class="detail-section"><h3>影片與參考來源</h3><div class="links">${urlList(p.v[8])
@@ -368,7 +411,7 @@ window.startTrip = (meta = {}) => {
         .map((u, i) => link(u, "參考網站 " + (i + 1)))
         .join(
           "",
-        )}</div><p class="note">${esc(p.v[7])}</p></section>${(window.TRIP_GEO.places[p.id] || []).length > 1 ? `<section class="detail-section"><h3>分店／地址（${window.TRIP_GEO.places[p.id].length}）</h3><div class="links">${window.TRIP_GEO.places[p.id].map((g, k) => link(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]))).join("")}</div></section>` : ""}${((b) => (b.length ? `<section class="detail-section"><h3>🛍 購物清單（${b.length}）</h3><div class="links">${b.map((x) => `<button class="action${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.bought ? "✓ " : ""}${esc(x.name)}</button>`).join("")}</div></section>` : ""))(buysAt({ placeId: p.id }))}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>`,
+        )}</div><p class="note">${esc(p.v[7])}</p></section>${(window.TRIP_GEO.places[p.id] || []).length > 1 ? `<section class="detail-section"><h3>分店／地址（${window.TRIP_GEO.places[p.id].length}）</h3><div class="links">${window.TRIP_GEO.places[p.id].map((g, k) => link(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]))).join("")}</div></section>` : ""}${((b) => (b.length ? `<section class="detail-section"><h3>購物清單（${b.length}）</h3><div class="links">${b.map((x) => `<button class="action${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.bought ? "✓ " : ""}${esc(x.name)}</button>`).join("")}</div></section>` : ""))(buysAt({ placeId: p.id }))}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>`,
     );
     window.Together?.refresh();
   }
@@ -564,8 +607,7 @@ window.startTrip = (meta = {}) => {
   }
   // ---- 行程 (plan): day stops, the stop form and the in-page place picker ----
   // Each day's plan lives in Firestore planDays/{day}: the stop list and the day's title.
-  let planEdits = {},
-    openStop = null;
+  let planEdits = {};
   // A stop for an explore place or a hotel shows that place's current name, area, details and address, so editing the
   // place in 探索 (or the hotel in 住宿) updates every stop; the copy saved in the stop is only a fallback.
   function resolveStop(s) {
@@ -741,7 +783,7 @@ window.startTrip = (meta = {}) => {
     ppCat = "全部";
     const s = slot != null ? stopsFor(day)[slot] : null;
     openDialog(
-      `<div class="eyebrow">ADD TO DAY ${day}</div><h2 class="detailtitle">${s ? "加入同一時間的選擇" : "從探索加入地點"}</h2><p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? `<button class="action" data-stop-own="${slot}">✎ 自己輸入</button>` : ""}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點"><div class="chips" role="group" aria-label="分類">${["全部", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => `<button class="chip ${c === ppCat ? "active" : ""}" data-pp-cat="${c}">${c}</button>`).join("")}</div>${s ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}"></div>`,
+      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點（不在探索）", { icon: "plus", attrs: { "data-stop-new": true } })}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點"><div class="chips" role="group" aria-label="分類">${["全部", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => `<button class="chip ${c === ppCat ? "active" : ""}" data-pp-cat="${c}">${c}</button>`).join("")}</div>${s ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}"></div>`,
     );
     ppResults();
   }
@@ -866,33 +908,52 @@ window.startTrip = (meta = {}) => {
       else gs.push([{ s, i }]);
       return gs;
     }, []);
+  function stopCard(s, i, label, last) {
+    const placeOk = s.placeId && places.some((p) => p.id === s.placeId);
+    return `<div class="stopcontent"><div class="stop-top"><span class="eyebrow">${label} / ${esc(s.area)}</span>${Kit.menu(
+      [
+        { label: "修改", icon: "edit", attrs: { "data-stop-edit": i } },
+        { label: "加入同一時間的選擇", icon: "plus", attrs: { "data-stop-alt": i } },
+        { label: "上移", icon: "up", disabled: !i, attrs: { "data-stop-move": `${i}:-1` } },
+        { label: "下移", icon: "down", disabled: i >= last, attrs: { "data-stop-move": `${i}:1` } },
+        { label: "刪除", icon: "trash", danger: true, attrs: { "data-stop-delete": i } },
+      ],
+      { label: `編輯「${s.title}」`, attrs: { "data-stop-more": i } },
+    )}</div><h3>${esc(s.title)}</h3>${s.detail ? `<p>${esc(s.detail)}</p>` : ""}${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}<div class="links">${placeOk ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": s.placeId } }) : ""}${s.hotelId ? Kit.btn("住宿資料", { size: "sm", href: "#hotels" }) : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(s.ref)
+      .map((u) => link(u, "參考網站"))
+      .join("")}</div></div>`;
+  }
   function renderPlanDay(day) {
     const d = days[day - 1],
       edit = planEdits[day],
       stops = stopsFor(day),
-      last = stops.length - 1;
-    return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)} · ${esc(d.weekday)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p></div><div class="links"><button class="action" data-day-label>✎ 這天標題</button><a href="#hotels" class="action">查看酒店 ↗</a></div></div><div class="notice">${edit?.stops?.length ? "旅伴安排的行程，修改即時同步。" : "這天還未安排，按「＋ 新增站點」或「⌕ 從探索加入地點」。"}<br>住宿：${esc(d.hotel || "未設定")}</div><div class="plan-tools"><button class="action primary" data-stop-new>＋ 新增站點</button><button class="action" data-plan-pick>⌕ 從探索加入地點</button>${routeStops(day).length ? '<button class="action" data-day-map>🗺 當天路線</button>' : ""}<button class="action" data-plan-print>🖨 列印／PDF</button>${edit?.stops?.length ? '<button class="action" data-plan-reset>清空這天</button>' : ""}</div><div class="timeline">${
+      last = stops.length - 1,
+      first = stops[0];
+    return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)} · ${esc(d.weekday)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
+      [
+        { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
+        routeStops(day).length && { label: "當天路線地圖", icon: "map", attrs: { "data-day-map": true } },
+        { label: "列印／另存 PDF", icon: "printer", attrs: { "data-plan-print": true } },
+        edit?.stops?.length && { label: "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
+      ],
+      { label: "這天的更多操作", cls: "day-more" },
+    )}</div>${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
       stopGroups(stops)
         .map(
           (g, n, all) =>
             `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}</div><div class="stop-alts">${g
-              .map(
-                ({ s, i }, k) =>
-                  `<div class="stopcontent"><button class="stop-more${openStop === i ? " active" : ""}" data-stop-more="${i}" aria-label="編輯這個站點" aria-expanded="${openStop === i}">⋯</button><span class="eyebrow">${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""} / ${esc(s.area)}</span><h3>${esc(s.title)}</h3><p>${esc(s.detail)}</p>${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}${n === 0 && !hotelLink() && s.transport ? `<p class="transport">↳ ${esc(s.transport)}</p>` : ""}<div class="links">${s.placeId && places.some((p) => p.id === s.placeId) ? `<button class="action" data-place="${esc(s.placeId)}">地點資料</button>` : ""}${s.hotelId ? '<a class="action" href="#hotels">住宿資料</a>' : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(
-                    s.ref,
-                  )
-                    .map((u) => link(u, "參考網站"))
-                    .join(
-                      "",
-                    )}</div>${openStop === i ? `<div class="stop-edit"><button class="smallbtn" data-stop-move="${i}:-1"${i ? "" : " disabled"} aria-label="上移">↑</button><button class="smallbtn" data-stop-move="${i}:1"${i < last ? "" : " disabled"} aria-label="下移">↓</button><button class="smallbtn" data-stop-edit="${i}">✎ 修改</button><button class="smallbtn" data-stop-delete="${i}">刪除</button><button class="smallbtn" data-stop-alt="${i}">＋ 加入</button></div>` : ""}</div>`,
-              )
+              .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last))
               .join("")}</div></article>`,
         )
-        .join("") || '<div class="empty"><h2>這天還沒有行程</h2><p>按「＋ 新增站點」或「⌕ 從探索加入地點」。</p></div>'
-    }</div><section class="tg-slot" data-tg-day="${day}"></section>`;
+        .join("") || Kit.empty("這天還沒有行程", "按右下角「加入地點」，從探索、住宿或購物清單選擇，或新增地點。")
+    }</div><section class="tg-slot" data-tg-day="${day}"></section>${Kit.fab("加入地點", { "data-plan-pick": true })}`;
   }
   function renderPlan() {
-    return `${header("DAY BY DAY", "跟著酒店，順路出發。", "選擇日期查看當天行程")}<div class="daytabs" aria-label="選擇行程日期">${days.map((d) => `<button class="daytab ${d.n === selectedDay ? "active" : ""}" data-day="${d.n}" aria-pressed="${d.n === selectedDay}"><b>DAY ${d.n}</b><span>${esc(d.date)} · ${esc(d.weekday)}</span><em class="day-region" title="${esc(d.region)}">${esc(d.region)}</em><small class="weather-tab" data-weather-tab="${d.n}"></small></button>`).join("")}</div><article class="journey-day" aria-label="第${selectedDay}天行程">${renderPlanDay(selectedDay)}</article>`;
+    const tab = (d) => {
+      const [dd, mm] = d.date.split("/");
+      return `<button class="daytab ${d.n === selectedDay ? "active" : ""}" data-day="${d.n}" aria-pressed="${d.n === selectedDay}" aria-label="第 ${d.n} 天 ${esc(d.date)} ${esc(d.region)}"><b>D${d.n}</b><span>${dd}/${mm} ${d.weekday.slice(-1)}</span><small class="weather-tab" data-weather-tab="${d.n}"></small></button>`;
+    };
+    return `<h1 class="sr-only">每日行程</h1><div class="daytabs" aria-label="選擇行程日期">${days.map(tab).join("")}</div><article class="journey-day" aria-label="第${selectedDay}天行程">${renderPlanDay(selectedDay)}</article>`;
   }
   // ---- 行程 extras: weather, day route map and the printed itinerary ----
   // Weather for each day where the day happens: the middle stop with coordinates (travel days start elsewhere),
@@ -1041,8 +1102,13 @@ window.startTrip = (meta = {}) => {
     const prev = all[n - 1],
       next = all[n],
       multi = next.length > 1;
-    const lines = next.filter(({ s }) => s.transport).map(({ s }, k) => `${multi ? `${esc(s.title)}：` : ""}${esc(s.transport)}`);
-    return `<div class="stop-link"><div></div><button type="button" class="route-dot${lines.length ? " has-route" : ""}" data-route-link="${n}" aria-label="${prev ? esc(prev[0].s.title) : "酒店"} 至 ${esc(next[0].s.title)} 的交通"><i aria-hidden="true"></i><span>${lines.length ? lines.join("<br>") : prev ? "🚃 查交通" : "🏨 由酒店出發 · 查交通"}</span></button></div>`;
+    // One line per choice, total time first ("約 14 分 · ¥180 · 🚶 2 分 → 🚇 …"); long routes end in "…".
+    const short = (t) => {
+      const [steps, total] = String(t).split("｜");
+      return total ? `${total.trim()} · ${steps.trim()}` : String(t);
+    };
+    const lines = next.filter(({ s }) => s.transport).map(({ s }) => `<span class="route-line">${multi ? `${esc(s.title)}：` : ""}${esc(short(s.transport))}</span>`);
+    return `<div class="stop-link"><div></div><button type="button" class="route-dot${lines.length ? " has-route" : ""}" data-route-link="${n}" aria-label="${prev ? esc(prev[0].s.title) : "酒店"} 至 ${esc(next[0].s.title)} 的交通"><i aria-hidden="true"></i><span>${lines.length ? lines.join("") : `${icon(prev ? "train" : "bed")}${prev ? "查交通" : "由酒店出發 · 查交通"}`}</span></button></div>`;
   }
   function routeDialog(day, i, fromGroup = null, toGroup = null) {
     const list = stopsFor(day),
@@ -1351,7 +1417,7 @@ window.startTrip = (meta = {}) => {
   }
   const notebookArea = (r) => r.region || "其他";
   function renderNotebook() {
-    return `${header("TRAVEL NOTEBOOK", "完整資料簿", "搜尋全部旅遊資料，或按分類及區域快速找。")}<div class="notebook-shortcuts"><a href="#plan">☷ 每日行程</a><a href="#flights">✈ 航班與行李</a><a href="#hotels">▥ 酒店住宿</a><a href="#shopping">☑ 購物清單</a><a href="#together">✎ 筆記</a></div><div class="controls notebook-controls"><div class="searchrow"><input id="notebookSearch" class="search" type="search" aria-label="搜尋完整資料簿" placeholder="輸入店名、菜式、酒店、航班或日期…" value="${esc(notebookSearch)}"><select id="notebookRegion" aria-label="資料簿區域"><option>全部區域</option>${[...new Set(notebookRecords().map(notebookArea))].map((r) => `<option${r === notebookRegion ? " selected" : ""}>${esc(r)}</option>`).join("")}</select></div><div class="chips">${["全部", "餐廳", "景點", "商店", "行程", "酒店", "機票", "購物", "筆記"].map((t) => `<button class="chip ${t === notebookType ? "active" : ""}" data-notebook-type="${t}" aria-pressed="${t === notebookType}">${t}</button>`).join("")}</div></div><div id="notebookResults"></div><div class="sourcefooter">資料由旅伴在網站內輸入，所有旅伴即時同步。</div>`;
+    return `${header("資料簿", "搜尋全部旅程資料，或按分類及區域篩選")}<div class="controls notebook-controls"><div class="searchrow"><input id="notebookSearch" class="search" type="search" aria-label="搜尋完整資料簿" placeholder="輸入店名、菜式、酒店、航班或日期…" value="${esc(notebookSearch)}"><select id="notebookRegion" aria-label="資料簿區域"><option>全部區域</option>${[...new Set(notebookRecords().map(notebookArea))].map((r) => `<option${r === notebookRegion ? " selected" : ""}>${esc(r)}</option>`).join("")}</select></div><div class="chips">${["全部", "餐廳", "景點", "商店", "行程", "酒店", "機票", "購物", "筆記"].map((t) => `<button class="chip ${t === notebookType ? "active" : ""}" data-notebook-type="${t}" aria-pressed="${t === notebookType}">${t}</button>`).join("")}</div></div><div id="notebookResults"></div><div class="sourcefooter">資料由旅伴在網站內輸入，所有旅伴即時同步。</div>`;
   }
   function notebookResults() {
     const all = notebookRecords(),
@@ -1401,9 +1467,15 @@ window.startTrip = (meta = {}) => {
     );
   }
   // ---- 住宿 and 機票 (hotels and flights) ----
+  const docsBtn = (k, x) => Kit.btn(`文件${x.docs?.length ? `（${x.docs.length}）` : ""}`, { size: "sm", icon: "clip", attrs: { "data-docs": `${k}:${x.id}` } }),
+    itemMenu = (k, id) =>
+      Kit.menu([
+        { label: "編輯", icon: "edit", attrs: { [`data-${k}-edit`]: id } },
+        { label: "刪除", icon: "trash", danger: true, attrs: { [`data-${k}-del`]: id } },
+      ]);
   function renderHotels() {
     const hs = [...lists().hotels].sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)));
-    return `${header("STAY & REST", "每一天，都有回去的地方。", "貼上 Google 地圖連結即可自動填寫酒店資料")}<div class="links"><button class="action primary" data-hotel-new>＋ 新增住宿</button></div>${hs.length ? `<div class="twocol">${hs.map((h) => `<article class="card hotel"><span class="hotelnum">${esc(h.checkIn || "?")} → ${esc(h.checkOut || "?")}</span><h2>${esc(h.name)}</h2>${nights(h) > 0 ? `<div class="badge">${nights(h)} 晚</div>` : ""}<dl class="kv">${h.address ? `<dt>地址</dt><dd>${esc(h.address)}</dd>` : ""}${h.note ? `<dt>備註</dt><dd>${esc(h.note)}</dd>` : ""}</dl><div class="links">${link(route(`${h.name} ${h.address}`.trim()), "導航")}${h.mapsUrl ? link(h.mapsUrl, "Google 地圖") : ""}<button class="smallbtn" data-docs="hotels:${esc(h.id)}">📎 文件${h.docs?.length ? `（${h.docs.length}）` : ""}</button><button class="smallbtn" data-hotel-edit="${esc(h.id)}">編輯</button><button class="smallbtn" data-hotel-del="${esc(h.id)}">刪除</button></div></article>`).join("")}</div>` : '<div class="empty"><h2>還沒有住宿</h2><p>按「＋ 新增住宿」，貼上酒店的 Google 地圖連結。</p></div>'}<div class="sectionhead"><h2>每晚住宿</h2></div><div class="panel">${days.map((d) => `<a class="dayrow" href="#plan?day=${d.n}"><span class="daynum">D${d.n}</span><div><strong>${esc(d.date)} · ${esc(d.region)}</strong><small>${esc(d.hotel || "未設定")}</small></div><span class="arrow">↗</span></a>`).join("")}</div>`;
+    return `${header("住宿")}${hs.length ? `<div class="twocol">${hs.map((h) => `<article class="card hotel"><div class="card-top"><span class="hotelnum">${esc(h.checkIn || "?")} → ${esc(h.checkOut || "?")}${nights(h) > 0 ? ` · ${nights(h)} 晚` : ""}</span>${itemMenu("hotel", h.id)}</div><h2>${esc(h.name)}</h2><dl class="kv">${h.address ? `<dt>地址</dt><dd>${esc(h.address)}</dd>` : ""}${h.note ? `<dt>備註</dt><dd>${esc(h.note)}</dd>` : ""}</dl><div class="links">${link(route(`${h.name} ${h.address}`.trim()), "導航")}${h.mapsUrl ? link(h.mapsUrl, "Google 地圖") : ""}${docsBtn("hotels", h)}</div></article>`).join("")}</div>` : Kit.empty("還沒有住宿", "按右下角「新增住宿」，貼上酒店的 Google 地圖連結即可自動填寫。")}${Kit.sectionHead("每晚住宿")}<div class="panel">${days.map((d) => `<a class="dayrow" href="#plan?day=${d.n}"><span class="daynum">D${d.n}</span><div><strong>${esc(d.date)} · ${esc(d.region)}</strong><small>${esc(d.hotel || "未設定")}</small></div>${icon("chevron")}</a>`).join("")}</div>${Kit.fab("新增住宿", { "data-hotel-new": true })}`;
   }
   function hotelForm(h) {
     const v = (k) => esc(h?.[k] ?? ""),
@@ -1456,7 +1528,7 @@ window.startTrip = (meta = {}) => {
   }
   function renderFlights() {
     const fs = [...lists().flights].sort((a, b) => String(a.depart).localeCompare(String(b.depart)));
-    return `${header("FLIGHTS", "出發與回家，都準備好。", "航班時間為各地當地時間")}<div class="links"><button class="action primary" data-flight-new>＋ 新增航班</button></div>${fs.length ? `<div class="twocol">${fs.map((f) => `<article class="ticket"><div class="ticket-top"><b>${esc(f.depart ? f.depart.slice(0, 10) : "")}</b><span>${esc(f.airline)} · ${esc(f.flightNo)}</span></div><div class="flightpath"><div><strong>${esc(f.from)}</strong><b>${esc(f.depart ? f.depart.slice(11, 16) : "")}</b></div><div class="plane">✈</div><div><strong>${esc(f.to)}</strong><b>${esc(f.arrive ? f.arrive.slice(11, 16) : "")}</b><small>${f.arrive && f.depart && f.arrive.slice(0, 10) !== f.depart.slice(0, 10) ? esc(f.arrive.slice(0, 10)) : ""}</small></div></div><div class="ticket-bottom"><span>${esc(f.note)}</span><span><button class="smallbtn" data-docs="flights:${esc(f.id)}">📎 文件${f.docs?.length ? `（${f.docs.length}）` : ""}</button> <button class="smallbtn" data-flight-edit="${esc(f.id)}">編輯</button> <button class="smallbtn" data-flight-del="${esc(f.id)}">刪除</button></span></div></article>`).join("")}</div>` : '<div class="empty"><h2>還沒有航班</h2><p>按「＋ 新增航班」輸入航班號、出發及到達時間。</p></div>'}<p class="note">電子機票等文件可按「📎 文件」上載，只限旅伴登入查看。</p>`;
+    return `${header("機票", "航班時間為各地當地時間")}${fs.length ? `<div class="twocol">${fs.map((f) => `<article class="ticket"><div class="ticket-top"><b>${esc(f.depart ? f.depart.slice(0, 10) : "")}</b><span>${esc(f.airline)} · ${esc(f.flightNo)}</span></div><div class="flightpath"><div><strong>${esc(f.from)}</strong><b>${esc(f.depart ? f.depart.slice(11, 16) : "")}</b></div><div class="plane">✈</div><div><strong>${esc(f.to)}</strong><b>${esc(f.arrive ? f.arrive.slice(11, 16) : "")}</b><small>${f.arrive && f.depart && f.arrive.slice(0, 10) !== f.depart.slice(0, 10) ? esc(f.arrive.slice(0, 10)) : ""}</small></div></div><div class="ticket-bottom"><span>${esc(f.note)}</span><span>${docsBtn("flights", f)}${itemMenu("flight", f.id)}</span></div></article>`).join("")}</div>` : Kit.empty("還沒有航班", "按右下角「新增航班」，輸入航班號、出發及到達時間。")}<p class="note">電子機票等文件可按「文件」上載，只限旅伴登入查看。</p>${Kit.fab("新增航班", { "data-flight-new": true })}`;
   }
   function flightForm(f) {
     const v = (k) => esc(f?.[k] ?? "");
@@ -1503,7 +1575,7 @@ window.startTrip = (meta = {}) => {
     together: () =>
       window.Together
         ? window.Together.render()
-        : header("TOGETHER", "一起記，一起走。") + '<div class="empty"><h2>未能載入共用功能</h2><p>請重新整理網頁。</p></div>',
+        : header("共用") + Kit.empty("未能載入共用功能", "請重新整理網頁。"),
   };
   window.TripApp = Object.freeze({
     days,
@@ -1515,27 +1587,24 @@ window.startTrip = (meta = {}) => {
     setSaved,
     savedIds: () => [...saved],
   });
+  // Pages without a tab of their own light up the tab they are reached from.
+  const navOf = { nearby: "explore", hotels: "home", flights: "home" };
   function setActive(view) {
     current = view;
     document.querySelectorAll(".bottomnav a").forEach((a) => {
-      const active = a.dataset.view === view;
+      const active = a.dataset.view === (navOf[view] || view);
       a.classList.toggle("active", active);
       if (active) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
     $("#sourceBtn").classList.toggle("active", view === "notebook");
   }
-  function sourceList() {
-    if ($("#detail").open) $("#detail").close();
-    if (location.hash === "#notebook") navigate();
-    else location.hash = "notebook";
-  }
   function refreshExplore() {
-    $("#app").innerHTML = renderExplore() + footer();
+    $("#app").innerHTML = renderExplore();
     bindExplore();
   }
   function refreshNotebook() {
-    $("#app").innerHTML = renderNotebook() + footer();
+    $("#app").innerHTML = renderNotebook();
     bindNotebook();
   }
   function navigate() {
@@ -1548,8 +1617,8 @@ window.startTrip = (meta = {}) => {
     if (params.has("category")) category = exploreCats.includes(params.get("category")) ? params.get("category") : "全部";
     if (params.has("day")) selectedDay = Math.min(days.length, Math.max(1, Number(params.get("day")) || 1));
     setActive(view);
-    openStop = null; // a page opened afresh shows no stop's edit buttons
-    $("#app").innerHTML = sectionViews[view]() + footer();
+    Kit.close();
+    $("#app").innerHTML = sectionViews[view]() + (view === "home" ? footer() : "");
     if (view === "explore") bindExplore();
     if (view === "notebook") bindNotebook();
     if (view === "nearby") nearbyResults();
@@ -1557,12 +1626,21 @@ window.startTrip = (meta = {}) => {
     window.Together?.refresh();
     window.scrollTo({ top: 0, behavior: "instant" });
   }
-  $("#sourceBtn").onclick = sourceList;
   $("#detail .dialog-close").onclick = () => $("#detail").close();
   $("#detail").addEventListener("click", (e) => {
     if (e.target === $("#detail")) $("#detail").close();
   });
-  $("#shareBtn").onclick = async () => {
+  // ☰ menu: the pages without a tab, sharing, and the signed-in account.
+  function openMenu() {
+    const row = (href, ic, title, sub) =>
+      `<a class="menu-row" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span>${icon("chevron")}</a>`;
+    Kit.open(
+      `${Kit.sheetHead(esc(meta.name || "口袋旅伴"), "選單")}<nav class="menu-list" aria-label="更多頁面">${row("#trips", "suitcase", "我的旅程", "切換、建立或複製旅程，邀請旅伴")}${row("#hotels", "bed", "住宿", `${lists().hotels.length} 間住宿`)}${row("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${row("#nearby", "locate", "附近", "100／200／500 米內的地點")}${row("#notebook", "book", "資料簿", "搜尋所有旅程資料")}<button type="button" class="menu-row" id="shareBtn">${icon("share")}<span><b>分享連結</b><small>給已加入旅程的旅伴</small></span></button></nav>${window.Together?.account?.() || ""}`,
+    );
+  }
+  $("#menuBtn").onclick = openMenu;
+  document.addEventListener("click", async (e) => {
+    if (!e.target.closest("#shareBtn")) return;
     const url = location.origin + location.pathname + location.hash;
     try {
       if (navigator.share) await navigator.share({ title: document.title, url });
@@ -1573,7 +1651,7 @@ window.startTrip = (meta = {}) => {
     } catch (e) {
       if (e.name !== "AbortError") toast("請複製瀏覽器網址分享。");
     }
-  };
+  });
   document.addEventListener("click", async (e) => {
     const el = e.target.closest("button");
     if (!el) return;
@@ -1618,11 +1696,6 @@ window.startTrip = (meta = {}) => {
       const p = places.find((x) => x.id === el.dataset.placePlan);
       if (p) addPlaceToPlan(p);
     }
-    if (el.dataset.stopMore) {
-      const i = Number(el.dataset.stopMore);
-      openStop = openStop === i ? null : i;
-      refreshPlan();
-    }
     if (el.dataset.stopNew !== undefined) placeForm(null, { day: selectedDay, slot: null });
     if (el.dataset.planPick !== undefined) pickPlaceForPlan(selectedDay);
     if (el.dataset.ppCat) {
@@ -1662,20 +1735,17 @@ window.startTrip = (meta = {}) => {
     }
     if (el.dataset.stopOwn) placeForm(null, { day: selectedDay, slot: Number(el.dataset.stopOwn) });
     if (el.dataset.stopEdit) stopForm(selectedDay, Number(el.dataset.stopEdit));
+    // Deleting a stop takes effect at once; the undo bar puts the day back as it was.
     if (el.dataset.stopDelete) {
       const i = Number(el.dataset.stopDelete),
-        list = stopsFor(selectedDay);
-      {
-        const day = selectedDay;
-        UI.confirm(`刪除「${list[i]?.title}」？`, { danger: true, ok: "刪除" }).then((ok) => {
-          if (ok) {
-            openStop = null;
-            savePlan(
-              day,
-              stopsFor(day).filter((_, j) => j !== i),
-            );
-          }
-        });
+        day = selectedDay,
+        before = stopsFor(day);
+      if (before[i]) {
+        savePlan(
+          day,
+          before.filter((_, j) => j !== i),
+        );
+        Kit.snack(`已刪除「${before[i].title}」`, { action: "復原" }).then((undo) => undo && savePlan(day, before));
       }
     }
     if (el.dataset.stopMove) {
@@ -1684,7 +1754,6 @@ window.startTrip = (meta = {}) => {
         j = i + dir;
       if (list[j]) {
         [list[i], list[j]] = [list[j], list[i]];
-        openStop = j;
         savePlan(selectedDay, list);
       }
     }
@@ -1739,7 +1808,6 @@ window.startTrip = (meta = {}) => {
       refreshExplore();
     }
     if (el.dataset.day) {
-      openStop = null;
       const n = Number(el.dataset.day);
       if (location.hash === "#plan?day=" + n) render();
       else location.hash = "plan?day=" + n;
@@ -1763,6 +1831,11 @@ window.startTrip = (meta = {}) => {
         toast("請在地址上長按複製");
       }
     }
+  });
+  // A tap anywhere on an explore card opens the place (its own buttons and links keep their job).
+  document.addEventListener("click", (e) => {
+    const card = e.target.closest("[data-card-place]");
+    if (card && !e.target.closest("a,button,summary,details")) placeDetail(card.dataset.cardPlace);
   });
   document.addEventListener("click", (e) => {
     const a = e.target.closest('a[href^="#"]');

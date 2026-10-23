@@ -1,7 +1,6 @@
   // ---- 行程 (plan): day stops, the stop form and the in-page place picker ----
   // Each day's plan lives in Firestore planDays/{day}: the stop list and the day's title.
-  let planEdits = {},
-    openStop = null;
+  let planEdits = {};
   // A stop for an explore place or a hotel shows that place's current name, area, details and address, so editing the
   // place in 探索 (or the hotel in 住宿) updates every stop; the copy saved in the stop is only a fallback.
   function resolveStop(s) {
@@ -177,7 +176,7 @@
     ppCat = "全部";
     const s = slot != null ? stopsFor(day)[slot] : null;
     openDialog(
-      `<div class="eyebrow">ADD TO DAY ${day}</div><h2 class="detailtitle">${s ? "加入同一時間的選擇" : "從探索加入地點"}</h2><p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? `<button class="action" data-stop-own="${slot}">✎ 自己輸入</button>` : ""}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點"><div class="chips" role="group" aria-label="分類">${["全部", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => `<button class="chip ${c === ppCat ? "active" : ""}" data-pp-cat="${c}">${c}</button>`).join("")}</div>${s ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}"></div>`,
+      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點（不在探索）", { icon: "plus", attrs: { "data-stop-new": true } })}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點"><div class="chips" role="group" aria-label="分類">${["全部", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => `<button class="chip ${c === ppCat ? "active" : ""}" data-pp-cat="${c}">${c}</button>`).join("")}</div>${s ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}"></div>`,
     );
     ppResults();
   }
@@ -302,31 +301,50 @@
       else gs.push([{ s, i }]);
       return gs;
     }, []);
+  function stopCard(s, i, label, last) {
+    const placeOk = s.placeId && places.some((p) => p.id === s.placeId);
+    return `<div class="stopcontent"><div class="stop-top"><span class="eyebrow">${label} / ${esc(s.area)}</span>${Kit.menu(
+      [
+        { label: "修改", icon: "edit", attrs: { "data-stop-edit": i } },
+        { label: "加入同一時間的選擇", icon: "plus", attrs: { "data-stop-alt": i } },
+        { label: "上移", icon: "up", disabled: !i, attrs: { "data-stop-move": `${i}:-1` } },
+        { label: "下移", icon: "down", disabled: i >= last, attrs: { "data-stop-move": `${i}:1` } },
+        { label: "刪除", icon: "trash", danger: true, attrs: { "data-stop-delete": i } },
+      ],
+      { label: `編輯「${s.title}」`, attrs: { "data-stop-more": i } },
+    )}</div><h3>${esc(s.title)}</h3>${s.detail ? `<p>${esc(s.detail)}</p>` : ""}${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}<div class="links">${placeOk ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": s.placeId } }) : ""}${s.hotelId ? Kit.btn("住宿資料", { size: "sm", href: "#hotels" }) : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(s.ref)
+      .map((u) => link(u, "參考網站"))
+      .join("")}</div></div>`;
+  }
   function renderPlanDay(day) {
     const d = days[day - 1],
       edit = planEdits[day],
       stops = stopsFor(day),
-      last = stops.length - 1;
-    return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)} · ${esc(d.weekday)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p></div><div class="links"><button class="action" data-day-label>✎ 這天標題</button><a href="#hotels" class="action">查看酒店 ↗</a></div></div><div class="notice">${edit?.stops?.length ? "旅伴安排的行程，修改即時同步。" : "這天還未安排，按「＋ 新增站點」或「⌕ 從探索加入地點」。"}<br>住宿：${esc(d.hotel || "未設定")}</div><div class="plan-tools"><button class="action primary" data-stop-new>＋ 新增站點</button><button class="action" data-plan-pick>⌕ 從探索加入地點</button>${routeStops(day).length ? '<button class="action" data-day-map>🗺 當天路線</button>' : ""}<button class="action" data-plan-print>🖨 列印／PDF</button>${edit?.stops?.length ? '<button class="action" data-plan-reset>清空這天</button>' : ""}</div><div class="timeline">${
+      last = stops.length - 1,
+      first = stops[0];
+    return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)} · ${esc(d.weekday)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
+      [
+        { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
+        routeStops(day).length && { label: "當天路線地圖", icon: "map", attrs: { "data-day-map": true } },
+        { label: "列印／另存 PDF", icon: "printer", attrs: { "data-plan-print": true } },
+        edit?.stops?.length && { label: "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
+      ],
+      { label: "這天的更多操作", cls: "day-more" },
+    )}</div>${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
       stopGroups(stops)
         .map(
           (g, n, all) =>
             `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}</div><div class="stop-alts">${g
-              .map(
-                ({ s, i }, k) =>
-                  `<div class="stopcontent"><button class="stop-more${openStop === i ? " active" : ""}" data-stop-more="${i}" aria-label="編輯這個站點" aria-expanded="${openStop === i}">⋯</button><span class="eyebrow">${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""} / ${esc(s.area)}</span><h3>${esc(s.title)}</h3><p>${esc(s.detail)}</p>${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}${n === 0 && !hotelLink() && s.transport ? `<p class="transport">↳ ${esc(s.transport)}</p>` : ""}<div class="links">${s.placeId && places.some((p) => p.id === s.placeId) ? `<button class="action" data-place="${esc(s.placeId)}">地點資料</button>` : ""}${s.hotelId ? '<a class="action" href="#hotels">住宿資料</a>' : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(
-                    s.ref,
-                  )
-                    .map((u) => link(u, "參考網站"))
-                    .join(
-                      "",
-                    )}</div>${openStop === i ? `<div class="stop-edit"><button class="smallbtn" data-stop-move="${i}:-1"${i ? "" : " disabled"} aria-label="上移">↑</button><button class="smallbtn" data-stop-move="${i}:1"${i < last ? "" : " disabled"} aria-label="下移">↓</button><button class="smallbtn" data-stop-edit="${i}">✎ 修改</button><button class="smallbtn" data-stop-delete="${i}">刪除</button><button class="smallbtn" data-stop-alt="${i}">＋ 加入</button></div>` : ""}</div>`,
-              )
+              .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last))
               .join("")}</div></article>`,
         )
-        .join("") || '<div class="empty"><h2>這天還沒有行程</h2><p>按「＋ 新增站點」或「⌕ 從探索加入地點」。</p></div>'
-    }</div><section class="tg-slot" data-tg-day="${day}"></section>`;
+        .join("") || Kit.empty("這天還沒有行程", "按右下角「加入地點」，從探索、住宿或購物清單選擇，或新增地點。")
+    }</div><section class="tg-slot" data-tg-day="${day}"></section>${Kit.fab("加入地點", { "data-plan-pick": true })}`;
   }
   function renderPlan() {
-    return `${header("DAY BY DAY", "跟著酒店，順路出發。", "選擇日期查看當天行程")}<div class="daytabs" aria-label="選擇行程日期">${days.map((d) => `<button class="daytab ${d.n === selectedDay ? "active" : ""}" data-day="${d.n}" aria-pressed="${d.n === selectedDay}"><b>DAY ${d.n}</b><span>${esc(d.date)} · ${esc(d.weekday)}</span><em class="day-region" title="${esc(d.region)}">${esc(d.region)}</em><small class="weather-tab" data-weather-tab="${d.n}"></small></button>`).join("")}</div><article class="journey-day" aria-label="第${selectedDay}天行程">${renderPlanDay(selectedDay)}</article>`;
+    const tab = (d) => {
+      const [dd, mm] = d.date.split("/");
+      return `<button class="daytab ${d.n === selectedDay ? "active" : ""}" data-day="${d.n}" aria-pressed="${d.n === selectedDay}" aria-label="第 ${d.n} 天 ${esc(d.date)} ${esc(d.region)}"><b>D${d.n}</b><span>${dd}/${mm} ${d.weekday.slice(-1)}</span><small class="weather-tab" data-weather-tab="${d.n}"></small></button>`;
+    };
+    return `<h1 class="sr-only">每日行程</h1><div class="daytabs" aria-label="選擇行程日期">${days.map(tab).join("")}</div><article class="journey-day" aria-label="第${selectedDay}天行程">${renderPlanDay(selectedDay)}</article>`;
   }

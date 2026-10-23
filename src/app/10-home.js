@@ -1,8 +1,41 @@
-  // ---- 總覽 (home) ----
-  const art = `<svg class="hero-art" viewBox="0 0 380 300" aria-hidden="true"><circle cx="267" cy="73" r="44" fill="#d98456"/><path d="M5 224L100 105L177 192L235 111L376 227Z" fill="#6f8977"/><path d="M11 245L113 156L190 234L276 164L385 249Z" fill="#a2b297"/><path d="M0 265Q80 230 153 267T380 255V300H0Z" fill="#cbd1b2"/><path d="M0 280Q88 252 177 282T380 273" fill="none" stroke="#f1e7c9" stroke-width="3"/><path d="M195 150V257M210 150V257M185 160H221M181 146H226" stroke="#bf6749" stroke-width="8"/><rect x="48" y="242" width="94" height="32" rx="8" fill="#e6dfc5"/><rect x="57" y="249" width="18" height="12" rx="3" fill="#486953"/><rect x="82" y="249" width="18" height="12" rx="3" fill="#486953"/><rect x="107" y="249" width="22" height="12" rx="3" fill="#486953"/><circle cx="65" cy="275" r="6" fill="#183e39"/><circle cx="123" cy="275" r="6" fill="#183e39"/><path d="M293 203q-10-13 0-25t0-24M310 211q-10-13 0-25t0-24M327 203q-10-13 0-25t0-24" fill="none" stroke="#ece6ce" stroke-width="3" stroke-linecap="round"/><text x="52" y="228" fill="#e6dfc5" font-size="10" letter-spacing="3">TAKE IT SLOW</text></svg>`;
+  // ---- 總覽 (home): the trip at a glance, today's stops, shortcuts and every day ----
+  const todayIso = () => {
+    const n = new Date();
+    return `${n.getFullYear()}/${String(n.getMonth() + 1).padStart(2, "0")}/${String(n.getDate()).padStart(2, "0")}`;
+  };
   function renderHome() {
     const hs = lists().hotels,
       first = days[0],
-      last = days.at(-1);
-    return `<section class="hero"><div><div class="eyebrow">${esc(meta.destination || "OUR JOURNEY")}</div><h1>${esc(meta.name || "我們的旅程")}</h1><p>${days.length} 天的旅程。<br>把想去的地方，都放進口袋裡。</p><a href="#plan" class="herobtn">打開我們的行程 →</a>${first ? `<div class="stamp" style="margin-bottom:25px">${esc(first.iso.replaceAll("/", "."))} — ${esc(last.iso.slice(5).replace("/", "."))}</div>` : ""}</div>${art}</section><div class="stats"><div class="stat"><b>${days.length}</b><small>天的旅程</small></div><div class="stat"><b>${hs.length}</b><small>間住宿</small></div><div class="stat"><b>${places.length}</b><small>個口袋地點</small></div><div class="stat"><b>${places.filter((p) => saved.has(p.id)).length}</b><small>個我的收藏</small></div></div><section class="nearby-entry"><div><b>附近有甚麼？</b><small>100米・200米・500米，找到清單中的地點</small></div><button class="locate-button" data-locate>◎ 定位</button></section><div class="homegrid"><section><div class="sectionhead"><h2>旅程一覽</h2></div><div class="panel">${days.map((d) => `<a class="dayrow" href="#plan?day=${d.n}"><span class="daynum">D${d.n}</span><div><strong>${esc(d.region)}</strong><small>${esc(d.date)} · ${esc(d.weekday)}${d.hotel ? ` · ${esc(d.hotel)}` : ""}</small></div><span class="arrow">↗</span></a>`).join("")}</div></section><section><div class="sectionhead"><h2>隨手查一查</h2></div><div class="quicklinks"><a class="quick" href="#explore"><span class="ico">⌕</span><b>口袋地點</b><small>${places.length} 個地點</small></a><a class="quick" href="#shopping"><span class="ico">☑</span><b>購物清單</b><small>要買的東西</small></a><a class="quick" href="#flights"><span class="ico">✈</span><b>機票</b><small>${lists().flights.length} 個航班</small></a><a class="quick" href="#hotels"><span class="ico">▥</span><b>住宿</b><small>${hs.length} 間住宿</small></a></div></section></div>`;
+      last = days.at(-1),
+      iso = todayIso(),
+      now = days.find((d) => d.iso === iso),
+      until = first ? Math.round((Date.parse(first.iso) - Date.parse(iso)) / 864e5) : 0;
+    const when = now
+      ? `今天是第 ${now.n} 天`
+      : !first
+        ? ""
+        : until > 0
+          ? `還有 ${until} 天出發`
+          : "旅程已完結";
+    const todayStops = now ? stopsFor(now.n) : [];
+    const today = now
+      ? `${Kit.sectionHead(`今天 · ${esc(now.region)}`, Kit.btn("全日行程", { href: `#plan?day=${now.n}`, size: "sm", icon: "calendar" }))}<div class="panel today-list">${
+          todayStops.length
+            ? todayStops
+                .map((s) => `<a class="today-row" href="#plan?day=${now.n}"><time>${esc(s.time || "—")}</time><span>${esc(s.title)}</span></a>`)
+                .join("")
+            : '<p class="note">這天還沒有安排。</p>'
+        }</div>`
+      : "";
+    const tile = (href, ic, title, sub) => `<a class="quick" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span></a>`;
+    return `<section class="hero trip-card"><div class="eyebrow">${esc(meta.destination || "我們的旅程")}</div><h1>${esc(meta.name || "我們的旅程")}</h1>${
+      first
+        ? `<p class="trip-dates">${esc(first.iso.replaceAll("/", "."))} – ${esc(last.iso.slice(5).replace("/", "."))} · ${days.length} 天</p>`
+        : ""
+    }${when ? `<p class="trip-when">${when}</p>` : ""}${Kit.btn(now ? "今天的行程" : "打開行程", { href: `#plan?day=${now ? now.n : 1}`, variant: "primary", icon: "calendar", cls: "herobtn" })}</section>${today}<div class="quicklinks">${tile("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${tile("#hotels", "bed", "住宿", `${hs.length} 間`)}${tile("#nearby", "locate", "附近", "定位找地點")}${tile("#notebook", "book", "資料簿", "搜尋全部")}</div>${Kit.sectionHead("旅程一覽")}<div class="panel">${days
+      .map(
+        (d) =>
+          `<a class="dayrow${now && d.n === now.n ? " today" : ""}" href="#plan?day=${d.n}"><span class="daynum">D${d.n}</span><div><strong>${esc(d.region)}</strong><small>${esc(d.date)} · ${esc(d.weekday)}${d.hotel ? ` · ${esc(d.hotel)}` : ""}</small></div>${icon("chevron")}</a>`,
+      )
+      .join("")}</div>`;
   }

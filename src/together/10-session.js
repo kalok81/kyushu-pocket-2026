@@ -111,6 +111,7 @@
         { includeMetadataChanges: true },
         (snap) => {
           state[name] = snap.docs
+            .filter((d) => !hiding.has(`${name}:${d.id}`))
             .map((d) => ({ ...d.data(), id: d.id, pending: d.metadata.hasPendingWrites }))
             .sort((a, b) => (b.at || 0) - (a.at || 0));
           if (state.status !== "ready") {

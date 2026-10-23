@@ -85,7 +85,7 @@
     return r.filter((x) => x.status === "rejected").length;
   }
   function renderTrips() {
-    return `${header("MY TRIPS", "我的旅程", "切換旅程、建立新旅程及邀請旅伴")}<div id="tripsPage"></div>`;
+    return `${header("我的旅程", "切換旅程、建立新旅程及邀請旅伴")}<div id="tripsPage"></div>`;
   }
   async function tripAction(form, data, done) {
     const msg = form.querySelector("[data-trip-msg]"),

@@ -47,12 +47,20 @@
     );
   }
   function renderExplore() {
-    return `${header("POCKET PLACES", "把喜歡的地方，收好。", "旅伴加入的地點 · 按「＋ 新增地點」貼上 Google 地圖連結")}<div class="nearby-inline"><a class="action primary" href="#nearby">◎ 查看附近地點（100／200／500米）</a><button class="action" data-place-new>＋ 新增地點</button></div><div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋店名、美食、地址…" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div><div class="chips">${["全部", ...exploreCats].map((c) => `<button class="chip ${category === c ? "active" : ""}" data-cat="${c}">${c}</button>`).join("")}<button class="chip ${category === "購物清單" ? "active" : ""}" data-cat="購物清單">🛍 購物清單</button><button class="chip ${onlySaved ? "active" : ""}" id="savedToggle">☆ 我的收藏</button></div></div><div id="results"></div>`;
+    const chip = (c, label, ic) => ({ label, icon: ic, active: category === c, attrs: { "data-cat": c } });
+    return `${header("探索", "", Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" }))}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋店名、美食、地址…" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
+      [
+        ...["全部", ...exploreCats].map((c) => chip(c, c)),
+        chip("購物清單", "購物清單", "bag"),
+        { label: "收藏", icon: "star", active: onlySaved, attrs: { id: "savedToggle" } },
+      ],
+      { label: "分類" },
+    )}</div><div id="results"></div>${Kit.fab("新增地點", { "data-place-new": true })}`;
   }
   // 🛍 購物清單 also lists 購買地點 that are not explore places yet, with 加入探索 to make them one.
   let buySpots = [];
   const spotCard = (s, k) =>
-    `<article class="card place shop-spot"><div class="place-top"><span class="badge shop">購物清單</span></div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">🛍 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions"><button class="action primary" data-spot-explore="${k}">＋ 加入探索</button>${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
+    `<article class="card place shop-spot"><div class="place-top"><span class="badge shop">購物清單</span></div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
   function renderResults() {
     let q = search.toLocaleLowerCase();
     const ps = places.filter(
@@ -68,15 +76,16 @@
     const extra = buySpots.length
       ? `<div class="sectionhead"><h2>未在探索清單的購買地點（${buySpots.length}）</h2></div><div class="cardgrid">${buySpots.map(spotCard).join("")}</div>`
       : "";
+    const filtered = category !== "全部" || region !== "全部區域" || onlySaved || q;
     $("#results").innerHTML =
-      `<div class="resultsbar"><span>${ps.length} 個地點${onlySaved ? " · 我的收藏" : ""}${buySpots.length ? ` · 另有 ${buySpots.length} 個購買地點` : ""}</span><button class="smallbtn" id="resetFilters">重設篩選</button></div><div class="cardgrid">${ps.map((p) => placeCard(p)).join("")}</div>${extra}${ps.length || buySpots.length ? "" : `<div class="empty"><h2>暫時沒有符合的地點</h2><p>${onlySaved ? "按地點卡上的 ☆，建立這部手機的收藏。" : "試試其他關鍵字，或清除篩選。"}</p></div>`}`;
+      `<div class="resultsbar"><span>${ps.length} 個地點${onlySaved ? " · 我的收藏" : ""}${buySpots.length ? ` · 另有 ${buySpots.length} 個購買地點` : ""}</span>${filtered ? Kit.btn("清除篩選", { variant: "ghost", size: "sm", attrs: { id: "resetFilters" } }) : ""}</div><div class="cardgrid">${ps.map((p) => placeCard(p)).join("")}</div>${extra}${ps.length || buySpots.length ? "" : Kit.empty("暫時沒有符合的地點", onlySaved ? "按地點卡上的星號，建立這部手機的收藏。" : "試試其他關鍵字，或清除篩選。")}`;
   }
   // Shopping list items bought at a place (unbought first), shown on explore cards, place details and plan stops.
   const buysAt = (q) => [...(window.Together?.shoppingAt?.(q) || [])].sort((a, b) => a.bought - b.bought);
   const buyLine = (items) => {
     const todo = items.filter((x) => !x.bought);
     return todo.length
-      ? `<p class="buy-here">🛍 要買：${todo.map((x) => `<button type="button" class="buy-item" data-shop-open="${esc(x.id)}">${esc(x.name)}</button>`).join("、")}</p>`
+      ? `<p class="buy-here">${icon("bag")} 要買：${todo.map((x) => `<button type="button" class="buy-item" data-shop-open="${esc(x.id)}">${esc(x.name)}</button>`).join("、")}</p>`
       : "";
   };
   function shoppingChanged() {
@@ -84,10 +93,12 @@
     else if (current === "explore" && $("#results")) renderResults();
     else if (current === "notebook" && $("#notebookResults")) notebookResults();
   }
+  // Explore card: tap anywhere for the details; the map and the star are the only buttons.
   function placeCard(p, near) {
     const c0 = p.cats.find((x) => x !== "手信") || p.cats[0] || p.v[6],
-      c = c0 === "手信" ? "手信店" : c0;
-    return `<article class="card place"><div class="place-top"><span class="badge ${{ 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c] || ""}">${esc(c)}</span><button class="save ${saved.has(p.id) ? "saved" : ""}" data-save="${p.id}" aria-label="${saved.has(p.id) ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${saved.has(p.id)}">${saved.has(p.id) ? "★" : "☆"}</button></div><h3>${esc(p.v[1])}</h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}<div class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</div>${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}<p class="feature">${esc(p.v[4])}</p>${p.v[5] ? `<p class="hours">${esc(p.v[5])}</p>` : ""}${buyLine(buysAt({ placeId: p.id }))}<div class="actions"><button class="action primary" data-place="${p.id}">詳細資料</button>${link(maps(p.v[1] + " " + p.v[3]), "地圖")}</div></article>`;
+      c = c0 === "手信" ? "手信店" : c0,
+      on = saved.has(p.id);
+    return `<article class="card place" data-card-place="${esc(p.id)}"><div class="place-top"><span class="badge ${{ 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c] || ""}">${esc(c)}</span><span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: maps(p.v[1] + " " + p.v[3]), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button></h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
   }
   function placeDetail(id) {
     const p = places.find((p) => p.id === id);
@@ -100,7 +111,10 @@
       [9, "核對狀態"],
     ];
     openDialog(
-      `<div class="eyebrow">${esc(p.v[0])}</div><h2 class="detailtitle">${esc(p.v[1])}</h2><div class="links place-admin"><button class="action primary" data-place-plan="${esc(p.id)}">＋ 加入行程</button><button class="action" data-place-edit="${esc(p.id)}">✎ 編輯</button><button class="action" data-place-delete="${esc(p.id)}">刪除</button></div><div class="links">${link(maps(p.v[1] + " " + p.v[3]), "Google 地圖")}${link(route(p.v[1] + " " + p.v[3]), "從目前位置前往")}<button class="action" data-copy="${esc(p.v[3] || p.v[1])}">複製地址</button></div>${fields
+      `${Kit.sheetHead(esc(p.v[1]), esc(p.v[0]))}<div class="links place-admin">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}${Kit.btn("編輯", { icon: "edit", attrs: { "data-place-edit": p.id } })}${Kit.menu([
+        { label: "複製地址", icon: "copy", attrs: { "data-copy": p.v[3] || p.v[1] } },
+        { label: "刪除地點", icon: "trash", danger: true, attrs: { "data-place-delete": p.id } },
+      ])}</div><div class="links">${link(maps(p.v[1] + " " + p.v[3]), "Google 地圖")}${link(route(p.v[1] + " " + p.v[3]), "導航前往")}</div>${fields
         .filter(([i]) => p.v[i])
         .map(([i, label]) => `<section class="detail-section"><h3>${label}</h3><p>${esc(p.v[i])}</p></section>`)
         .join("")}<section class="detail-section"><h3>影片與參考來源</h3><div class="links">${urlList(p.v[8])
@@ -109,7 +123,7 @@
         .map((u, i) => link(u, "參考網站 " + (i + 1)))
         .join(
           "",
-        )}</div><p class="note">${esc(p.v[7])}</p></section>${(window.TRIP_GEO.places[p.id] || []).length > 1 ? `<section class="detail-section"><h3>分店／地址（${window.TRIP_GEO.places[p.id].length}）</h3><div class="links">${window.TRIP_GEO.places[p.id].map((g, k) => link(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]))).join("")}</div></section>` : ""}${((b) => (b.length ? `<section class="detail-section"><h3>🛍 購物清單（${b.length}）</h3><div class="links">${b.map((x) => `<button class="action${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.bought ? "✓ " : ""}${esc(x.name)}</button>`).join("")}</div></section>` : ""))(buysAt({ placeId: p.id }))}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>`,
+        )}</div><p class="note">${esc(p.v[7])}</p></section>${(window.TRIP_GEO.places[p.id] || []).length > 1 ? `<section class="detail-section"><h3>分店／地址（${window.TRIP_GEO.places[p.id].length}）</h3><div class="links">${window.TRIP_GEO.places[p.id].map((g, k) => link(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]))).join("")}</div></section>` : ""}${((b) => (b.length ? `<section class="detail-section"><h3>購物清單（${b.length}）</h3><div class="links">${b.map((x) => `<button class="action${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.bought ? "✓ " : ""}${esc(x.name)}</button>`).join("")}</div></section>` : ""))(buysAt({ placeId: p.id }))}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>`,
     );
     window.Together?.refresh();
   }

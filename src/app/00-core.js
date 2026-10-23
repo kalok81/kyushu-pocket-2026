@@ -1,4 +1,6 @@
   // ---- Shared helpers, trip days, favourites and page state ----
+  const Kit = window.Kit,
+    { icon } = Kit;
   const $ = (s) => document.querySelector(s),
     esc = (s) =>
       String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -10,8 +12,7 @@
           return false;
         }
       }),
-    link = (u, label, cls = "action") =>
-      `<a class="${cls}" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${esc(label)} ↗</a>`,
+    link = (u, label) => Kit.btn(esc(label), { href: u, external: true, size: "sm" }),
     maps = (s) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s),
     route = (s) => "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(s);
   const categories = ["餐廳", "景點", "商店", "手信"];
@@ -70,13 +71,8 @@
   function toast(s) {
     window.UI.toast(s);
   }
-  function openDialog(html) {
-    $("#detailBody").innerHTML = html;
-    $("#detail").showModal();
-  }
-  function header(k, t, p = "") {
-    return `<div class="pagehead"><div class="eyebrow">${k}</div><h1>${t}</h1>${p ? `<p>${p}</p>` : ""}</div>`;
-  }
+  const openDialog = Kit.open,
+    header = (title, sub = "", aside = "") => Kit.pageHead(title, { sub, aside });
   function footer() {
     return '<div class="sourcefooter">旅程資料由旅伴在網站內輸入 · 班次、營業時間及訂位請以出發前公告為準。</div>';
   }

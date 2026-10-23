@@ -2,6 +2,7 @@
   load().catch(() => {});
   return Object.freeze({
     render,
+    account,
     renderShopping,
     renderTrips,
     refresh,

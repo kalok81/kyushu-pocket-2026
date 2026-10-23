@@ -10,7 +10,7 @@
     }
   }
   function refresh() {
-    if (!started && !$("#tgPage")) $("#app").innerHTML = header("POCKET TRAVEL", "口袋旅伴") + '<div id="tgPage"></div>';
+    if (!started && !$("#tgPage")) $("#app").innerHTML = '<div id="tgPage"></div>';
     const p = $("#tgPage");
     if (p) paint(p, page());
     const tp = $("#tripsPage");
@@ -26,5 +26,5 @@
     const p = new URLSearchParams(location.hash.split("?")[1]);
     if (tabs[p.get("tab")]) state.tab = p.get("tab");
     if (p.has("day")) state.day = Math.min(7, Math.max(1, Number(p.get("day")) || 1));
-    return `${header("TOGETHER", "一起記，一起走。", "筆記、開支與共用行程 · 只限旅伴登入，內容不會公開")}<div id="tgPage"></div>`;
+    return `${header("共用")}<div id="tgPage"></div>`;
   }

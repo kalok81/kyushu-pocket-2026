@@ -18,7 +18,7 @@ const checks=()=>{
  if(document.documentElement.scrollWidth>W+1)res.push(['PAGE-HSCROLL',`page is ${document.documentElement.scrollWidth}px wide in ${W}px`]);
  const root=document.querySelector('#detail[open]')||document.body;
  for(const e of root.querySelectorAll('*')){
-  if(!vis(e)||e.closest('.leaflet-container,#printArea,.swal2-container .swal2-file,svg'))continue;
+  if(!vis(e)||e.closest('.leaflet-container,#printArea,.swal2-container .swal2-file,svg,.sr-only'))continue;
   const r=e.getBoundingClientRect();if(!r.width||!r.height)continue;
   if((r.right>W+1||r.left<-1)&&!scroller(e)&&!e.closest('.ui-toast,.swal2-toast,.skip-link'))res.push(['OFFSCREEN',`${name(e)} spans ${Math.round(r.left)}–${Math.round(r.right)}`]);
   const s=getComputedStyle(e);
@@ -29,7 +29,7 @@ const checks=()=>{
  }
  // uneven button heights within one row
  for(const row of root.querySelectorAll('.links,.plan-tools,.chips,.topactions,.tg-row,.place-admin,.stop-edit,.ui-actions,.searchrow,.map-toolbar,.shop-actions,.ticket-bottom')){
-  if(!vis(row))continue;const bs=[...row.children].filter(c=>vis(c)&&/^(A|BUTTON)$/.test(c.tagName)&&/action|chip|smallbtn|locate|button|swal2/.test(c.className+c.tagName));
+  if(!vis(row))continue;const bs=[...row.children].filter(c=>vis(c)&&/^(A|BUTTON)$/.test(c.tagName)&&/action|chip|smallbtn|locate|button|btn|swal2/.test(c.className+c.tagName));
   const lines=new Map();for(const b of bs){const r=b.getBoundingClientRect();const k=Math.round(r.top/6);(lines.get(k)||lines.set(k,[]).get(k)).push(r.height)}
   for(const hs of lines.values())if(hs.length>1&&Math.max(...hs)-Math.min(...hs)>4)res.push(['UNEVEN-ROW',`${name(row)} heights ${hs.map(Math.round).join('/')}`]);
  }
@@ -52,14 +52,20 @@ for(const w of [320,390,768,1280]){
  const dialogs=[
   ['place','#explore',async()=>{await pg.locator('#results [data-place]').first().click()}],
   ['placeform','#explore',async()=>{await pg.locator('#results [data-place]').first().click();await pg.click('#detail [data-place-edit]')}],
-  ['stopform','#plan?day=1',async()=>{await pg.click('[data-stop-new]')}],
+  ['stopform','#plan?day=1',async()=>{await pg.click('[data-plan-pick]');await pg.click('#detail [data-stop-new]')}],
   ['picker','#plan?day=1',async()=>{await pg.click('[data-plan-pick]')}],
   ['route','#plan?day=1',async()=>{await pg.locator('[data-route-link]').nth(2).click();await pg.click('#routeGo');await pg.waitForSelector('#routeResults .notice');await pg.click('[data-route-ai]');await pg.waitForTimeout(500)}],
-  ['daymap','#plan?day=1',async()=>{await pg.click('[data-day-map]');await pg.waitForTimeout(600)}],
+  ['daymenu','#plan?day=1',async()=>{await pg.click('.day-more summary');await pg.waitForTimeout(200)}],
+  ['stopmenu','#plan?day=1',async()=>{await pg.locator('[data-stop-more]').last().click();await pg.waitForTimeout(200)}],
+  ['daymap','#plan?day=1',async()=>{await pg.click('.day-more summary');await pg.click('[data-day-map]');await pg.waitForTimeout(600)}],
+  ['menu','#home',async()=>{await pg.click('#menuBtn');await pg.waitForTimeout(300)}],
+  ['notesheet','#together?tab=notes',async()=>{await pg.click('[data-tg=newEntry]');await pg.click('[data-note-kind=coupon]')}],
+  ['expensesheet','#together?tab=expenses',async()=>{await pg.click('[data-tg=newEntry]')}],
+  ['shopsheet','#shopping',async()=>{await pg.click('[data-tg=shopAdd]')}],
   ['hotelform','#hotels',async()=>{await pg.click('[data-hotel-new]')}],
   ['flightform','#flights',async()=>{await pg.click('[data-flight-new]')}],
   ['docs','#hotels',async()=>{await pg.locator('[data-docs]').nth(1).click();await pg.waitForTimeout(400)}],
-  ['confirm','#hotels',async()=>{await pg.locator('[data-hotel-del]').first().click();await pg.waitForSelector('.ui-pop');await pg.waitForTimeout(500)}],
+  ['confirm','#hotels',async()=>{await pg.locator('.card.hotel .more summary').first().click();await pg.locator('[data-hotel-del]').first().click();await pg.waitForSelector('.ui-pop');await pg.waitForTimeout(500)}],
   ['ratePrompt','#together?tab=expenses',async()=>{await pg.locator('.tg-fx summary').click();await pg.locator('[data-fx-set]').first().click();await pg.waitForSelector('.ui-pop');await pg.waitForTimeout(500)}],
  ];
  for(const [k,h,open] of dialogs){try{await pg.goto(base+'/'+h);await pg.waitForTimeout(700);await open();await pg.waitForTimeout(400);await shot(pg,`${w}-dlg-${k}`,false);report[`${w} dlg-${k}`]=await pg.evaluate(checks)}catch(e){report[`${w} dlg-${k}`]=[['SCRIPT',String(e).slice(0,150)]]}

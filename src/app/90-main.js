@@ -12,7 +12,7 @@
     together: () =>
       window.Together
         ? window.Together.render()
-        : header("TOGETHER", "一起記，一起走。") + '<div class="empty"><h2>未能載入共用功能</h2><p>請重新整理網頁。</p></div>',
+        : header("共用") + Kit.empty("未能載入共用功能", "請重新整理網頁。"),
   };
   window.TripApp = Object.freeze({
     days,
@@ -24,27 +24,24 @@
     setSaved,
     savedIds: () => [...saved],
   });
+  // Pages without a tab of their own light up the tab they are reached from.
+  const navOf = { nearby: "explore", hotels: "home", flights: "home" };
   function setActive(view) {
     current = view;
     document.querySelectorAll(".bottomnav a").forEach((a) => {
-      const active = a.dataset.view === view;
+      const active = a.dataset.view === (navOf[view] || view);
       a.classList.toggle("active", active);
       if (active) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
     $("#sourceBtn").classList.toggle("active", view === "notebook");
   }
-  function sourceList() {
-    if ($("#detail").open) $("#detail").close();
-    if (location.hash === "#notebook") navigate();
-    else location.hash = "notebook";
-  }
   function refreshExplore() {
-    $("#app").innerHTML = renderExplore() + footer();
+    $("#app").innerHTML = renderExplore();
     bindExplore();
   }
   function refreshNotebook() {
-    $("#app").innerHTML = renderNotebook() + footer();
+    $("#app").innerHTML = renderNotebook();
     bindNotebook();
   }
   function navigate() {
@@ -57,8 +54,8 @@
     if (params.has("category")) category = exploreCats.includes(params.get("category")) ? params.get("category") : "全部";
     if (params.has("day")) selectedDay = Math.min(days.length, Math.max(1, Number(params.get("day")) || 1));
     setActive(view);
-    openStop = null; // a page opened afresh shows no stop's edit buttons
-    $("#app").innerHTML = sectionViews[view]() + footer();
+    Kit.close();
+    $("#app").innerHTML = sectionViews[view]() + (view === "home" ? footer() : "");
     if (view === "explore") bindExplore();
     if (view === "notebook") bindNotebook();
     if (view === "nearby") nearbyResults();
@@ -66,12 +63,21 @@
     window.Together?.refresh();
     window.scrollTo({ top: 0, behavior: "instant" });
   }
-  $("#sourceBtn").onclick = sourceList;
   $("#detail .dialog-close").onclick = () => $("#detail").close();
   $("#detail").addEventListener("click", (e) => {
     if (e.target === $("#detail")) $("#detail").close();
   });
-  $("#shareBtn").onclick = async () => {
+  // ☰ menu: the pages without a tab, sharing, and the signed-in account.
+  function openMenu() {
+    const row = (href, ic, title, sub) =>
+      `<a class="menu-row" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span>${icon("chevron")}</a>`;
+    Kit.open(
+      `${Kit.sheetHead(esc(meta.name || "口袋旅伴"), "選單")}<nav class="menu-list" aria-label="更多頁面">${row("#trips", "suitcase", "我的旅程", "切換、建立或複製旅程，邀請旅伴")}${row("#hotels", "bed", "住宿", `${lists().hotels.length} 間住宿`)}${row("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${row("#nearby", "locate", "附近", "100／200／500 米內的地點")}${row("#notebook", "book", "資料簿", "搜尋所有旅程資料")}<button type="button" class="menu-row" id="shareBtn">${icon("share")}<span><b>分享連結</b><small>給已加入旅程的旅伴</small></span></button></nav>${window.Together?.account?.() || ""}`,
+    );
+  }
+  $("#menuBtn").onclick = openMenu;
+  document.addEventListener("click", async (e) => {
+    if (!e.target.closest("#shareBtn")) return;
     const url = location.origin + location.pathname + location.hash;
     try {
       if (navigator.share) await navigator.share({ title: document.title, url });
@@ -82,7 +88,7 @@
     } catch (e) {
       if (e.name !== "AbortError") toast("請複製瀏覽器網址分享。");
     }
-  };
+  });
   document.addEventListener("click", async (e) => {
     const el = e.target.closest("button");
     if (!el) return;
@@ -127,11 +133,6 @@
       const p = places.find((x) => x.id === el.dataset.placePlan);
       if (p) addPlaceToPlan(p);
     }
-    if (el.dataset.stopMore) {
-      const i = Number(el.dataset.stopMore);
-      openStop = openStop === i ? null : i;
-      refreshPlan();
-    }
     if (el.dataset.stopNew !== undefined) placeForm(null, { day: selectedDay, slot: null });
     if (el.dataset.planPick !== undefined) pickPlaceForPlan(selectedDay);
     if (el.dataset.ppCat) {
@@ -171,20 +172,17 @@
     }
     if (el.dataset.stopOwn) placeForm(null, { day: selectedDay, slot: Number(el.dataset.stopOwn) });
     if (el.dataset.stopEdit) stopForm(selectedDay, Number(el.dataset.stopEdit));
+    // Deleting a stop takes effect at once; the undo bar puts the day back as it was.
     if (el.dataset.stopDelete) {
       const i = Number(el.dataset.stopDelete),
-        list = stopsFor(selectedDay);
-      {
-        const day = selectedDay;
-        UI.confirm(`刪除「${list[i]?.title}」？`, { danger: true, ok: "刪除" }).then((ok) => {
-          if (ok) {
-            openStop = null;
-            savePlan(
-              day,
-              stopsFor(day).filter((_, j) => j !== i),
-            );
-          }
-        });
+        day = selectedDay,
+        before = stopsFor(day);
+      if (before[i]) {
+        savePlan(
+          day,
+          before.filter((_, j) => j !== i),
+        );
+        Kit.snack(`已刪除「${before[i].title}」`, { action: "復原" }).then((undo) => undo && savePlan(day, before));
       }
     }
     if (el.dataset.stopMove) {
@@ -193,7 +191,6 @@
         j = i + dir;
       if (list[j]) {
         [list[i], list[j]] = [list[j], list[i]];
-        openStop = j;
         savePlan(selectedDay, list);
       }
     }
@@ -248,7 +245,6 @@
       refreshExplore();
     }
     if (el.dataset.day) {
-      openStop = null;
       const n = Number(el.dataset.day);
       if (location.hash === "#plan?day=" + n) render();
       else location.hash = "plan?day=" + n;
@@ -272,6 +268,11 @@
         toast("請在地址上長按複製");
       }
     }
+  });
+  // A tap anywhere on an explore card opens the place (its own buttons and links keep their job).
+  document.addEventListener("click", (e) => {
+    const card = e.target.closest("[data-card-place]");
+    if (card && !e.target.closest("a,button,summary,details")) placeDetail(card.dataset.cardPlace);
   });
   document.addEventListener("click", (e) => {
     const a = e.target.closest('a[href^="#"]');

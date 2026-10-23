@@ -103,9 +103,7 @@
       });
       if (!f.dataset.placeId) {
         notePhotoDraft = [];
-        f.reset();
-        const box = $("#notePhotoPreview");
-        if (box) box.innerHTML = "";
+        Kit.close();
         return;
       }
     }
@@ -148,8 +146,7 @@
         dup = duplicateOf(exp);
       const go = () => {
         add("expenses", exp);
-        f.reset();
-        $("#tgItemRows").innerHTML = itemRow();
+        Kit.close();
       };
       if (dup) UI.confirm("似乎已經記錄過", { text: dupText(dup), ok: "仍然加入" }).then((ok) => ok && go());
       else go();
@@ -157,7 +154,7 @@
     }
     if (f.dataset.tgForm === "shopLink") {
       queueProductLink(str("url"));
-      f.reset();
+      Kit.close();
       return;
     }
     if (f.dataset.tgForm === "shop") {
@@ -184,7 +181,7 @@
       } else add("shopping", { ...item, bought: false, boughtBy: null, boughtAt: null });
       state.shopEdit = null;
       shopPhoto = null;
-      $("#shopPage").dataset.sig = "";
+      Kit.close();
       refresh();
       return;
     }
@@ -274,7 +271,7 @@
     }
     if (d.noteKind) {
       state.noteKind = d.noteKind;
-      refresh();
+      if ($('#detail [data-tg-form="note"]:not([data-place-id])')) openForm();
     }
     if (d.noteFilter) {
       state.noteFilter = d.noteFilter;
@@ -331,11 +328,8 @@
       shopPhoto = null;
       $("#shopPreview").innerHTML = "";
     }
-    if (d.tg === "shopCancel") {
-      state.shopEdit = null;
-      shopPhoto = null;
-      refresh();
-    }
+    if (d.tg === "shopAdd") openShopSheet();
+    if (d.tg === "newEntry") openForm();
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
       refresh();
@@ -352,14 +346,8 @@
     }
     if (d.shopOpen) openShopItem(d.shopOpen);
     if (d.shopEdit) {
-      if ($("#detail").open) $("#detail").close();
       const x = state.shopping.find((i) => i.id === d.shopEdit);
-      if (x) {
-        state.shopEdit = x.id;
-        shopPhoto = x.photo || null;
-        refresh();
-        $("#shopPage")?.scrollIntoView({ behavior: "smooth" });
-      }
+      if (x) openShopSheet(x);
     }
     if (d.shopToggle) {
       const x = state.shopping.find((i) => i.id === d.shopToggle);
@@ -383,6 +371,7 @@
     if (e.target.id === "tgReceipt" && e.target.files.length) {
       if (state.status === "ready") queueReceipts([...e.target.files]);
       e.target.value = "";
+      Kit.close();
     }
     if (e.target.id === "shopPhotoInput" && e.target.files[0]) {
       pickShopPhoto(e.target.files[0]);
@@ -391,6 +380,7 @@
     if ((e.target.id === "shopAiInput" || e.target.id === "shopAiCam") && e.target.files.length) {
       if (state.status === "ready") queueProducts([...e.target.files]);
       e.target.value = "";
+      Kit.close();
     }
   });
   document.addEventListener("change", (e) => {
@@ -469,9 +459,6 @@
     fb.fs.updateDoc(jobRef(card.dataset.draft), { ["edit." + k]: v }).catch(() => {});
     if (k !== "title") renderDrafts();
   });
-  document.addEventListener("click", (e) => {
-    if (e.target.closest("#tripsBtn")) location.hash = "trips";
-  });
   addEventListener("online", () => {
     refresh();
     renderDrafts();
@@ -494,7 +481,10 @@
     if (!files.length || state.status !== "ready") return;
     const view = location.hash.slice(1).split("?")[0];
     if (view === "shopping") queueProducts(files);
-    else if (view === "together" && state.tab === "notes") addNotePhotos(files);
+    else if (view === "together" && state.tab === "notes") {
+      if (!$("#notePhotoPreview")) openForm();
+      addNotePhotos(files);
+    }
     else if (view === "together" && state.tab === "expenses") queueReceipts(files);
     else return;
     e.preventDefault();

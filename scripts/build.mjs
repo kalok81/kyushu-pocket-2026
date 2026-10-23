@@ -1,9 +1,15 @@
-// Builds dist/app.js and dist/together.js from the feature files in src/app and src/together: the files are joined in
+// Builds dist/kit.js, dist/app.js and dist/together.js from the feature files in src/ui, src/app and src/together: the files are joined in
 // file-name order inside one function each, so they share its variables (no modules or bundler needed).
 // Run after editing src/: `node scripts/build.mjs`. `--check` only reports whether dist is up to date (used by validate).
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 
 const bundles = [
+ {
+  out: 'dist/kit.js',
+  dir: 'src/ui',
+  head: '"use strict";\n// Shared UI building blocks (icons, buttons, chips, menus, sheets, undo bar) used by app.js and together.js.\n// Generated from src/ui/*.js by scripts/build.mjs — edit those files, not this one.\nwindow.Kit = (() => {\n',
+  tail: '})();\n',
+ },
  {
   out: 'dist/app.js',
   dir: 'src/app',

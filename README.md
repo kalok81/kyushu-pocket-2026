@@ -6,10 +6,11 @@
 
 網站在 `dist/`，由 GitHub Actions 發佈到 GitHub Pages。
 
+- `src/ui/*.js` → `dist/kit.js`（`window.Kit`）：共用介面元件，兩組頁面都用它，格式因此一致（見下「介面元件」）。
 - `src/app/*.js` → `dist/app.js`：旅程頁面（總覽、行程、探索、附近、住宿、機票、資料簿）。
 - `src/together/*.js` → `dist/together.js`：登入、選擇旅程、Firestore 同步，以及共用、購物、我的旅程頁面。
-- 兩組檔案按功能分開（檔名前的數字是合併次序），由 `node scripts/build.mjs` 合併成 `dist/` 的同名檔案；同一組檔案共用變數，毋須模組或打包工具。**修改 `src/` 後要執行 build**，`scripts/validate.mjs` 會檢查 `dist/` 是否最新。
-- `dist/style.css`：版面；`dist/design.css`：統一設計規範（參考 shadcn/ui 的顏色變數、按鈕種類、輸入框、卡片及視窗），改顏色或圓角只需改檔案頂部的變數。
+- 每組檔案按功能分開（檔名前的數字是合併次序），由 `node scripts/build.mjs` 合併成 `dist/` 的同名檔案；同一組檔案共用變數，毋須模組或打包工具。**修改 `src/` 後要執行 build**，`scripts/validate.mjs` 會檢查 `dist/` 是否最新。
+- `dist/style.css`：版面；`dist/design.css`：統一設計規範（顏色變數、按鈕、標籤、選單、底部視窗、頁頭等元件樣式），改顏色或圓角只需改檔案頂部的變數。
 - `dist/ui.js`：確認、輸入及提示視窗（SweetAlert2，網頁載入後才在閒置時下載，載入失敗時改用瀏覽器內置視窗）。
 - `dist/split.js`：分帳計算（各貨幣分開，或按匯率合併成自己的貨幣）。
 - `dist/weather.js`：每日天氣（Open-Meteo，免費、毋須 API key，只傳送約 1 公里精度的座標；手機快取 3 小時）。
@@ -17,6 +18,24 @@
 - `dist/vendor/`：Firebase、heic2any、Leaflet、SweetAlert2 的瀏覽器版本。
 - `functions/`：Cloud Functions（見下）。`firestore.rules`、`storage.rules`：權限規則。
 - `scripts/accounts.mjs`：管理旅伴帳號；`scripts/validate.mjs`：發佈前檢查；`tests/`：自動測試。
+
+### 介面元件（`Kit`）
+
+所有頁面用同一套元件，新功能請沿用，不要自行寫按鈕或視窗的 HTML：
+
+| 元件 | 用途 |
+|---|---|
+| `Kit.icon(名稱)` | 線條圖示（Lucide），例如 `plus`、`edit`、`trash`、`pin`、`calendar` |
+| `Kit.btn(文字, { variant, size, icon, href, external, attrs })` | 按鈕或連結：`primary`（每頁或每個表格只有一個主要按鈕）、`secondary`、`outline`（預設）、`ghost`、`danger`；卡片內用 `size: "sm"` |
+| `Kit.chips(項目)` | 篩選標籤；加 `cls: "tabs"` 變成分頁切換 |
+| `Kit.pageHead(標題)`、`Kit.sectionHead(標題)` | 簡短的頁頭及段落標題，不放標語 |
+| `Kit.fab(文字, attrs)` | 右下角「＋」主要新增按鈕 |
+| `Kit.menu(項目)` | 「⋯」選單，放修改、刪除等次要操作 |
+| `Kit.open(html)`、`Kit.sheetHead(標題)` | 底部彈出視窗（手機）／對話框（電腦），新增及修改表格都在這裡 |
+| `Kit.snack(文字, { action: "復原" })` | 底部提示列；刪除後即時消失，按「復原」可取回，提示列關閉後才真正刪除 |
+| `Kit.empty(標題, 說明)` | 沒有資料時的提示 |
+
+版面：頂部列（旅程名稱、搜尋資料簿、☰ 選單）、底部 5 個分頁（總覽、行程、探索、購物、共用；電腦版在頂部）。住宿、機票、附近、資料簿、我的旅程、分享及登出在 ☰ 選單。
 
 在電腦預覽：`python3 -m http.server 8000 --directory dist`，再開啟 http://localhost:8000 。
 
@@ -39,7 +58,7 @@
 
 ## 主要功能
 
-- **行程**：每天的站點可新增（與探索的新增地點同一表格，加上時間，地點同時存入探索）、修改、刪除、調動，同一時間可放多個選擇並排顯示。「⌕ 從探索加入地點」可搜尋探索地點、住宿及購物清單的購買地點。站點之間的交通點可查詢 Google 路線建議（`suggestRoutes`）或 AI 建議（`aiRoutes`，日本的公共交通 Google 不經 API 提供）。另有每日天氣、當天路線地圖及列印／另存 PDF。
+- **行程**：頂部日期列固定在畫面上方。右下角「加入地點」可搜尋探索地點、住宿及購物清單的購買地點，或新增地點（與探索的新增地點同一表格，加上時間，地點同時存入探索）；站點的「⋯」可修改、調動、加入同一時間的選擇或刪除，同一時間的多個選擇上下排列。站點之間的交通點可查詢 Google 路線建議（`suggestRoutes`）或 AI 建議（`aiRoutes`，日本的公共交通 Google 不經 API 提供）。另有每日天氣、當天路線地圖及列印／另存 PDF。
 - **探索**：貼 Google 地圖連結自動填寫（`lookupPlace`，日本用日文、韓國用韓文店名及地址），地點可有多個分店。「🛍 購物清單」篩選顯示要買東西的地點及未加入探索的購買地點。
 - **附近**：以定位或地圖選點，找出 100／200／500 米內的地點及可買清單物品的地方。
 - **購物**：共用購物清單，可影相由 AI 認物品並自動加入；亦可貼上產品網頁或圖片連結（`processReceipt` 讀取網頁的名稱、說明、價錢及主圖；只讀取公開網址，會封鎖內部網絡位址），或直接貼上截圖；物品分類（藥妝、食品、衣服鞋袋、生活用品、文具、玩具精品、電器、其他，`shopping/{id}.cat`）由 AI 判斷，亦可自行更改，清單按分類分組及篩選。

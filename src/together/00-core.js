@@ -36,6 +36,8 @@
     liveFx: null,
     settleMode: null,
   };
+  const Kit = window.Kit,
+    { icon } = Kit;
   const T = () => window.TripApp,
     S = window.Split,
     $ = (s) => document.querySelector(s);
@@ -50,7 +52,7 @@
         ? e.message.replace(/\s*\[\d+\]$/, "")
         : fallback;
   const toast = (s) => window.UI.toast(s);
-  const header = (k, t, p) => `<div class="pagehead"><div class="eyebrow">${k}</div><h1>${t}</h1>${p ? `<p>${p}</p>` : ""}</div>`;
+  const header = (title, sub = "", aside = "") => Kit.pageHead(title, { sub, aside });
   let fb,
     loading,
     unsub = [],
@@ -90,18 +92,26 @@
   function update(name, id, data) {
     fb.fs.updateDoc(tdoc(name, id), data).catch(() => toast("未能儲存，請再試。"));
   }
+  // Delete with undo: the item disappears at once and is deleted when the undo bar closes without 復原.
+  const hiding = new Set();
   async function remove(name, id) {
-    if (
-      !(await UI.confirm("確定刪除？", {
-        text: name === "expenses" ? "所有旅伴都會看不到這項，收據相片亦會一併刪除。" : "所有旅伴都會看不到這項。",
-        danger: true,
-        ok: "刪除",
-      }))
-    )
+    const x = state[name]?.find((i) => i.id === id);
+    if (!x) return;
+    const key = `${name}:${id}`;
+    hiding.add(key);
+    state[name] = state[name].filter((i) => i.id !== id);
+    if (name === "shopping" || name === "notes") T().shoppingChanged?.();
+    refresh();
+    const undo = await Kit.snack(`已刪除「${String(x.title || x.name || x.text || "").split("\n")[0].slice(0, 20)}」`, { action: "復原" });
+    hiding.delete(key);
+    if (undo) {
+      state[name] = [...state[name], x].sort((a, b) => (b.at || 0) - (a.at || 0));
+      if (name === "shopping" || name === "notes") T().shoppingChanged?.();
+      refresh();
       return;
-    const paths = name === "expenses" ? state.expenses.find((e) => e.id === id)?.receipts : null;
+    }
     fb.fs.deleteDoc(tdoc(name, id)).then(
-      () => dropPhotos(paths),
+      () => dropPhotos(name === "expenses" ? x.receipts : null),
       () => toast("未能刪除，請再試。"),
     );
   }
@@ -132,4 +142,7 @@
     at ? new Date(at).toLocaleString("zh-HK", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
   const meta = (x, extra = "") =>
     `<div class="tg-meta">${extra}<span>${esc(x.byName || "旅伴")} · ${esc(when(x.at))}</span>${x.pending ? '<span class="tg-pending">未同步</span>' : ""}</div>`;
-  const del = (name, x) => `<button class="smallbtn" data-tg-del="${name}:${esc(x.id)}" aria-label="刪除">刪除</button>`;
+  // Top row of every list item: badges and author on the left, the item's "⋯" menu on the right.
+  const itemTop = (x, extra, items) => `<div class="item-top">${meta(x, extra)}${Kit.menu(items)}</div>`;
+  // Menu entry that deletes an item (with undo).
+  const del = (name, x) => ({ label: "刪除", icon: "trash", danger: true, attrs: { "data-tg-del": `${name}:${x.id}` } });
