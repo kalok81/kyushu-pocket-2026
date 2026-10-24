@@ -76,7 +76,7 @@
 | `suggestRoutes` | 站點之間的路線建議 | Routes API |
 | `aiRoutes` | AI 路線建議 | DeepSeek |
 | `planDay` | 行程工具：全日交通、AI 安排、AI 推薦地點 | DeepSeek、Routes API（步行） |
-| `findBuyPlaces` | 購物「AI 找購買地點」：上網搜尋物品在旅程目的地的售賣地點 | DeepSeek Search、DeepSeek |
+| `findBuyPlaces` | 購物「AI 填寫」：上網搜尋物品資料及售賣地點，售賣地點用 Google 地圖核實 | DeepSeek Search、DeepSeek、Places API |
 | `manageTrip` | 建立及修改旅程、管理旅伴 | — |
 | `translateNames` | 探索地點、購物物品及開支（連收據物品）名稱不是繁中時，加上繁中譯名（`zh`、`zhFor`、開支物品 `itemsZh`），原名不變（Firestore 觸發） | DeepSeek |
 
