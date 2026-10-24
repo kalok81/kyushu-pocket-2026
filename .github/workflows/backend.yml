@@ -54,21 +54,25 @@ jobs:
           fi
           F=$PWD/functions
           COMMON="--project=kyushu-2e307 --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=$F --memory=256Mi --max-instances=3 --quiet"
-          gcloud functions deploy processReceipt $COMMON --entry-point=processReceipt --trigger-location=asia-northeast1 \
-            --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' \
-            --trigger-event-filters-path-pattern=document='trips/{trip}/receiptJobs/{id}' \
-            --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=180s
-          gcloud functions deploy translateNames $COMMON --entry-point=translateNames --trigger-location=asia-northeast1 \
-            --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database='(default)' \
-            --trigger-event-filters-path-pattern=document='trips/{trip}/{col}/{id}' \
-            --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=180s
-          gcloud functions deploy findBuyPlaces $COMMON --entry-point=findBuyPlaces --trigger-http --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest,PLACES_API_KEY=places-api-key:latest --timeout=90s
-          gcloud functions deploy aiRoutes $COMMON --entry-point=aiRoutes --trigger-http --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=120s
-          gcloud functions deploy planDay $COMMON --entry-point=planDay --trigger-http --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest,PLACES_API_KEY=places-api-key:latest,RAPIDAPI_KEY=rapidapi-key:latest --timeout=120s
-          gcloud functions deploy discoverPlaces $COMMON --entry-point=discoverPlaces --trigger-http --set-secrets=DEEPSEEK_API_KEY=deepseek-api-key:latest,PLACES_API_KEY=places-api-key:latest --timeout=120s
-          gcloud functions deploy lookupPlace $COMMON --entry-point=lookupPlace --trigger-http \
-            --set-secrets=PLACES_API_KEY=places-api-key:latest,DEEPSEEK_API_KEY=deepseek-api-key:latest --timeout=60s
-          gcloud functions deploy suggestRoutes $COMMON --entry-point=suggestRoutes --trigger-http --set-secrets=PLACES_API_KEY=places-api-key:latest,RAPIDAPI_KEY=rapidapi-key:latest --timeout=40s
-          for f in manageTrip; do
-            gcloud functions deploy $f $COMMON --entry-point=$f --trigger-http --set-secrets=PLACES_API_KEY=places-api-key:latest --timeout=40s
+          FIRESTORE="--trigger-location=asia-northeast1 --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database=(default)"
+          DS=DEEPSEEK_API_KEY=deepseek-api-key:latest PL=PLACES_API_KEY=places-api-key:latest RA=RAPIDAPI_KEY=rapidapi-key:latest
+          # All functions deploy at the same time (each one's log is printed when it ends); the step fails if any failed.
+          mkdir -p /tmp/deploy
+          deploy() { (gcloud functions deploy "$1" $COMMON --entry-point="$1" "${@:2}" >"/tmp/deploy/$1.log" 2>&1 && echo ok >"/tmp/deploy/$1.ok") & }
+          deploy processReceipt $FIRESTORE --trigger-event-filters-path-pattern=document='trips/{trip}/receiptJobs/{id}' --set-secrets=$DS --timeout=180s
+          deploy translateNames $FIRESTORE --trigger-event-filters-path-pattern=document='trips/{trip}/{col}/{id}' --set-secrets=$DS --timeout=180s
+          deploy findBuyPlaces --trigger-http --set-secrets=$DS,$PL --timeout=90s
+          deploy aiRoutes --trigger-http --set-secrets=$DS --timeout=120s
+          deploy planDay --trigger-http --set-secrets=$DS,$PL,$RA --timeout=120s
+          deploy discoverPlaces --trigger-http --set-secrets=$DS,$PL --timeout=120s
+          deploy lookupPlace --trigger-http --set-secrets=$PL,$DS --timeout=60s
+          deploy suggestRoutes --trigger-http --set-secrets=$PL,$RA --timeout=40s
+          deploy manageTrip --trigger-http --set-secrets=$PL --timeout=40s
+          wait
+          failed=0
+          for log in /tmp/deploy/*.log; do
+            f=$(basename "$log" .log)
+            echo "::group::$f"; cat "$log"; echo "::endgroup::"
+            [ -f "/tmp/deploy/$f.ok" ] || { echo "::error::$f failed to deploy"; failed=1; }
           done
+          exit $failed

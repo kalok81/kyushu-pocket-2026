@@ -15,7 +15,7 @@ const PLACES_API_KEY = defineSecret('PLACES_API_KEY');
 const RAPIDAPI_KEY = defineSecret('RAPIDAPI_KEY');
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 // Daily limits per companion, so a leaked login cannot run up the AI or Google Maps bill.
-const DAILY = { ai: 80, maps: 300, tr: 300, navi: 40 };
+const DAILY = { ai: 200, maps: 300, tr: 300, navi: 40 };
 
 // Counts one use in usage/{uid}_{UTC date} (no client access: firestore.rules has no match for it).
 async function useQuota(uid, kind) {
@@ -121,7 +121,7 @@ Reply with JSON only, in this shape:
 - name: ${local ? `the name it is sold under in ${local[1]}'s shops, in ${local[0]} as on the local package (brand first, e.g. "${local[2]}"), but only when that ${local[0]} name is actually shown in the photo, the page or the search results. Otherwise keep the name exactly as shown (English or Chinese): never translate a name into ${local[0]} yourself or make one up` : 'the product name in its original language, as printed on the package or product page (brand first)'}, at most 80 characters. Do not translate it into Chinese and do not add a translation in brackets: a Traditional Chinese translation is added separately.
 - shownName: the product name exactly as it is written in the photo, page or results (any language), at most 80 characters.
 - spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, mint), at most 30 characters; empty if unknown.
-- detail: one short Traditional Chinese line on what it is or what it is for, at most 60 characters.
+- detail: one short line on what it is or what it is for, at most 60 characters, always in Traditional Chinese as used in Hong Kong (translate it when the photo or page is in Japanese, English or another language; never Japanese).
 - category: drug for cosmetics, skincare, hair care, beauty tools, medicine, patches and supplements (drugstore goods); food for snacks, sweets, drinks, instant food and condiments; fashion for clothes, shoes, bags, wallets and accessories; home for kitchen and household goods; stationery for pens, notebooks and office goods; toys for toys, games, figures, character and idol goods; electronics for gadgets and appliances; other otherwise.
 - price: only if a price tag or label with this product's price is visible (tax-included price if both are shown); otherwise null.
 - currency: ${cur} unless the price is clearly in ${home}.
@@ -148,7 +148,15 @@ const localNamePrompt = (t, item, results) => `Travellers photographed this prod
 From the web search results below, give the name this same product is sold under in ${LOCAL_NAMES[t.country][1]}, in ${LOCAL_NAMES[t.country][0]} exactly as written in the results (brand first, same variant).
 Reply with JSON only: {"name": string}. Empty name if the results do not show this product's ${LOCAL_NAMES[t.country][0]} name; never translate it yourself.
 Search results: ${JSON.stringify(results)}`;
+// 備註 (detail) is for the travellers: Traditional Chinese only. One with kana or hangul left in it is translated.
+async function zhDetail(item, t) {
+ if (!/[\u3040-\u30ff\uac00-\ud7af]/.test(item.detail || '')) return item;
+ const r = await askDeepSeek(`Rewrite this product note in Traditional Chinese as used in Hong Kong, at most 60 characters; keep brand and product names as written. Reply with JSON only: {"detail": string}\nNote: ${JSON.stringify(item.detail)}`, [], { think: false }).catch(() => null);
+ const detail = typeof r?.detail === 'string' ? r.detail.trim().slice(0, 500) : '';
+ return detail ? { ...item, detail } : item;
+}
 async function withLocalName(item, t) {
+ item = await zhDetail(item, t);
  const script = LOCAL_NAMES[t?.country]?.[3];
  if (!script || !item.name || String(item.name).normalize('NFKC').match(script)) return item;
  const s = await deepseekTool('search', { query: `${item.name.replace(/[（(].*?[)）]/g, ' ').trim()} ${t.country === 'KR' ? '정품' : '公式'}`.slice(0, 128), count: 6 });
@@ -252,7 +260,7 @@ async function readProductLink(link) {
 const pagePrompt = (t, f) => `${productPrompt(t)}
 The traveller pasted a link to this web page instead of a photo; the picture (if any) is the page's main image.
 If the page is not about one specific product (a home, category, search or shop page), reply with an empty name and confidence low.
-Use the page for the name, spec and detail; the price only if it is in ${tripInfo(t).cur} or ${tripInfo(t).home}; place: the shop or brand selling it if clear.
+Use the page for the name, spec and detail (detail still in Traditional Chinese); the price only if it is in ${tripInfo(t).cur} or ${tripInfo(t).home}; place: the shop or brand selling it if clear.
 Page: ${JSON.stringify({ site: f.site, title: f.title, brand: f.brand, description: f.description, price: f.price, currency: f.currency, text: f.text.slice(0, 2000) })}`;
 
 // ---- Articles that list several products (手信推介, 必買清單): the whole page through DeepSeek Fetch (Markdown, with its
@@ -1122,7 +1130,7 @@ export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck
   results.length ? askDeepSeek(buyPrompt(trip, item, results), [], { think: false }) : {},
   full && about.length ? askDeepSeek(productInfoPrompt(trip, item.name, about), [], { think: false }).catch(() => null) : null,
  ]);
- const product = info && info.confidence !== 'low' ? cleanProduct(info, trip, JSON.stringify(about), item.name) : null;
+ const product = info && info.confidence !== 'low' ? await zhDetail(cleanProduct(info, trip, JSON.stringify(about), item.name), trip) : null;
  // A picture for the item: the main image of the product page the model chose, else of the next product results.
  let photo = null;
  if (product && d.photo === true) {

@@ -39,7 +39,8 @@ const checks=()=>{
  return [...new Map(res.map(x=>[x.join('|'),x])).values()];
 };
 const b=await chromium.launch(),report={};
-for(const w of [320,390,768,1280]){
+// the four widths at once, each in its own browser context (own fake data and storage)
+await Promise.all([320,390,768,1280].map(async w=>{
  const pg=await b.newPage({viewport:{width:w,height:w<700?780:900}});const errs=[];pg.on('pageerror',e=>errs.push(String(e)));
  await pg.route('**/vendor/firebase/*.js',r=>{const f=r.request().url().split('/').pop().split('?')[0];f==='firebase-firestore.js'?r.fulfill({body:seeded,contentType:'text/javascript'}):f==='firebase-storage.js'?r.fulfill({body:storage,contentType:'text/javascript'}):r.fulfill({path:fake+f,contentType:'text/javascript'})});
  await pg.route('https://api.open-meteo.com/**',r=>r.fulfill({json:weather,headers:{'Access-Control-Allow-Origin':'*'}}));
@@ -76,7 +77,7 @@ for(const w of [320,390,768,1280]){
   if(await pg.evaluate(()=>document.querySelector('#detail').open))await pg.click('#detail .dialog-close',{timeout:3000}).catch(()=>{})}
  if(errs.length)report[`${w} page-errors`]=errs.map(e=>['PAGEERROR',e]);
  await pg.close();
-}
+}));
 await b.close();srv.close();
 const bad=Object.entries(report).filter(([,v])=>v.length);
 for(const [k,v] of bad)console.log(`\n## ${k}\n`+v.map(x=>`  ${x[0]}: ${x[1]}`).join('\n'));
