@@ -453,8 +453,9 @@ try {
   const d3 = await names();
   await page.click('[data-day="2"]'); await page.waitForTimeout(400); const d2 = await names(); await page.click('[data-day="3"]'); await page.waitForTimeout(400);
   await page.click('.day-more summary'); await page.click('[data-day-swap]:visible'); await page.click('[data-day-pick="2"]');
-  await page.waitForTimeout(500); assert.deepEqual(await names(), d2, 'D2 is now on D3');
-  await page.click('[data-day="2"]'); await page.waitForSelector('.timeline h3'); assert.deepEqual(await names(), d3, 'D3 is now on D2');
+  const showing = (want) => page.waitForFunction((w) => JSON.stringify([...document.querySelectorAll('.timeline h3')].map((h) => h.firstChild.textContent.trim())) === w, JSON.stringify(want), { timeout: 8000 });
+  await showing(d2); // D2's stops are now on D3
+  await page.click('[data-day="2"]'); await showing(d3); // and D3's on D2
   // move the first stop of D2 to D3
   await page.locator('[data-stop-more]').first().click(); await page.click('[data-stop-to-day]:visible'); await page.click('[data-day-pick="3"]');
   await page.waitForFunction((n) => document.querySelectorAll('.timeline h3').length === n - 1, d3.length);
