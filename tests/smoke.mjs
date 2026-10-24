@@ -106,9 +106,11 @@ try {
   await page.locator('[data-route-link]').nth(1).click();
   assert.match(await page.locator('#routeFrom option:checked').innerText(), /上野酒店/);
   assert.equal(await page.inputValue('#routeTime'), '08:00');
-  await page.click('#routeGo'); await page.waitForSelector('#routeResults .notice');
-  assert.match(await page.locator('#routeResults').innerText(), /日本的公共交通/);
-  assert.match(await page.locator('#routeResults a').getAttribute('href'), /travelmode=transit/);
+  // Japan by public transport: NAVITIME timetables, with Google Maps and Yahoo!乗換案内 links
+  await page.click('#routeGo'); await page.waitForSelector('#routeResults [data-route-pick]');
+  assert.match(await page.locator('#routeResults').innerText(), /NAVITIME/);
+  assert.match(await page.locator('#routeResults a').first().getAttribute('href'), /travelmode=transit/);
+  assert.match(await page.locator('#routeResults a:has-text("Yahoo")').getAttribute('href'), /transit\.yahoo\.co\.jp.*from=%E4%B8%8A%E9%87%8E%E9%85%92%E5%BA%97/);
   await page.click('[data-route-ai]'); await page.waitForSelector('[data-route-ai-pick]');
   assert.deepEqual(await page.locator('#routeAi .route-option .route-head b').allInnerTexts(), ['最快', '的士']);
   assert.deepEqual(await page.locator('#routeAi .ai-sure').allInnerTexts(), ['把握：高', '把握：低，請核對']);
@@ -435,9 +437,9 @@ try {
   await page.evaluate(() => document.querySelector('#discoverOut .ai-progress').remove());
   await page.mouse.click(10, 10); await page.waitForFunction(() => !document.querySelector('#detail').open);
   // unsaved typing: tapping outside asks first
-  await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.fill('[data-tg-form=shop] [name=name]', '草莓大福');
+  await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.fill('[data-tg-form=shop] [name=name]', '草莓大福'); await page.waitForTimeout(300);
   await page.mouse.click(10, 10); await page.waitForSelector('.ui-pop'); assert.match(await page.locator('.ui-pop').innerText(), /放棄未儲存的內容/);
-  await page.click('.ui-pop button:has-text("繼續編輯")'); await page.waitForTimeout(300);
+  await page.click('.ui-pop button:has-text("繼續編輯")'); await page.waitForSelector('.swal2-container', { state: 'detached' });
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '草莓大福');
   await page.mouse.click(10, 10); await page.click('.ui-pop button:has-text("放棄")'); await page.waitForFunction(() => !document.querySelector('#detail').open);
  });

@@ -12,9 +12,10 @@ import sharp from 'sharp';
 initializeApp();
 const DEEPSEEK_API_KEY = defineSecret('DEEPSEEK_API_KEY');
 const PLACES_API_KEY = defineSecret('PLACES_API_KEY');
+const RAPIDAPI_KEY = defineSecret('RAPIDAPI_KEY');
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 // Daily limits per companion, so a leaked login cannot run up the AI or Google Maps bill.
-const DAILY = { ai: 80, maps: 300, tr: 300 };
+const DAILY = { ai: 80, maps: 300, tr: 300, navi: 40 };
 
 // Counts one use in usage/{uid}_{UTC date} (no client access: firestore.rules has no match for it).
 async function useQuota(uid, kind) {
@@ -664,7 +665,37 @@ const point = v => v && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Math
 const mins = d => Math.max(0, Math.round(parseInt(d || '0', 10) / 60));
 const ROUTE_FIELDS = ['duration', 'distanceMeters', 'travelAdvisory.transitFare', 'legs.steps.travelMode', 'legs.steps.staticDuration', 'legs.steps.distanceMeters', 'legs.steps.transitDetails'].map(f => 'routes.' + f).join(',');
 
-export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
+// Japan's public transport with timetables (Google offers none for Japan): NAVITIME Route via RapidAPI (free plan,
+// 500 requests a month; each companion at most DAILY.navi a day). when: local 'YYYY-MM-DDTHH:mm'. Options in the
+// shape of suggestRoutes (steps with lines, stations and times); fare = ticket + unreserved express fee.
+const NAVI_VEHICLE = { superexpress_train: 'HIGH_SPEED_TRAIN', bus: 'BUS', highway_bus: 'INTERCITY_BUS', ferry: 'FERRY' };
+async function naviRoutes(uid, a, b, when, limit = 3) {
+ if (![a?.lat, a?.lng, b?.lat, b?.lng].every(Number.isFinite) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when)) return null;
+ await useQuota(uid, 'navi');
+ const q = new URLSearchParams({ start: `${a.lat},${a.lng}`, goal: `${b.lat},${b.lng}`, start_time: `${when}:00`, datum: 'wgs84', coord_unit: 'degree', limit: String(limit) });
+ const res = await fetch(`https://navitime-route-totalnavi.p.rapidapi.com/route_transit?${q}`, { headers: { 'X-RapidAPI-Key': RAPIDAPI_KEY.value().trim(), 'X-RapidAPI-Host': 'navitime-route-totalnavi.p.rapidapi.com' }, signal: AbortSignal.timeout(20_000) }).catch(() => null);
+ if (!res?.ok) {
+  console.error('NAVITIME failed', res?.status, res ? (await res.text()).slice(0, 300) : '');
+  return null;
+ }
+ const station = x => String(x?.name || '').replace(/（[^）]*[都道府県]）$/, '').slice(0, 60);
+ return ((await res.json()).items || []).map(it => {
+  const secs = it.sections || [], steps = [];
+  secs.forEach((s, i) => {
+   if (s.type !== 'move') return;
+   const minutes = Number(s.time) || 0, last = steps.at(-1);
+   if (s.move === 'walk') {
+    if (last?.mode === 'WALK') { last.minutes += minutes; last.meters += Number(s.distance) || 0; } else steps.push({ mode: 'WALK', minutes, meters: Number(s.distance) || 0 });
+    return;
+   }
+   steps.push({ mode: 'TRANSIT', vehicle: NAVI_VEHICLE[s.move] || (/train/.test(s.move) ? 'HEAVY_RAIL' : ''), line: String(s.line_name || s.transport?.name || '').slice(0, 60), headsign: '', from: station(secs[i - 1]), to: station(secs[i + 1]), stops: 0, depart: String(s.from_time || '').slice(11, 16), arrive: String(s.to_time || '').slice(11, 16), minutes });
+  });
+  const f = it.summary?.move?.fare || {}, amount = (Number(f.unit_48 ?? f.unit_0) || 0) + (Number(f.unit_1) || 0);
+  return { minutes: Number(it.summary?.move?.time) || 0, meters: Number(it.summary?.move?.distance) || 0, fare: amount ? { currency: 'JPY', amount } : null, steps: steps.filter(x => x.mode === 'TRANSIT' || x.minutes > 0) };
+ }).filter(o => o.steps.some(x => x.mode === 'TRANSIT'));
+}
+
+export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY, RAPIDAPI_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
  const d = req.data || {}, origin = point(d.origin), destination = point(d.destination);
@@ -672,6 +703,11 @@ export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck
  const mode = ['TRANSIT', 'WALK', 'DRIVE'].includes(d.mode) ? d.mode : 'TRANSIT';
  const country = typeof d.country === 'string' && /^[A-Z]{2}$/.test(d.country) ? d.country : '';
  const zone = ZONES[country] || 'UTC';
+ // Japan by public transport: NAVITIME timetables (falls through to Google, which has none, if NAVITIME fails)
+ if (mode === 'TRANSIT' && country === 'JP' && d.origin?.lat != null && d.destination?.lat != null) {
+  const options = await naviRoutes(req.auth.uid, d.origin, d.destination, String(d.time || ''), 4).catch(e => (console.error('navi', e?.message), null));
+  if (options?.length) return { options, estimated: false, source: 'navitime' };
+ }
  await useQuota(req.auth.uid, 'maps');
  // Timetables only reach a few weeks ahead: for a past or far-off date, use the same weekday and time next week.
  let when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.time || '') ? zonedToUtc(d.time, zone) : null, estimated = false;
@@ -833,7 +869,7 @@ const WALK_MAX = 1500;
 const walkLeg = (k, w) => ({ k, minutes: w.minutes, meters: w.meters, fare: null, confidence: 'high', source: 'google', steps: [{ mode: 'WALK', vehicle: '', line: '', from: '', to: '', minutes: w.minutes }] });
 const LEG_SHAPE = '{"k": string, "minutes": number, "fare": number or null, "confidence": "high" | "medium" | "low", "steps": [{"mode": "WALK" | "TRANSIT" | "TAXI" | "DRIVE", "vehicle": "SUBWAY" | "HEAVY_RAIL" | "HIGH_SPEED_TRAIN" | "BUS" | "TRAM" | "MONORAIL" | "FERRY" | "", "line": string, "from": string, "to": string, "minutes": number}]}';
 const LEG_RULES = cur => `- A leg is the way from the stop before to stop k. Use real line, station and stop names as written on local signs (Japanese in Japan, Korean in Korea); do not invent lines or stations. Walk when the places are under about 1 km apart. minutes: door to door including walking and waiting. fare: per adult in ${cur} (IC card fare), null if unknown or walking. confidence: high only if you know these exact lines run there.`;
-export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY, PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 120, maxInstances: 3 }, async req => {
+export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY, PLACES_API_KEY, RAPIDAPI_KEY], memory: '256MiB', timeoutSeconds: 120, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
  const d = req.data || {}, mode = d.mode;
@@ -855,11 +891,23 @@ export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true
   const got = await Promise.all(near.map(([k, a, b]) => googleWalk(a, b).then(w => [k, w])));
   return Object.fromEntries(got.filter(([, w]) => w).map(([k, w]) => [k, walkLeg(k, w)]));
  };
+ // Train and bus legs in Japan: NAVITIME's first route at the leg's time (at most 10 per request)
+ const naviLegs = async list => {
+  if (trip?.country && trip.country !== 'JP' && d.country !== 'JP') return {};
+  const got = {};
+  for (const [k, a, b, time] of list.filter(([, a, b, time]) => a?.lat != null && b?.lat != null && time).slice(0, 10)) {
+   const o = await naviRoutes(req.auth.uid, a, b, `${date}T${time.padStart(5, '0')}`, 1).catch(() => null);
+   if (o?.[0]) got[k] = { k, ...o[0], confidence: 'high', source: 'navitime' };
+  }
+  return got;
+ };
+ const trip = typeof d.trip === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(d.trip) ? (await getFirestore().doc(`trips/${d.trip}`).get()).data() : null;
  let prompt, walked = {};
  if (mode === 'routes') {
   const all = (Array.isArray(d.legs) ? d.legs : []).slice(0, 25).map(l => ({ k: text(l.k, 12), from: point(l.from), to: point(l.to), time: text(l.time, 5) })).filter(l => l.k && l.from?.name && l.to?.name);
   if (!all.length) throw new HttpsError('invalid-argument', '沒有需要查詢的交通。');
   walked = await walks(all.map(l => [l.k, l.from, l.to]));
+  Object.assign(walked, date ? await naviLegs(all.filter(l => !walked[l.k]).map(l => [l.k, l.from, l.to, l.time || '09:00'])) : {});
   const legs = all.filter(l => !walked[l.k]);
   if (!legs.length) return { legs: Object.values(walked) };
   await useQuota(req.auth.uid, 'ai');
@@ -918,6 +966,8 @@ Reply with JSON only: {"picks": [{"k": string, "reason": string}], "advice": str
  // close stops in the chosen order walk by Google's times
  const at = Object.fromEntries(stops.map(s => [s.k, s]));
  const near = await walks(order.slice(1).map((k, j) => [k, at[order[j]], at[k]]));
+ const endOf = k => String(times[k] || '').match(/(\d{1,2}:\d{2})\s*$/)?.[1] || '';
+ if (date) Object.assign(near, await naviLegs(order.slice(1).map((k, j) => [k, at[order[j]], at[k], endOf(order[j])]).filter(([k]) => !near[k])));
  return { order, times, legs: [...legs.filter(l => !near[l.k]), ...Object.values(near)], warnings, advice: text(r?.advice, 300) };
 });
 

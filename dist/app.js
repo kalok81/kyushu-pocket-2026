@@ -1443,12 +1443,12 @@ window.startTrip = (meta = {}) => {
       time = $("#routeTime").value || "09:00";
     c.mode = mode;
     const gm = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from.point.address || `${from.point.lat},${from.point.lng}`)}&destination=${encodeURIComponent(dest.address || `${dest.lat},${dest.lng}`)}&travelmode=${ROUTE_MODES[mode][1]}`;
-    const gmLink = `${Kit.btn("在 Google 地圖查看", { href: gm, external: true, size: "sm", icon: "map" })}${Kit.btn("AI 分析", { variant: "secondary", size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}`;
+    // Yahoo!乗換案内 with the names, date and time filled in: the timetable in the browser
+    const [yy, mo, dd] = isoDash(days[c.day - 1]).split("-"),
+      [hh, mi] = time.split(":"),
+      yahoo = `https://transit.yahoo.co.jp/search/result?${new URLSearchParams({ from: from.name, to: to.title, y: yy, m: mo, d: dd, hh, m1: mi[0], m2: mi[1], type: "1" })}`;
+    const gmLink = `${Kit.btn("在 Google 地圖查看", { href: gm, external: true, size: "sm", icon: "map" })}${meta.country === "JP" && mode === "TRANSIT" ? Kit.btn("Yahoo!乗換案内", { href: yahoo, external: true, size: "sm", icon: "train" }) : ""}${Kit.btn("AI 分析", { variant: "secondary", size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}`;
     c.ai = { from, to, dest, time };
-    if (mode === "TRANSIT" && meta.country === "JP") {
-      box.innerHTML = `<div class="notice">Google 不向其他網站提供日本的公共交通路線，只可以在 Google 地圖 App 內查看。請按下面按鈕查看，揀好路線後在下面「交通」填寫；步行和駕車可以直接在這裡查詢。</div><div class="links">${gmLink}</div>`;
-      return;
-    }
     box.innerHTML = Kit.progress({ text: "正在查詢 Google 地圖…", seconds: 6 });
     try {
       const r = await window.Together.suggestRoutes({
@@ -1460,8 +1460,8 @@ window.startTrip = (meta = {}) => {
       });
       c.options = r.options;
       box.innerHTML = r.options.length
-        ? `${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": k } })}</div>`).join("")}<div class="links">${gmLink}</div>`
-        : `<p class="note">Google 地圖找不到${ROUTE_MODES[mode][0]}路線。</p><div class="links">${gmLink}</div>`;
+        ? `${r.source === "navitime" ? '<p class="note">班次及車費由 NAVITIME 提供（車費＝車票＋自由席特急料金）。</p>' : ""}${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": k } })}</div>`).join("")}<div class="links">${gmLink}</div>`
+        : `<p class="note">${mode === "TRANSIT" && meta.country === "JP" ? "找不到公共交通班次，可以按「Yahoo!乗換案内」或「AI 分析」。" : `Google 地圖找不到${ROUTE_MODES[mode][0]}路線。`}</p><div class="links">${gmLink}</div>`;
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p><div class="links">${gmLink}</div>`;
     }
@@ -1737,13 +1737,15 @@ window.startTrip = (meta = {}) => {
   });
 
   // 查全日交通: every leg without transport (or all of them, when asked) in one request: walks under 1.5 km by Google
-  // Maps, the rest by the AI (Google offers no public transport routes for Japan to other sites).
+  // Maps, trains and buses in Japan by NAVITIME timetables, the rest by the AI.
   const placeForAi = (s) => {
     const p = pointOf(s);
     return { name: s.title || s.name, address: s.target || s.address || "", ...(p ? { lat: p.lat, lng: p.lng } : {}) };
   };
   const legText = (l) =>
-    l.source === "google"
+    l.source === "navitime"
+      ? `${routeText(l, "TRANSIT")}（NAVITIME 班次）`
+      : l.source === "google"
       ? `🚶 步行 ${l.minutes} 分（${l.meters >= 1000 ? `${(l.meters / 1000).toFixed(1)} 公里` : `${l.meters} 米`}）｜約 ${l.minutes} 分（Google 地圖）`
       : `${l.steps.map(aiStep).join(" → ")}｜約 ${l.minutes} 分${l.fare ? ` · ${fareText(l)}` : ""}（AI 估算）`;
   function dayLegs(day, all) {
@@ -1765,7 +1767,7 @@ window.startTrip = (meta = {}) => {
       return fillRoutes(day, true);
     }
     const found = {},
-      done = Kit.busy($("#planToolsInfo"), { text: `正在查詢 ${legs.length} 段交通（步行用 Google 地圖，其餘由 AI 估算）…`, seconds: 10 + legs.length * 4 });
+      done = Kit.busy($("#planToolsInfo"), { text: `正在查詢 ${legs.length} 段交通（步行用 Google 地圖，火車巴士用 NAVITIME 班次）…`, seconds: 10 + legs.length * 4 });
     let ai = false;
     try {
       const d = days[day - 1],
@@ -1779,7 +1781,7 @@ window.startTrip = (meta = {}) => {
         });
       for (const l of r.legs) {
         found[l.k] = legText(l);
-        ai ||= l.source !== "google";
+        ai ||= !["google", "navitime"].includes(l.source);
       }
     } catch (e) {
       toast(fnError(e, "未能查詢交通，請稍後再試。"));

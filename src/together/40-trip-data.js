@@ -11,7 +11,7 @@
   }
   async function planDay(data) {
     if (!navigator.onLine) throw new Error("offline");
-    return (await (await callable("planDay", 120000))(data)).data;
+    return (await (await callable("planDay", 120000))({ ...data, trip: tripId })).data;
   }
   async function suggestRoutes(data) {
     if (!navigator.onLine) throw new Error("offline");

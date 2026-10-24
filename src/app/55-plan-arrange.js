@@ -177,13 +177,15 @@
   });
 
   // 查全日交通: every leg without transport (or all of them, when asked) in one request: walks under 1.5 km by Google
-  // Maps, the rest by the AI (Google offers no public transport routes for Japan to other sites).
+  // Maps, trains and buses in Japan by NAVITIME timetables, the rest by the AI.
   const placeForAi = (s) => {
     const p = pointOf(s);
     return { name: s.title || s.name, address: s.target || s.address || "", ...(p ? { lat: p.lat, lng: p.lng } : {}) };
   };
   const legText = (l) =>
-    l.source === "google"
+    l.source === "navitime"
+      ? `${routeText(l, "TRANSIT")}（NAVITIME 班次）`
+      : l.source === "google"
       ? `🚶 步行 ${l.minutes} 分（${l.meters >= 1000 ? `${(l.meters / 1000).toFixed(1)} 公里` : `${l.meters} 米`}）｜約 ${l.minutes} 分（Google 地圖）`
       : `${l.steps.map(aiStep).join(" → ")}｜約 ${l.minutes} 分${l.fare ? ` · ${fareText(l)}` : ""}（AI 估算）`;
   function dayLegs(day, all) {
@@ -205,7 +207,7 @@
       return fillRoutes(day, true);
     }
     const found = {},
-      done = Kit.busy($("#planToolsInfo"), { text: `正在查詢 ${legs.length} 段交通（步行用 Google 地圖，其餘由 AI 估算）…`, seconds: 10 + legs.length * 4 });
+      done = Kit.busy($("#planToolsInfo"), { text: `正在查詢 ${legs.length} 段交通（步行用 Google 地圖，火車巴士用 NAVITIME 班次）…`, seconds: 10 + legs.length * 4 });
     let ai = false;
     try {
       const d = days[day - 1],
@@ -219,7 +221,7 @@
         });
       for (const l of r.legs) {
         found[l.k] = legText(l);
-        ai ||= l.source !== "google";
+        ai ||= !["google", "navitime"].includes(l.source);
       }
     } catch (e) {
       toast(fnError(e, "未能查詢交通，請稍後再試。"));
