@@ -668,6 +668,8 @@ const ROUTE_FIELDS = ['duration', 'distanceMeters', 'travelAdvisory.transitFare'
 // Japan's public transport with timetables (Google offers none for Japan): NAVITIME Route via RapidAPI (free plan,
 // 500 requests a month; each companion at most DAILY.navi a day). when: local 'YYYY-MM-DDTHH:mm'. Options in the
 // shape of suggestRoutes (steps with lines, stations and times); fare = ticket + unreserved express fee.
+// The marketplace plan has trains only (local buses need a separate contract), so routes that are mostly walking —
+// where a bus is likely the way — are dropped and the AI (which knows the buses) is asked instead.
 const NAVI_VEHICLE = { superexpress_train: 'HIGH_SPEED_TRAIN', bus: 'BUS', highway_bus: 'INTERCITY_BUS', ferry: 'FERRY' };
 async function naviRoutes(uid, a, b, when, limit = 3) {
  if (![a?.lat, a?.lng, b?.lat, b?.lng].every(Number.isFinite) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when)) return null;
@@ -692,7 +694,7 @@ async function naviRoutes(uid, a, b, when, limit = 3) {
   });
   const f = it.summary?.move?.fare || {}, amount = (Number(f.unit_48 ?? f.unit_0) || 0) + (Number(f.unit_1) || 0);
   return { minutes: Number(it.summary?.move?.time) || 0, meters: Number(it.summary?.move?.distance) || 0, fare: amount ? { currency: 'JPY', amount } : null, steps: steps.filter(x => x.mode === 'TRANSIT' || x.minutes > 0) };
- }).filter(o => o.steps.some(x => x.mode === 'TRANSIT'));
+ }).filter(o => o.steps.some(x => x.mode === 'TRANSIT') && o.steps.reduce((t, x) => t + (x.mode === 'WALK' ? x.minutes : 0), 0) <= 15);
 }
 
 export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY, RAPIDAPI_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
@@ -924,10 +926,11 @@ ${LEG_RULES(cur)}`;
 Put the stops below in a sensible order and give each a visit time, so the day flows with little back-tracking, places are visited while open (mind the weekday and closing days), meals fall at meal times (lunch about 11:30–13:30, dinner about 18:00–20:00) and there is time to get between them.
 ${start ? `The day starts from ${placeText(start)}${stops[0]?.fixed && stops[0].time ? '' : ' at about 09:00'}.` : 'The day starts at about 09:00.'}${end ? `\nThe night is spent at ${placeText(end)}.` : ''}
 Stops (k: name, address, position; type; opening hours as noted by the traveller; time = fixed means it must stay at that time; stay = minutes the traveller plans there):
-${stops.map(s => `${placeLine(s)}${s.type ? `; ${s.type}` : ''}${s.hours ? `; hours: ${s.hours.replace(/\s+/g, ' ')}` : ''}${s.fixed && s.time ? `; time = fixed ${s.time}` : ''}${s.stay ? `; stay ${s.stay} min` : ''}`).join('\n')}
+${stops.map(s => `${placeLine(s)}${s.type ? `; ${s.type}` : ''}${s.hours ? `; hours: ${s.hours.replace(/\s+/g, ' ')}` : ''}${s.time ? (s.fixed ? `; time = fixed ${s.time}` : `; planned ${s.time}`) : ''}${s.stay ? `; stay ${s.stay} min` : ''}`).join('\n')}
 Reply with JSON only:
 {"order": [k, ...], "times": {"k": "HH:MM–HH:MM"}, "legs": [${LEG_SHAPE}], "warnings": {"k": string}, "advice": string}
 - order: every stop exactly once. A stop marked fixed keeps its time; order the others around it. A hotel stop that starts the day goes first.
+- "planned" times show the part of the day the traveller meant (breakfast, lunch, dinner, hotel check-in, evening walks, night views): keep each stop in that part of the day unless a clearly better order needs a small shift. Hotel check-in not before 15:00; evening and night spots after dark.
 - times: start–end for each stop, using the planned stay or a usual visit length (meal about 60 min, café 40, sight 60–120, shop 30–60). Times must not overlap, and the gap before a stop must fit its leg.
 - legs: one leg per stop after the first (k = that stop), the way from the stop before it.
 - warnings: only real problems, in Traditional Chinese as used in Hong Kong, short (e.g. "星期一休息", "18:00 關門，可能趕不及", "要預約"). Leave out stops without problems.
@@ -947,7 +950,7 @@ Reply with JSON only: {"picks": [{"k": string, "reason": string}], "advice": str
 - advice: one short sentence in Traditional Chinese (Hong Kong) about the day.`;
  }
  let r;
- try { r = await askDeepSeek(prompt, [], { think: mode === 'arrange' }); } catch (e) { console.error('planDay', mode, e?.message); throw new HttpsError('unavailable', 'AI 暫時未能分析，請稍後再試。'); }
+ try { r = await askDeepSeek(prompt, [], { think: false }); } catch (e) { console.error('planDay', mode, e?.message); throw new HttpsError('unavailable', 'AI 暫時未能分析，請稍後再試。'); }
  const keys = new Set(stops.map(s => s.k));
  const legs = (Array.isArray(r?.legs) ? r.legs : []).slice(0, 25).map(l => ({
   k: text(String(l?.k ?? ''), 12), minutes: num(l?.minutes, 1440),
