@@ -321,6 +321,52 @@
     changeDay(a.day, after, "已套用 AI 安排");
   }
 
+  // Another day: 與另一日對調 swaps two whole days (stops and titles); 移去其他日子 moves one stop, keeping its time.
+  let dayPick = null;
+  function pickDay(title, note, onPick) {
+    dayPick = onPick;
+    openDialog(
+      `${Kit.sheetHead(title, `D${selectedDay}`)}<p class="note">${note}</p><div class="day-pick">${days
+        .filter((d) => d.n !== selectedDay)
+        .map((d) => `<button type="button" class="day-pick-row" data-day-pick="${d.n}"><b>D${d.n}</b><span>${esc(d.date)} ${esc(d.weekday)}<small>${esc(d.region)} · ${stopsFor(d.n).length} 個站點</small></span></button>`)
+        .join("")}</div>`,
+    );
+  }
+  function swapDays(a, b) {
+    const A = stopsFor(a),
+      B = stopsFor(b),
+      la = days[a - 1].region,
+      lb = days[b - 1].region;
+    const put = (day, label, stops) => {
+      planEdits = { ...planEdits, [day]: { ...planEdits[day], stops, label } };
+      window.Together.setDayLabel(day, label, stops.map(stopFields));
+    };
+    put(a, lb, B);
+    put(b, la, A);
+    refreshDays();
+    refreshPlan();
+    Kit.snack(`已對調 D${a} 與 D${b}`, { action: "復原" }).then((undo) => {
+      if (!undo) return;
+      put(a, la, A);
+      put(b, lb, B);
+      refreshDays();
+      refreshPlan();
+    });
+  }
+  function moveStopToDay(from, i, to) {
+    const A = stopsFor(from),
+      B = stopsFor(to),
+      s = A[i];
+    if (!s) return;
+    const moved = { ...s, transport: "", warn: "" };
+    savePlan(from, legsChanged(A, A.filter((_, j) => j !== i)));
+    savePlan(to, insertByTime(B, moved));
+    Kit.snack(`已把「${s.title}」移去 D${to}`, { action: "復原" }).then((undo) => {
+      if (!undo) return;
+      savePlan(from, A);
+      savePlan(to, B);
+    });
+  }
   function planTools(stops) {
     return `<div class="plan-tools" role="toolbar" aria-label="安排這天">${[
       ["排順路", "route", "data-plan-order"],
@@ -335,6 +381,19 @@
     const el = e.target.closest("button");
     if (!el) return;
     const day = selectedDay;
+    if (el.dataset.daySwap !== undefined)
+      pickDay("與另一日對調", "兩日的站點、時間、交通、備註及標題會整份對調，可以復原。", (to) => swapDays(day, to));
+    if (el.dataset.stopToDay) {
+      const i = Number(el.dataset.stopToDay),
+        s = stopsFor(day)[i];
+      if (s) pickDay(`把「${esc(s.title)}」移去…`, "保留原本時間，放在該日相應位置；交通需要重新查詢。", (to) => moveStopToDay(day, i, to));
+    }
+    if (el.dataset.dayPick && dayPick) {
+      const go = dayPick;
+      dayPick = null;
+      $("#detail").close();
+      go(Number(el.dataset.dayPick));
+    }
     if (el.dataset.planInsert !== undefined) {
       const g = stopGroups(stopsFor(day))[Number(el.dataset.planInsert)];
       if (g) pickPlaceForPlan(day, null, g[0].i);

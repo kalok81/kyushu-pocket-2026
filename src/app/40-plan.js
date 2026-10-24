@@ -386,6 +386,7 @@
       [
         { label: "修改", icon: "edit", attrs: { "data-stop-edit": i } },
         { label: "加入同一時間的選擇", icon: "plus", attrs: { "data-stop-alt": i } },
+        { label: "移去其他日子", icon: "calendar", attrs: { "data-stop-to-day": i } },
         { label: "上移", icon: "up", disabled: !i, attrs: { "data-stop-move": `${i}:-1` } },
         { label: "下移", icon: "down", disabled: i >= last, attrs: { "data-stop-move": `${i}:1` } },
         { label: "刪除", icon: "trash", danger: true, attrs: { "data-stop-delete": i } },
@@ -404,6 +405,7 @@
     return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)} · ${esc(d.weekday)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
       [
         { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
+        { label: "與另一日對調", icon: "calendar", attrs: { "data-day-swap": true } },
         routeStops(day).length && { label: "當天路線地圖", icon: "map", attrs: { "data-day-map": true } },
         { label: "列印／另存 PDF", icon: "printer", attrs: { "data-plan-print": true } },
         edit?.stops?.length && { label: "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },

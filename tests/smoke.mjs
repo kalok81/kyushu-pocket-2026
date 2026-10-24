@@ -447,6 +447,19 @@ try {
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '草莓大福');
   await tapOutside(); await page.click('.ui-pop button:has-text("放棄")'); await page.waitForFunction(() => !document.querySelector('#detail').open);
  });
+ await step('plan: swap two days; move a stop to another day', async () => {
+  await page.goto(base + '/#plan?day=3'); await page.waitForSelector('.timeline h3');
+  const names = () => page.locator('.timeline h3').evaluateAll((hs) => hs.map((h) => h.firstChild.textContent.trim()));
+  const d3 = await names();
+  await page.click('[data-day="2"]'); await page.waitForTimeout(400); const d2 = await names(); await page.click('[data-day="3"]'); await page.waitForTimeout(400);
+  await page.click('.day-more summary'); await page.click('[data-day-swap]:visible'); await page.click('[data-day-pick="2"]');
+  await page.waitForTimeout(500); assert.deepEqual(await names(), d2, 'D2 is now on D3');
+  await page.click('[data-day="2"]'); await page.waitForSelector('.timeline h3'); assert.deepEqual(await names(), d3, 'D3 is now on D2');
+  // move the first stop of D2 to D3
+  await page.locator('[data-stop-more]').first().click(); await page.click('[data-stop-to-day]:visible'); await page.click('[data-day-pick="3"]');
+  await page.waitForFunction((n) => document.querySelectorAll('.timeline h3').length === n - 1, d3.length);
+  await page.click('[data-day="3"]'); await page.waitForTimeout(400); assert.ok((await names()).includes(d3[0]), 'the stop is on D3');
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

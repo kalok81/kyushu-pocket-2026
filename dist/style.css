@@ -862,3 +862,9 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .route-dot .route-for{display:block;font-size:13px}
 .route-dot .route-total{display:block;font-weight:650;color:var(--foreground)}
 .route-dot .route-step{display:block;padding:0;border-radius:0;background:none;font-size:13.5px;line-height:1.5;white-space:normal;overflow-wrap:anywhere}
+/* choose another day (與另一日對調, 移去其他日子) */
+.day-pick{display:grid;gap:8px;margin-top:8px}
+.day-pick-row{display:flex;gap:12px;align-items:center;width:100%;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card);text-align:left;box-shadow:none}
+.day-pick-row b{flex:none;width:44px;font-size:16px;color:var(--primary)}
+.day-pick-row span{display:grid;font-size:15px}
+.day-pick-row small{font-size:13px;color:var(--muted-foreground)}
