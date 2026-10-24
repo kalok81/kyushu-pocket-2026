@@ -113,10 +113,12 @@ async function deepseekTool(tool, body) {
  }
  return res.json();
 }
-const productPrompt = t => { const { place, cur, home } = tripInfo(t); return `You identify products that travellers in ${place} photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
+// Product names as sold locally (Japanese in Japan, Korean in Korea), so they match the shelves; Chinese goes under it.
+const LOCAL_NAMES = { JP: ['Japanese', 'Japan', '東京ばな奈 見ぃつけたっ", "肌ラボ 極潤 ヒアルロン液'], KR: ['Korean', 'Korea', '이니스프리 그린티 씨드 세럼'] };
+const productPrompt = t => { const { place, cur, home } = tripInfo(t), local = LOCAL_NAMES[t?.country]; return `You identify products that travellers in ${place} photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
 Reply with JSON only, in this shape:
 {"name": string, "spec": string, "detail": string, "category": "drug" | "food" | "fashion" | "home" | "stationery" | "toys" | "electronics" | "other", "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
-- name: the product name in its original language, as printed on the package or product page (brand first, e.g. "東京ばな奈 見ぃつけたっ", "肌ラボ 極潤 ヒアルロン液"), at most 80 characters. Do not translate it and do not add a translation in brackets: a Traditional Chinese translation is added separately.
+- name: ${local ? `the name it is sold under in ${local[1]}'s shops, in ${local[0]} as on the local package (brand first, e.g. "${local[2]}"). If the photo or page only shows an English or Chinese name (an export or overseas version), still give the ${local[0]} name of that same product (same type: a face wash stays a face wash); if you are not sure of its exact local name, write the brand as written locally plus a plain ${local[0]} description of what it is (e.g. "プリマヴィスタ 洗顔ジェル"), never the name of a different product; keep only brand names that are written in Latin letters locally` : 'the product name in its original language, as printed on the package or product page (brand first)'}, at most 80 characters. Do not translate it into Chinese and do not add a translation in brackets: a Traditional Chinese translation is added separately.
 - spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, mint), at most 30 characters; empty if unknown.
 - detail: one short Traditional Chinese line on what it is or what it is for, at most 60 characters.
 - category: drug for cosmetics, skincare, hair care, beauty tools, medicine, patches and supplements (drugstore goods); food for snacks, sweets, drinks, instant food and condiments; fashion for clothes, shoes, bags, wallets and accessories; home for kitchen and household goods; stationery for pens, notebooks and office goods; toys for toys, games, figures, character and idol goods; electronics for gadgets and appliances; other otherwise.
