@@ -55,7 +55,7 @@ for(const w of [320,390,768,1280]){
   ['placeform','#explore',async()=>{await pg.locator('#results [data-place]').first().click();await pg.click('#detail [data-place-edit]')}],
   ['stopform','#plan?day=1',async()=>{await pg.click('[data-plan-pick]');await pg.click('#detail [data-stop-new]')}],
   ['picker','#plan?day=1',async()=>{await pg.click('[data-plan-pick]')}],
-  ['route','#plan?day=1',async()=>{await pg.locator('[data-route-link]').nth(2).click();await pg.click('#routeGo');await pg.waitForSelector('#routeResults .notice');await pg.click('[data-route-ai]');await pg.waitForTimeout(500)}],
+  ['route','#plan?day=1',async()=>{await pg.locator('[data-route-link]').nth(2).click();await pg.click('#routeGo');await pg.waitForSelector('#routeResults [data-route-pick]');await pg.click('[data-route-ai]');await pg.waitForTimeout(500)}],
   ['daymenu','#plan?day=1',async()=>{await pg.click('.day-more summary');await pg.waitForTimeout(200)}],
   ['stopmenu','#plan?day=1',async()=>{await pg.locator('[data-stop-more]').last().click();await pg.waitForTimeout(200)}],
   ['daymap','#plan?day=1',async()=>{await pg.click('.day-more summary');await pg.click('[data-day-map]');await pg.waitForTimeout(600)}],
