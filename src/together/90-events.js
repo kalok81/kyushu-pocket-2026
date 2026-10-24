@@ -176,6 +176,9 @@
       // A chosen explore place fills an empty 購買地點 with its name and address.
       const chosen = item.placeId && item.placeId !== "-" && T().places.find((p) => p.id === item.placeId);
       if (chosen && !item.place) item.place = `${chosen.v[1]} ${chosen.v[3]}`.trim().slice(0, 200);
+      // every 購買地點 already placed (Google Maps check, or unchanged lines): save the pins now
+      const pins = knownPins(item.place);
+      if (pins) Object.assign(item, { pins, lat: pins[0].lat, lng: pins[0].lng, geoFor: item.place });
       if (state.shopEdit) {
         update("shopping", state.shopEdit, { ...item, ai: false });
         toast("已儲存");

@@ -176,14 +176,16 @@
     grip.addEventListener("pointercancel", up, { once: true });
   });
 
-  // 查全日交通: every leg without transport (or all of them, when asked), short walks worked out here and the rest by
-  // the AI in one request (Google offers no public transport routes for Japan to other sites).
+  // 查全日交通: every leg without transport (or all of them, when asked) in one request: walks under 1.5 km by Google
+  // Maps, the rest by the AI (Google offers no public transport routes for Japan to other sites).
   const placeForAi = (s) => {
     const p = pointOf(s);
     return { name: s.title || s.name, address: s.target || s.address || "", ...(p ? { lat: p.lat, lng: p.lng } : {}) };
   };
-  const walkText = (m) => `🚶 步行約 ${Math.max(3, Math.ceil((m * 1.3) / 75))} 分（約 ${Math.round((m * 1.3) / 50) * 50} 米）`;
-  const legText = (l) => `${l.steps.map(aiStep).join(" → ")}｜約 ${l.minutes} 分${l.fare ? ` · ${fareText(l)}` : ""}（AI 估算）`;
+  const legText = (l) =>
+    l.source === "google"
+      ? `🚶 步行 ${l.minutes} 分（${l.meters >= 1000 ? `${(l.meters / 1000).toFixed(1)} 公里` : `${l.meters} 米`}）｜約 ${l.minutes} 分（Google 地圖）`
+      : `${l.steps.map(aiStep).join(" → ")}｜約 ${l.minutes} 分${l.fare ? ` · ${fareText(l)}` : ""}（AI 估算）`;
   function dayLegs(day, all) {
     const list = stopsFor(day),
       gs = stopGroups(list),
@@ -196,44 +198,38 @@
     return legs;
   }
   async function fillRoutes(day, all = false) {
-    let legs = dayLegs(day, all);
+    const legs = dayLegs(day, all);
     if (!legs.length) {
       if (!dayLegs(day, true).length) return toast("最少要有兩個站點（或住宿）才可以查交通。");
       if (!(await UI.confirm("全部交通已經填好", { text: "要重新查詢全日的交通嗎？", ok: "重新查詢" }))) return;
       return fillRoutes(day, true);
     }
-    const info = $("#planToolsInfo"),
-      found = {};
-    for (const l of legs) {
-      const a = pointOf(l.from),
-        b = pointOf(l.to),
-        m = a && b ? window.Nearby.distance(a, b) : null;
-      if (m != null && m < 800) found[l.i] = walkText(m);
-    }
-    const ask = legs.filter((l) => !found[l.i]);
-    if (ask.length) {
-      const done = Kit.busy(info, { text: `AI 正在查詢 ${ask.length} 段交通…`, seconds: 10 + ask.length * 4 });
-      try {
-        const d = days[day - 1],
-          r = await window.Together.planDay({
-            mode: "routes",
-            date: isoDash(d),
-            weekday: d.weekday,
-            region: meta.destination || d.region,
-            currency: meta.currency || "JPY",
-            legs: ask.map((l) => ({ k: String(l.i), from: placeForAi(l.from), to: placeForAi(l.to), time: l.time })),
-          });
-        for (const l of r.legs) found[l.k] = legText(l);
-      } catch (e) {
-        toast(fnError(e, "未能查詢交通，請稍後再試。"));
-      } finally {
-        done();
+    const found = {},
+      done = Kit.busy($("#planToolsInfo"), { text: `正在查詢 ${legs.length} 段交通（步行用 Google 地圖，其餘由 AI 估算）…`, seconds: 10 + legs.length * 4 });
+    let ai = false;
+    try {
+      const d = days[day - 1],
+        r = await window.Together.planDay({
+          mode: "routes",
+          date: isoDash(d),
+          weekday: d.weekday,
+          region: meta.destination || d.region,
+          currency: meta.currency || "JPY",
+          legs: legs.map((l) => ({ k: String(l.i), from: placeForAi(l.from), to: placeForAi(l.to), time: l.time })),
+        });
+      for (const l of r.legs) {
+        found[l.k] = legText(l);
+        ai ||= l.source !== "google";
       }
+    } catch (e) {
+      toast(fnError(e, "未能查詢交通，請稍後再試。"));
+    } finally {
+      done();
     }
     const list = stopsFor(day),
       n = Object.keys(found).length;
     if (!n) return;
-    changeDay(day, list.map((s, i) => (found[i] ? { ...s, transport: found[i].slice(0, 500) } : s)), `已填入 ${n} 段交通${ask.length ? "（AI 估算，出發前請再確認）" : ""}`);
+    changeDay(day, list.map((s, i) => (found[i] ? { ...s, transport: found[i].slice(0, 500) } : s)), `已填入 ${n} 段交通${ai ? "（AI 估算的部分出發前請再確認）" : ""}`);
   }
 
   // ✨ AI 安排: order, times and transport for the whole day in one go, shown first and applied only when accepted.

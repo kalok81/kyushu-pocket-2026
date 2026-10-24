@@ -753,9 +753,22 @@ const metres = (a, b) => {
  const r = x => (x * Math.PI) / 180, dl = r(b.lat - a.lat), dg = r(b.lng - a.lng);
  return Math.round(2 * 6371e3 * Math.asin(Math.sqrt(Math.sin(dl / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dg / 2) ** 2)));
 };
+// Walking legs (under 1.5 km apart) come from Google Maps instead of the AI: real paths and times.
+async function googleWalk(a, b) {
+ const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': PLACES_API_KEY.value().trim(), 'X-Goog-FieldMask': 'routes.duration,routes.distanceMeters' },
+  body: JSON.stringify({ origin: { location: { latLng: { latitude: a.lat, longitude: a.lng } } }, destination: { location: { latLng: { latitude: b.lat, longitude: b.lng } } }, travelMode: 'WALK', units: 'METRIC' }),
+  signal: AbortSignal.timeout(15_000),
+ }).catch(() => null);
+ const r = res?.ok ? (await res.json()).routes?.[0] : null;
+ return r ? { minutes: Math.max(1, mins(r.duration)), meters: r.distanceMeters || 0 } : null;
+}
+const WALK_MAX = 1500;
+const walkLeg = (k, w) => ({ k, minutes: w.minutes, meters: w.meters, fare: null, confidence: 'high', source: 'google', steps: [{ mode: 'WALK', vehicle: '', line: '', from: '', to: '', minutes: w.minutes }] });
 const LEG_SHAPE = '{"k": string, "minutes": number, "fare": number or null, "confidence": "high" | "medium" | "low", "steps": [{"mode": "WALK" | "TRANSIT" | "TAXI" | "DRIVE", "vehicle": "SUBWAY" | "HEAVY_RAIL" | "HIGH_SPEED_TRAIN" | "BUS" | "TRAM" | "MONORAIL" | "FERRY" | "", "line": string, "from": string, "to": string, "minutes": number}]}';
 const LEG_RULES = cur => `- A leg is the way from the stop before to stop k. Use real line, station and stop names as written on local signs (Japanese in Japan, Korean in Korea); do not invent lines or stations. Walk when the places are under about 1 km apart. minutes: door to door including walking and waiting. fare: per adult in ${cur} (IC card fare), null if unknown or walking. confidence: high only if you know these exact lines run there.`;
-export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 120, maxInstances: 3 }, async req => {
+export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY, PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 120, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
  const d = req.data || {}, mode = d.mode;
@@ -769,11 +782,22 @@ export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true
  const date = /^\d{4}-\d{2}-\d{2}$/.test(d.date || '') ? d.date : '', where = text(d.region, 80), weekday = text(d.weekday, 10);
  const day = `${date} (${weekday})${where ? ` in ${where}` : ''}`;
  const placeLine = p => `${p.k}: ${placeText(p)}`;
- await useQuota(req.auth.uid, 'ai');
- let prompt;
+ // Google walking times for close legs (at most 12 per request, one maps use)
+ const walks = async pairs => {
+  const near = pairs.filter(([, a, b]) => metres(a, b) != null && metres(a, b) < WALK_MAX).slice(0, 12);
+  if (!near.length) return {};
+  await useQuota(req.auth.uid, 'maps');
+  const got = await Promise.all(near.map(([k, a, b]) => googleWalk(a, b).then(w => [k, w])));
+  return Object.fromEntries(got.filter(([, w]) => w).map(([k, w]) => [k, walkLeg(k, w)]));
+ };
+ let prompt, walked = {};
  if (mode === 'routes') {
-  const legs = (Array.isArray(d.legs) ? d.legs : []).slice(0, 25).map(l => ({ k: text(l.k, 12), from: point(l.from), to: point(l.to), time: text(l.time, 5) })).filter(l => l.k && l.from?.name && l.to?.name);
-  if (!legs.length) throw new HttpsError('invalid-argument', '沒有需要查詢的交通。');
+  const all = (Array.isArray(d.legs) ? d.legs : []).slice(0, 25).map(l => ({ k: text(l.k, 12), from: point(l.from), to: point(l.to), time: text(l.time, 5) })).filter(l => l.k && l.from?.name && l.to?.name);
+  if (!all.length) throw new HttpsError('invalid-argument', '沒有需要查詢的交通。');
+  walked = await walks(all.map(l => [l.k, l.from, l.to]));
+  const legs = all.filter(l => !walked[l.k]);
+  if (!legs.length) return { legs: Object.values(walked) };
+  await useQuota(req.auth.uid, 'ai');
   prompt = `You are a local transport expert helping Hong Kong travellers on ${day}.
 For each leg below give the one most practical way to go (usually public transport; walk if close; taxi only when nothing else is sensible).
 Legs:
@@ -782,6 +806,7 @@ Reply with JSON only: {"legs": [${LEG_SHAPE}]}
 ${LEG_RULES(cur)}`;
  } else if (mode === 'arrange') {
   if (stops.length < 2) throw new HttpsError('invalid-argument', '最少要有兩個站點。');
+  await useQuota(req.auth.uid, 'ai');
   prompt = `You plan a day of sightseeing for Hong Kong travellers on ${day}.
 Put the stops below in a sensible order and give each a visit time, so the day flows with little back-tracking, places are visited while open (mind the weekday and closing days), meals fall at meal times (lunch about 11:30–13:30, dinner about 18:00–20:00) and there is time to get between them.
 ${start ? `The day starts from ${placeText(start)}${stops[0]?.fixed && stops[0].time ? '' : ' at about 09:00'}.` : 'The day starts at about 09:00.'}${end ? `\nThe night is spent at ${placeText(end)}.` : ''}
@@ -798,6 +823,7 @@ ${LEG_RULES(cur)}`;
  } else {
   const cands = (Array.isArray(d.candidates) ? d.candidates : []).slice(0, 40).map(c => ({ k: text(c.k, 40), name: text(c.name, 80), area: text(c.area, 60), type: text(c.type, 40), note: text(c.note, 120), hours: text(c.hours, 200), saved: c.saved === true, km: typeof c.km === 'number' && Number.isFinite(c.km) ? Math.round(c.km * 10) / 10 : null })).filter(c => c.k && c.name);
   if (!cands.length) throw new HttpsError('invalid-argument', '沒有可以推薦的地點。');
+  await useQuota(req.auth.uid, 'ai');
   prompt = `You help Hong Kong travellers fill a day on ${day}.
 Already planned: ${stops.length ? stops.map(s => `${s.name}${s.time ? ` (${s.time})` : ''}${s.type ? ` [${s.type}]` : ''}`).join('; ') : 'nothing yet'}.
 From their own list of places below, pick up to 6 that fit this day best: close to the planned stops or the area, open that weekday, filling what is missing (e.g. lunch, dinner, a café break, a sight, souvenirs) and not repeating what is planned. Prefer starred places (saved) when they fit.
@@ -816,7 +842,7 @@ Reply with JSON only: {"picks": [{"k": string, "reason": string}], "advice": str
   fare: typeof l?.fare === 'number' && l.fare > 0 && l.fare < 1e6 ? { currency: cur, amount: Math.round(l.fare * 100) / 100 } : null,
   steps: (Array.isArray(l?.steps) ? l.steps : []).slice(0, 10).map(s => ({ mode: ['WALK', 'TRANSIT', 'TAXI', 'DRIVE'].includes(s?.mode) ? s.mode : 'TRANSIT', vehicle: text(s?.vehicle, 30), line: text(s?.line, 60), from: text(s?.from, 60), to: text(s?.to, 60), minutes: num(s?.minutes, 1440) })),
  })).filter(l => l.k && l.steps.length);
- if (mode === 'routes') return { legs };
+ if (mode === 'routes') return { legs: [...legs.filter(l => !walked[l.k]), ...Object.values(walked)] };
  if (mode === 'suggest') return { picks: (Array.isArray(r?.picks) ? r.picks : []).slice(0, 6).map(p => ({ k: text(String(p?.k ?? ''), 40), reason: text(p?.reason, 60) })).filter(p => p.k), advice: text(r?.advice, 200) };
  // arrange: every stop once (unknown keys dropped, forgotten ones kept at the end in their old order)
  const order = [...new Set((Array.isArray(r?.order) ? r.order : []).map(k => String(k)).filter(k => keys.has(k)))];
@@ -824,7 +850,10 @@ Reply with JSON only: {"picks": [{"k": string, "reason": string}], "advice": str
  const clock = /^\d{1,2}:\d{2}(\s*[–~\-－]\s*\d{1,2}:\d{2})?$/;
  const times = Object.fromEntries(Object.entries(r?.times && typeof r.times === 'object' ? r.times : {}).filter(([k, v]) => keys.has(k) && typeof v === 'string' && clock.test(v.trim())).map(([k, v]) => [k, v.trim().replace(/\s*[~\-－]\s*/, '–')]));
  const warnings = Object.fromEntries(Object.entries(r?.warnings && typeof r.warnings === 'object' ? r.warnings : {}).filter(([k, v]) => keys.has(k) && typeof v === 'string' && v.trim()).map(([k, v]) => [k, v.trim().slice(0, 80)]));
- return { order, times, legs, warnings, advice: text(r?.advice, 300) };
+ // close stops in the chosen order walk by Google's times
+ const at = Object.fromEntries(stops.map(s => [s.k, s]));
+ const near = await walks(order.slice(1).map((k, j) => [k, at[order[j]], at[k]]));
+ return { order, times, legs: [...legs.filter(l => !near[l.k]), ...Object.values(near)], warnings, advice: text(r?.advice, 300) };
 });
 
 // Names in another language (explore places, shopping items, expenses and their receipt lines) get a Traditional
@@ -879,7 +908,7 @@ cloudEvent('translateNames', async event => {
 const buyPrompt = (t, item, results) => `Hong Kong travellers on a trip to ${tripInfo(t).place} want to buy this item: ${JSON.stringify(item)}.
 From the web search results below, list where they can buy it at or near the destination of the trip.
 Reply with JSON only: {"places": [{"name": string, "why": string}], "note": string}
-- places: up to 4, best first (shops at main stations, airports and popular shopping areas first). name: the shop or counter name and its area or building as written locally, short enough to search on Google Maps (e.g. "ふくや 博多デイトス売店", "福岡空港 国内線 ANA FESTA"). why: at most 20 Traditional Chinese characters (e.g. "博多站內，營業至 21:00").
+- places: up to 6, best first (shops at main stations, airports and popular shopping areas first). name: the shop or counter name and its area or building as written locally, short enough to search on Google Maps (e.g. "ふくや 博多デイトス売店", "福岡空港 国内線 ANA FESTA"). why: at most 20 Traditional Chinese characters (e.g. "博多站內，營業至 21:00").
 - Only places the results support; do not invent shops. No places if the results show none near the destination.
 - note: at most 60 Traditional Chinese characters (Hong Kong usage) for anything important, e.g. that it is mainly sold elsewhere (北海道限定) or only at the airport; empty otherwise.
 Search results: ${JSON.stringify(results)}`;
@@ -891,7 +920,25 @@ This time there is no photo: the traveller typed ${JSON.stringify(typed)}. Ident
 - confidence: low if the results do not clearly show which product this is.
 - Also add "page": the url of the result that best shows this exact product with a picture (the maker's product page or a shop's product page; not a blog, list or search page); empty if none.
 Search results: ${JSON.stringify(results)}`;
-export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 90, maxInstances: 3 }, async req => {
+// Each shop the AI names is looked up on Google Maps near the trip: kept (with Google's name, address, position and
+// link) only when the place found shares a distinctive word with the AI's name — a word of the name that is not part
+// of the address, so an area (博多, 空港) alone never matches. Shops Google cannot find are dropped.
+const BUY_FIELDS = ['id', 'displayName', 'formattedAddress', 'location', 'googleMapsUri'].map(f => 'places.' + f).join(',');
+async function checkOnMaps(p, t) {
+ const c = t?.center, country = /^[A-Z]{2}$/.test(t?.country || '') ? t.country : '';
+ const r = await placesApi('places:searchText', BUY_FIELDS, {
+  textQuery: p.name, languageCode: langFor(country), maxResultCount: 1, ...(country ? { regionCode: country } : {}),
+  ...(Number.isFinite(c?.lat) && Number.isFinite(c?.lng) ? { locationBias: { circle: { center: { latitude: c.lat, longitude: c.lng }, radius: 50000 } } } : {}),
+ }).catch(() => null);
+ const g = r?.places?.[0];
+ if (!g?.displayName?.text) return null;
+ const n = x => String(x).toLowerCase().normalize('NFKC').replace(/[\s（）()【】「」・･,，、.。:：\-－−&＆’'!！?？]/g, '');
+ const name = n(g.displayName.text), address = n(g.formattedAddress || '');
+ const words = String(p.name).normalize('NFKC').split(/[\s（）()【】「」・･,，、/]+/).map(n).filter(w => w.length >= (/^[a-z0-9]+$/.test(w) ? 3 : 2));
+ if (!words.some(w => name.includes(w) && !address.includes(w))) return null;
+ return { id: g.id, name: g.displayName.text.slice(0, 100), address: String(g.formattedAddress || '').slice(0, 200), lat: g.location?.latitude ?? null, lng: g.location?.longitude ?? null, mapsUrl: String(g.googleMapsUri || '').slice(0, 300), why: p.why };
+}
+export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY, PLACES_API_KEY], memory: '256MiB', timeoutSeconds: 90, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
  const d = req.data || {}, text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
@@ -920,6 +967,8 @@ export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck
    if (photo) break;
   }
  }
- const places = (Array.isArray(r?.places) ? r.places : []).slice(0, 4).map(p => ({ name: text(p?.name, 100), why: text(p?.why, 40) })).filter(p => p.name);
- return { places, note: text(r?.note, 120), product, photo: photo && photo.length <= 400000 ? photo : null, sources: [...new Set([...results, ...about].slice(0, 3).map(x => new URL(x.url).hostname))] };
+ const named = (Array.isArray(r?.places) ? r.places : []).slice(0, 6).map(p => ({ name: text(p?.name, 100), why: text(p?.why, 40) })).filter(p => p.name);
+ const checked = await Promise.all(named.map(p => checkOnMaps(p, trip)));
+ const places = checked.filter((p, i) => p && checked.findIndex(q => q?.id === p.id) === i).slice(0, 4).map(({ id: _id, ...p }) => p);
+ return { places, dropped: named.length - checked.filter(Boolean).length, note: text(r?.note, 120), product, photo: photo && photo.length <= 400000 ? photo : null, sources: [...new Set([...results, ...about].slice(0, 3).map(x => new URL(x.url).hostname))] };
 });

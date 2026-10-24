@@ -217,6 +217,13 @@
     `<input name="place" maxlength="200" placeholder="店名、地址，或貼上 Google 地圖連結" aria-label="購買地點" value="${esc(t)}">`;
   // 購物 › AI 找購買地點: web search for where the item in the form is sold; fills empty address rows (adds rows as needed).
   // full (AI 按名稱填寫): also the product itself — a fuller name, spec, detail, category and usual price for empty fields.
+  // Positions already known for 購買地點 lines in the open form (the item's pins, and shops the AI found on Google
+  // Maps), so saving needs no new lookup when every line has one.
+  let buyPins = new Map();
+  function knownPins(place) {
+    const lines = String(place || "").split("\n").filter(Boolean);
+    return lines.length && lines.every((l) => buyPins.has(l)) ? lines.map((l) => buyPins.get(l)) : null;
+  }
   async function findBuyPlaces(full = false) {
     const f = $('[data-tg-form="shop"]'),
       info = $("#shopPlaceInfo"),
@@ -256,14 +263,16 @@
       }
       const rows = $("#shopPlaceRows"),
         have = new Set([...rows.querySelectorAll("input")].map((i) => i.value.trim()).filter(Boolean));
+      for (const p of r.places) if (Number.isFinite(p.lat)) buyPins.set(p.name, { lat: p.lat, lng: p.lng });
       for (const p of r.places.filter((p) => !have.has(p.name))) {
         const empty = [...rows.querySelectorAll("input")].find((i) => !i.value.trim());
         if (empty) empty.value = p.name;
         else if (rows.querySelectorAll("input").length < 6) rows.insertAdjacentHTML("beforeend", placeRow(p.name));
       }
+      const dropped = r.dropped ? `另有 ${r.dropped} 間在 Google 地圖找不到，已略去。` : "";
       info.textContent = r.places.length
-        ? `AI 建議：${r.places.map((p) => `${p.name}${p.why ? `（${p.why}）` : ""}`).join("；")}${r.note ? `。${r.note}` : ""}　來源：${r.sources.join("、")}`
-        : r.note || "網上找不到目的地有售的地方。";
+        ? `AI 建議（已用 Google 地圖核實）：${r.places.map((p) => `${p.name}${p.why ? `（${p.why}）` : ""}`).join("；")}。${r.note ? `${r.note}。` : ""}${dropped}來源：${r.sources.join("、")}`
+        : `${r.note || "網上找不到目的地有售的地方。"}${dropped}`;
     } catch (e) {
       info.textContent = fnError(e, "未能搜尋購買地點，請稍後再試。");
       if (full) fillStatus(fnError(e, "未能搜尋產品資料，請稍後再試。"), false);
@@ -321,6 +330,7 @@
   function openShopSheet(x = null) {
     state.shopEdit = x?.id || null;
     shopPhoto = x?.photo || null;
+    buyPins = new Map(x ? placesOf(x).map((t, i) => [t, pinOf(x, i)]).filter(([, p]) => p) : []);
     Kit.open(
       `${Kit.sheetHead(x ? "修改物品" : "加入購物清單")}${
         x
