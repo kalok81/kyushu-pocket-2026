@@ -38,6 +38,7 @@
     ref: String(s.ref || "").slice(0, 500),
     target: String(s.target || "").slice(0, 200),
     placeId: String(s.placeId || "").slice(0, 40),
+    ...(s.warn ? { warn: String(s.warn).slice(0, 80) } : {}),
     ...(s.hotelId ? { hotelId: String(s.hotelId).slice(0, 40) } : {}),
     ...(Number.isFinite(s.lat) && Number.isFinite(s.lng) ? { lat: s.lat, lng: s.lng } : {}),
   });
@@ -174,21 +175,83 @@
     target: `${p.v[1]} ${p.v[3]}`.trim(),
     placeId: p.id,
   });
-  function pickPlaceForPlan(day, slot = null) {
+  // at: insert before this stop index (the ＋ between two stops); later picks follow the previous one.
+  function pickPlaceForPlan(day, slot = null, at = null) {
     ppCat = "全部";
-    const s = slot != null ? stopsFor(day)[slot] : null;
+    ppAi = null;
+    const s = slot != null ? stopsFor(day)[slot] : null,
+      before = at != null ? stopsFor(day)[at] : null;
     openDialog(
-      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點（不在探索）", { icon: "plus", attrs: { "data-stop-new": true } })}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點">${Kit.chips(
-        ["全部", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
+      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : before ? `加在「${esc(before.title)}」之前` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點（不在探索）", { icon: "plus", attrs: { "data-stop-new": true } })}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點">${Kit.chips(
+        ["全部", ...(saved.size ? ["★ 收藏"] : []), "✨ AI 推薦", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
         { label: "分類" },
-      )}${s ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}"></div>`,
+      )}${s || before ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><p class="note pp-sort">收藏的地點排先，其餘按與這天站點的距離排列。</p><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}"></div>`,
     );
     ppResults();
   }
   const addBtn = (attrs) => Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs });
+  // Distance from a place to the day: the nearest stop already planned, else the day's area or hotel.
+  function dayDistance(day) {
+    const pts = stopsFor(day)
+      .map((s) => stopPoint(s))
+      .filter((p) => p && Number.isFinite(p.lat));
+    if (!pts.length) pts.push(dayPoint(day));
+    return (p) => {
+      const g = window.TRIP_GEO.places[p.id] || [];
+      const d = Math.min(...g.flatMap((x) => pts.filter(Boolean).map((q) => window.Nearby.distance(x, q))), Infinity);
+      return d;
+    };
+  }
+  const kmText = (d) => (Number.isFinite(d) ? (d < 1000 ? ` · ${Math.round(d / 10) * 10} 米` : ` · ${(d / 1000).toFixed(1)} 公里`) : "");
+  // ✨ AI 推薦: up to 6 explore places that fit the day (planDay suggest), with the reason.
+  let ppAi = null;
+  async function ppSuggest(box, day) {
+    const dist = dayDistance(day),
+      inPlan = new Set(stopsFor(day).map((s) => s.placeId)),
+      d = days[day - 1];
+    const cands = places
+      .filter((p) => !inPlan.has(p.id) && !p.v[9]?.includes("已閉店"))
+      .map((p) => ({ p, d: dist(p) - (saved.has(p.id) ? 3000 : 0) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 40);
+    if (!cands.length) return (box.innerHTML = '<p class="note">探索沒有可以推薦的地點。</p>');
+    box.innerHTML = Kit.progress({ text: "AI 正在按這天的行程、距離及營業時間挑選…", seconds: 15 });
+    try {
+      const r = await window.Together.planDay({
+        mode: "suggest",
+        date: isoDash(d),
+        weekday: d.weekday,
+        region: d.region,
+        currency: meta.currency || "JPY",
+        stops: stopsFor(day).map((s, i) => ({ k: String(i), name: s.title, time: s.time, type: placeOf(s)?.v[2] || "" })),
+        candidates: cands.map(({ p }) => ({ k: p.id, name: p.v[1], area: areaOf(p) || p.v[0], type: p.v[2], note: String(p.v[4] || "").slice(0, 120), hours: String(p.v[5] || "").slice(0, 200), saved: saved.has(p.id), km: Number.isFinite(dist(p)) ? dist(p) / 1000 : null })),
+      });
+      ppAi = { day, picks: r.picks.filter((x) => places.some((p) => p.id === x.k)), advice: r.advice };
+    } catch (e) {
+      console.error(e);
+      ppAi = { day, picks: [], error: fnError(e, "AI 未能推薦，請稍後再試。") };
+    }
+    if (ppCat === "✨ AI 推薦") ppResults();
+  }
   function ppResults() {
     const box = $("#ppList");
     if (!box) return;
+    if (ppCat === "✨ AI 推薦") {
+      const day = Number(box.dataset.day);
+      if (!ppAi || ppAi.day !== day) return ppSuggest(box, day);
+      const inPlan = new Set(stopsFor(day).map((s) => s.placeId)),
+        dist = dayDistance(day);
+      box.innerHTML = ppAi.error
+        ? `<p class="note">${esc(ppAi.error)}</p>`
+        : `${ppAi.advice ? `<p class="note">${icon("sparkles")} ${esc(ppAi.advice)}</p>` : ""}${ppAi.picks
+            .map(({ k, reason }) => {
+              const p = places.find((x) => x.id === k);
+              return `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(dist(p))}</small>${reason ? `<small class="pp-reason">${esc(reason)}</small>` : ""}</div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`;
+            })
+            .join("") || '<p class="note">AI 沒有合適的推薦。</p>'}`;
+      box.insertAdjacentHTML("beforeend", Kit.btn("再推薦一次", { size: "sm", icon: "redo", attrs: { "data-pp-ai-again": true } }));
+      return;
+    }
     const day = Number(box.dataset.day),
       q = ($("#ppSearch")?.value || "").trim().toLocaleLowerCase(),
       inPlan = new Set(
@@ -197,21 +260,23 @@
           .filter(Boolean),
       );
     const hs =
-        ["全部", "住宿"].includes(ppCat)
+        (ppCat === "全部" && !q ? false : ["全部", "住宿"].includes(ppCat))
           ? [...lists().hotels]
               .filter((h) => !q || `${h.name} ${h.address}`.toLocaleLowerCase().includes(q))
               .sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)))
           : [],
       hotelIn = stopsFor(day).reduce((m, s) => (s.hotelId ? m.set(s.hotelId, (m.get(s.hotelId) || 0) + 1) : m), new Map());
+    const dist = dayDistance(day),
+      far = new Map(places.map((p) => [p.id, dist(p)]));
     const ps = ["住宿", "購物清單"].includes(ppCat)
       ? []
       : places
           .filter(
             (p) =>
-              (ppCat === "全部" || p.cats.includes(ppCat) || (ppCat === "商店" && giftShop(p))) &&
-              (!q || [p.v[1], p.v[0], areaOf(p), p.v[4], p.v[2]].join(" ").toLocaleLowerCase().includes(q)),
+              (ppCat === "全部" || (ppCat === "★ 收藏" && saved.has(p.id)) || p.cats.includes(ppCat) || (ppCat === "商店" && giftShop(p))) &&
+              (!q || [p.v[1], p.v[0], areaOf(p), p.v[4], p.v[2], p.zh].join(" ").toLocaleLowerCase().includes(q)),
           )
-          .sort((a, b) => saved.has(b.id) - saved.has(a.id));
+          .sort((a, b) => saved.has(b.id) - saved.has(a.id) || far.get(a.id) - far.get(b.id));
     const hotelRows = hs
       .map(
         (h) =>
@@ -239,7 +304,7 @@
         .slice(0, 40)
         .map(
           (p) =>
-            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${p.v[4] ? ` · ${esc(p.v[4].slice(0, 40))}` : ""}</small></div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
+            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(far.get(p.id))}${p.v[2] ? ` · ${esc(p.v[2])}` : ""}</small></div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
         )
         .join("")}${ps.length > 40 ? `<p class="note">還有 ${ps.length - 40} 個，請輸入更多字縮窄搜尋。</p>` : ""}`,
     );
@@ -266,6 +331,11 @@
     if (box.dataset.slot !== "") {
       const at = slotEnd(list, Number(box.dataset.slot));
       savePlan(day, [...list.slice(0, at + 1), make(list[at].time), ...list.slice(at + 1)]);
+    } else if (box.dataset.at !== "") {
+      // Between two stops: the stop after it now comes from somewhere else, so its transport is cleared.
+      const at = Number(box.dataset.at);
+      savePlan(day, legsChanged(list, [...list.slice(0, at), make(""), ...list.slice(at)]));
+      box.dataset.at = at + 1;
     } else savePlan(day, insertByTime(list, make(($("#ppTime")?.value || "").trim())));
     toast(`已加入 D${day}：${spot || hotel ? p.name : p.v[1]}`);
     ppResults();
@@ -318,7 +388,7 @@
         { label: "刪除", icon: "trash", danger: true, attrs: { "data-stop-delete": i } },
       ],
       { label: `編輯「${s.title}」`, attrs: { "data-stop-more": i } },
-    )}</div><h3>${esc(s.title)}${zhLine(placeOk ? places.find((p) => p.id === s.placeId).zh : "")}</h3>${s.detail ? `<p>${esc(s.detail)}</p>` : ""}${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}<div class="links">${placeOk ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": s.placeId } }) : ""}${s.hotelId ? Kit.btn("住宿資料", { size: "sm", href: "#hotels" }) : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(s.ref)
+    )}</div><h3>${esc(s.title)}${zhLine(placeOk ? places.find((p) => p.id === s.placeId).zh : "")}</h3>${s.warn ? `<p class="stop-warn">${icon("clock")}<span>${esc(s.warn)}</span></p>` : ""}${s.detail ? `<p>${esc(s.detail)}</p>` : ""}${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}<div class="links">${placeOk ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": s.placeId } }) : ""}${s.hotelId ? Kit.btn("住宿資料", { size: "sm", href: "#hotels" }) : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(s.ref)
       .map((u) => link(u, "參考網站"))
       .join("")}</div></div>`;
   }
@@ -336,11 +406,11 @@
         edit?.stops?.length && { label: "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
       ],
       { label: "這天的更多操作", cls: "day-more" },
-    )}</div>${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
+    )}</div>${stops.length ? planTools(stops) : ""}${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
       stopGroups(stops)
         .map(
           (g, n, all) =>
-            `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}</div><div class="stop-alts">${g
+            `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}" data-group="${n}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}${all.length > 1 ? `<button type="button" class="stop-grip" aria-label="拖動調整「${esc(g[0].s.title)}」的次序">${icon("grip")}</button>` : ""}</div><div class="stop-alts">${g
               .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last))
               .join("")}</div></article>`,
         )

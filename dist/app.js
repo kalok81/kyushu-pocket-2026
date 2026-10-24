@@ -705,6 +705,7 @@ window.startTrip = (meta = {}) => {
     ref: String(s.ref || "").slice(0, 500),
     target: String(s.target || "").slice(0, 200),
     placeId: String(s.placeId || "").slice(0, 40),
+    ...(s.warn ? { warn: String(s.warn).slice(0, 80) } : {}),
     ...(s.hotelId ? { hotelId: String(s.hotelId).slice(0, 40) } : {}),
     ...(Number.isFinite(s.lat) && Number.isFinite(s.lng) ? { lat: s.lat, lng: s.lng } : {}),
   });
@@ -841,21 +842,83 @@ window.startTrip = (meta = {}) => {
     target: `${p.v[1]} ${p.v[3]}`.trim(),
     placeId: p.id,
   });
-  function pickPlaceForPlan(day, slot = null) {
+  // at: insert before this stop index (the ＋ between two stops); later picks follow the previous one.
+  function pickPlaceForPlan(day, slot = null, at = null) {
     ppCat = "全部";
-    const s = slot != null ? stopsFor(day)[slot] : null;
+    ppAi = null;
+    const s = slot != null ? stopsFor(day)[slot] : null,
+      before = at != null ? stopsFor(day)[at] : null;
     openDialog(
-      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點（不在探索）", { icon: "plus", attrs: { "data-stop-new": true } })}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點">${Kit.chips(
-        ["全部", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
+      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : before ? `加在「${esc(before.title)}」之前` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p>${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點（不在探索）", { icon: "plus", attrs: { "data-stop-new": true } })}<div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點">${Kit.chips(
+        ["全部", ...(saved.size ? ["★ 收藏"] : []), "✨ AI 推薦", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
         { label: "分類" },
-      )}${s ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}"></div>`,
+      )}${s || before ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><p class="note pp-sort">收藏的地點排先，其餘按與這天站點的距離排列。</p><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}"></div>`,
     );
     ppResults();
   }
   const addBtn = (attrs) => Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs });
+  // Distance from a place to the day: the nearest stop already planned, else the day's area or hotel.
+  function dayDistance(day) {
+    const pts = stopsFor(day)
+      .map((s) => stopPoint(s))
+      .filter((p) => p && Number.isFinite(p.lat));
+    if (!pts.length) pts.push(dayPoint(day));
+    return (p) => {
+      const g = window.TRIP_GEO.places[p.id] || [];
+      const d = Math.min(...g.flatMap((x) => pts.filter(Boolean).map((q) => window.Nearby.distance(x, q))), Infinity);
+      return d;
+    };
+  }
+  const kmText = (d) => (Number.isFinite(d) ? (d < 1000 ? ` · ${Math.round(d / 10) * 10} 米` : ` · ${(d / 1000).toFixed(1)} 公里`) : "");
+  // ✨ AI 推薦: up to 6 explore places that fit the day (planDay suggest), with the reason.
+  let ppAi = null;
+  async function ppSuggest(box, day) {
+    const dist = dayDistance(day),
+      inPlan = new Set(stopsFor(day).map((s) => s.placeId)),
+      d = days[day - 1];
+    const cands = places
+      .filter((p) => !inPlan.has(p.id) && !p.v[9]?.includes("已閉店"))
+      .map((p) => ({ p, d: dist(p) - (saved.has(p.id) ? 3000 : 0) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 40);
+    if (!cands.length) return (box.innerHTML = '<p class="note">探索沒有可以推薦的地點。</p>');
+    box.innerHTML = Kit.progress({ text: "AI 正在按這天的行程、距離及營業時間挑選…", seconds: 15 });
+    try {
+      const r = await window.Together.planDay({
+        mode: "suggest",
+        date: isoDash(d),
+        weekday: d.weekday,
+        region: d.region,
+        currency: meta.currency || "JPY",
+        stops: stopsFor(day).map((s, i) => ({ k: String(i), name: s.title, time: s.time, type: placeOf(s)?.v[2] || "" })),
+        candidates: cands.map(({ p }) => ({ k: p.id, name: p.v[1], area: areaOf(p) || p.v[0], type: p.v[2], note: String(p.v[4] || "").slice(0, 120), hours: String(p.v[5] || "").slice(0, 200), saved: saved.has(p.id), km: Number.isFinite(dist(p)) ? dist(p) / 1000 : null })),
+      });
+      ppAi = { day, picks: r.picks.filter((x) => places.some((p) => p.id === x.k)), advice: r.advice };
+    } catch (e) {
+      console.error(e);
+      ppAi = { day, picks: [], error: fnError(e, "AI 未能推薦，請稍後再試。") };
+    }
+    if (ppCat === "✨ AI 推薦") ppResults();
+  }
   function ppResults() {
     const box = $("#ppList");
     if (!box) return;
+    if (ppCat === "✨ AI 推薦") {
+      const day = Number(box.dataset.day);
+      if (!ppAi || ppAi.day !== day) return ppSuggest(box, day);
+      const inPlan = new Set(stopsFor(day).map((s) => s.placeId)),
+        dist = dayDistance(day);
+      box.innerHTML = ppAi.error
+        ? `<p class="note">${esc(ppAi.error)}</p>`
+        : `${ppAi.advice ? `<p class="note">${icon("sparkles")} ${esc(ppAi.advice)}</p>` : ""}${ppAi.picks
+            .map(({ k, reason }) => {
+              const p = places.find((x) => x.id === k);
+              return `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(dist(p))}</small>${reason ? `<small class="pp-reason">${esc(reason)}</small>` : ""}</div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`;
+            })
+            .join("") || '<p class="note">AI 沒有合適的推薦。</p>'}`;
+      box.insertAdjacentHTML("beforeend", Kit.btn("再推薦一次", { size: "sm", icon: "redo", attrs: { "data-pp-ai-again": true } }));
+      return;
+    }
     const day = Number(box.dataset.day),
       q = ($("#ppSearch")?.value || "").trim().toLocaleLowerCase(),
       inPlan = new Set(
@@ -864,21 +927,23 @@ window.startTrip = (meta = {}) => {
           .filter(Boolean),
       );
     const hs =
-        ["全部", "住宿"].includes(ppCat)
+        (ppCat === "全部" && !q ? false : ["全部", "住宿"].includes(ppCat))
           ? [...lists().hotels]
               .filter((h) => !q || `${h.name} ${h.address}`.toLocaleLowerCase().includes(q))
               .sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)))
           : [],
       hotelIn = stopsFor(day).reduce((m, s) => (s.hotelId ? m.set(s.hotelId, (m.get(s.hotelId) || 0) + 1) : m), new Map());
+    const dist = dayDistance(day),
+      far = new Map(places.map((p) => [p.id, dist(p)]));
     const ps = ["住宿", "購物清單"].includes(ppCat)
       ? []
       : places
           .filter(
             (p) =>
-              (ppCat === "全部" || p.cats.includes(ppCat) || (ppCat === "商店" && giftShop(p))) &&
-              (!q || [p.v[1], p.v[0], areaOf(p), p.v[4], p.v[2]].join(" ").toLocaleLowerCase().includes(q)),
+              (ppCat === "全部" || (ppCat === "★ 收藏" && saved.has(p.id)) || p.cats.includes(ppCat) || (ppCat === "商店" && giftShop(p))) &&
+              (!q || [p.v[1], p.v[0], areaOf(p), p.v[4], p.v[2], p.zh].join(" ").toLocaleLowerCase().includes(q)),
           )
-          .sort((a, b) => saved.has(b.id) - saved.has(a.id));
+          .sort((a, b) => saved.has(b.id) - saved.has(a.id) || far.get(a.id) - far.get(b.id));
     const hotelRows = hs
       .map(
         (h) =>
@@ -906,7 +971,7 @@ window.startTrip = (meta = {}) => {
         .slice(0, 40)
         .map(
           (p) =>
-            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${p.v[4] ? ` · ${esc(p.v[4].slice(0, 40))}` : ""}</small></div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
+            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(far.get(p.id))}${p.v[2] ? ` · ${esc(p.v[2])}` : ""}</small></div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
         )
         .join("")}${ps.length > 40 ? `<p class="note">還有 ${ps.length - 40} 個，請輸入更多字縮窄搜尋。</p>` : ""}`,
     );
@@ -933,6 +998,11 @@ window.startTrip = (meta = {}) => {
     if (box.dataset.slot !== "") {
       const at = slotEnd(list, Number(box.dataset.slot));
       savePlan(day, [...list.slice(0, at + 1), make(list[at].time), ...list.slice(at + 1)]);
+    } else if (box.dataset.at !== "") {
+      // Between two stops: the stop after it now comes from somewhere else, so its transport is cleared.
+      const at = Number(box.dataset.at);
+      savePlan(day, legsChanged(list, [...list.slice(0, at), make(""), ...list.slice(at)]));
+      box.dataset.at = at + 1;
     } else savePlan(day, insertByTime(list, make(($("#ppTime")?.value || "").trim())));
     toast(`已加入 D${day}：${spot || hotel ? p.name : p.v[1]}`);
     ppResults();
@@ -985,7 +1055,7 @@ window.startTrip = (meta = {}) => {
         { label: "刪除", icon: "trash", danger: true, attrs: { "data-stop-delete": i } },
       ],
       { label: `編輯「${s.title}」`, attrs: { "data-stop-more": i } },
-    )}</div><h3>${esc(s.title)}${zhLine(placeOk ? places.find((p) => p.id === s.placeId).zh : "")}</h3>${s.detail ? `<p>${esc(s.detail)}</p>` : ""}${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}<div class="links">${placeOk ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": s.placeId } }) : ""}${s.hotelId ? Kit.btn("住宿資料", { size: "sm", href: "#hotels" }) : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(s.ref)
+    )}</div><h3>${esc(s.title)}${zhLine(placeOk ? places.find((p) => p.id === s.placeId).zh : "")}</h3>${s.warn ? `<p class="stop-warn">${icon("clock")}<span>${esc(s.warn)}</span></p>` : ""}${s.detail ? `<p>${esc(s.detail)}</p>` : ""}${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}<div class="links">${placeOk ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": s.placeId } }) : ""}${s.hotelId ? Kit.btn("住宿資料", { size: "sm", href: "#hotels" }) : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(s.ref)
       .map((u) => link(u, "參考網站"))
       .join("")}</div></div>`;
   }
@@ -1003,11 +1073,11 @@ window.startTrip = (meta = {}) => {
         edit?.stops?.length && { label: "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
       ],
       { label: "這天的更多操作", cls: "day-more" },
-    )}</div>${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
+    )}</div>${stops.length ? planTools(stops) : ""}${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
       stopGroups(stops)
         .map(
           (g, n, all) =>
-            `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}</div><div class="stop-alts">${g
+            `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}" data-group="${n}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}${all.length > 1 ? `<button type="button" class="stop-grip" aria-label="拖動調整「${esc(g[0].s.title)}」的次序">${icon("grip")}</button>` : ""}</div><div class="stop-alts">${g
               .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last))
               .join("")}</div></article>`,
         )
@@ -1174,7 +1244,7 @@ window.startTrip = (meta = {}) => {
       return total ? `${total.trim()} · ${steps.trim()}` : String(t);
     };
     const lines = next.filter(({ s }) => s.transport).map(({ s }) => `<span class="route-line">${multi ? `${esc(s.title)}：` : ""}${esc(short(s.transport))}</span>`);
-    return `<div class="stop-link"><div></div><button type="button" class="route-dot${lines.length ? " has-route" : ""}" data-route-link="${n}" aria-label="${prev ? esc(prev[0].s.title) : "酒店"} 至 ${esc(next[0].s.title)} 的交通"><i aria-hidden="true"></i><span>${lines.length ? lines.join("") : `${icon(prev ? "train" : "bed")}${prev ? "查交通" : "由酒店出發 · 查交通"}`}</span></button></div>`;
+    return `<div class="stop-link"><div></div><button type="button" class="route-dot${lines.length ? " has-route" : ""}" data-route-link="${n}" aria-label="${prev ? esc(prev[0].s.title) : "酒店"} 至 ${esc(next[0].s.title)} 的交通"><i aria-hidden="true"></i><span>${lines.length ? lines.join("") : `${icon(prev ? "train" : "bed")}${prev ? "查交通" : "由酒店出發 · 查交通"}`}</span></button>${Kit.btn("在這裡加入地點", { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "link-add", attrs: { "data-plan-insert": n } })}</div>`;
   }
   function routeDialog(day, i, fromGroup = null, toGroup = null) {
     const list = stopsFor(day),
@@ -1352,6 +1422,351 @@ window.startTrip = (meta = {}) => {
         .querySelectorAll(".route-option")
         .forEach((o, k) => o.classList.toggle("picked", k === Number(pick.dataset.routePick)));
     }
+  });
+  // ---- 行程 tools: order by distance, drag to reorder, every leg's transport at once, AI arrangement and times ----
+  // Times and transport follow the order: a stop whose previous stop changed loses its transport (and AI warning),
+  // and a reordered day that had times gets them worked out again. Each change can be undone from the snack bar.
+  const placeOf = (s) => (s.placeId && places.find((p) => p.id === s.placeId)) || null;
+  const pointOf = (s) => {
+    const p = s && stopPoint(s);
+    return p && Number.isFinite(p.lat) ? p : null;
+  };
+  const stopKey = (s) => s && (s.placeId || s.hotelId || s.title);
+  // The hotel the day starts from (last night's) and the one it ends at.
+  const hotelNamed = (name) => name && lists().hotels.find((h) => h.name === name);
+  const dayStartHotel = (day) => hotelNamed(days[day - 2]?.hotel);
+  const dayEndHotel = (day) => hotelNamed(days[day - 1]?.hotel);
+
+  function legsChanged(before, after) {
+    const prevOf = (list) => {
+      const m = new Map();
+      stopGroups(list).forEach((g, n, gs) => g.forEach(({ s }) => m.set(s, n ? stopKey(gs[n - 1][0].s) : null)));
+      return m;
+    };
+    const was = new Map();
+    stopGroups(before).forEach((g, n, gs) => g.forEach(({ s }) => was.set(stopKey(s), n ? stopKey(gs[n - 1][0].s) : null)));
+    const now = prevOf(after);
+    return after.map((s) => (was.has(stopKey(s)) && was.get(stopKey(s)) === now.get(s) ? s : { ...s, transport: "", warn: "" }));
+  }
+
+  // Minutes planned at a stop: its time range, else a usual visit length for its kind of place.
+  function stayOf(s) {
+    const m = String(s.time || "").match(/(\d{1,2}):(\d{2})\s*[–~\-－至到]+\s*(\d{1,2}):(\d{2})/);
+    if (m) {
+      const d = Number(m[3]) * 60 + Number(m[4]) - (Number(m[1]) * 60 + Number(m[2]));
+      if (d > 0) return d;
+    }
+    if (s.hotelId) return 0;
+    const p = placeOf(s),
+      t = `${p?.v[2] || ""} ${p?.cats.join(" ") || ""} ${s.area || ""}`;
+    if (/咖啡|甜品|cafe|茶|雪糕|布甸/i.test(t)) return 40;
+    if (/餐廳|拉麵|食|居酒屋|燒肉|壽司|鍋|麵/.test(t)) return 60;
+    if (/商店|購物|百貨|藥妝|手信/.test(t)) return 45;
+    if (/景點|溫泉|公園|神社|寺|博物館|美術館/.test(t)) return 90;
+    return 60;
+  }
+  // Minutes to get to a stop: its saved transport ("約 14 分"), else a guess from the distance.
+  function legMinutes(prev, s) {
+    const m = String(s.transport || "").match(/｜約\s*(\d+)\s*分/) || String(s.transport || "").match(/約\s*(\d+)\s*分/);
+    if (m) return Number(m[1]);
+    const a = pointOf(prev),
+      b = pointOf(s);
+    if (!a || !b) return 20;
+    const d = window.Nearby.distance(a, b);
+    return d < 1000 ? Math.max(3, Math.ceil((d * 1.3) / 75)) : Math.round(15 + (d / 1000) * 2.5);
+  }
+  const hm = (t) => `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
+  function retimed(list) {
+    const out = [...list];
+    let t = startMinute(list[0]?.time) ?? 9 * 60;
+    stopGroups(list).forEach((g, n, gs) => {
+      if (n) t = Math.ceil((t + legMinutes(gs[n - 1][0].s, g[0].s)) / 5) * 5;
+      const stay = Math.max(...g.map(({ s }) => stayOf(s)));
+      for (const { s, i } of g) out[i] = { ...s, time: stay ? `${hm(t)}–${hm(t + stay)}` : hm(t) };
+      t += stay;
+    });
+    return out;
+  }
+  const hasTimes = (list) => list.some((s) => startMinute(s.time) != null);
+  function changeDay(day, after, text) {
+    const before = stopsFor(day);
+    savePlan(day, after);
+    Kit.snack(text, { action: "復原" }).then((undo) => undo && savePlan(day, before));
+  }
+
+  // 排順路: nearest stop next, then 2-opt, from the hotel the day starts at (or the first stop) to tonight's hotel.
+  // Time slots with several choices move together; stops without a position stay at the end.
+  function orderByDistance(day) {
+    const before = stopsFor(day),
+      gs = stopGroups(before);
+    const head = gs[0]?.[0].s.hotelId || !dayStartHotel(day) ? [gs.shift()] : [];
+    const tail = gs.length && gs.at(-1)[0].s.hotelId ? [gs.pop()] : [];
+    const free = gs.filter((g) => pointOf(g[0].s)),
+      lost = gs.filter((g) => !pointOf(g[0].s));
+    if (free.length < 2) return toast("站點太少或未有位置，未能排順路。");
+    const startH = dayStartHotel(day),
+      endH = tail.length ? null : dayEndHotel(day);
+    const S = head.length ? pointOf(head[0][0].s) : startH && Number.isFinite(startH.lat) ? startH : null,
+      E = tail.length ? pointOf(tail[0][0].s) : endH && Number.isFinite(endH.lat) ? endH : null;
+    const P = free.map((g) => pointOf(g[0].s)),
+      dist = (a, b) => (a && b ? window.Nearby.distance(a, b) : 0);
+    const cost = (o) => dist(S, P[o[0]]) + o.slice(1).reduce((t, k, j) => t + dist(P[o[j]], P[k]), 0) + dist(P[o.at(-1)], E);
+    // Nearest neighbour from the start
+    const left = new Set(P.keys()),
+      order = [];
+    let at = S || P[0];
+    while (left.size) {
+      const k = [...left].sort((a, b) => dist(at, P[a]) - dist(at, P[b]))[0];
+      order.push(k);
+      left.delete(k);
+      at = P[k];
+    }
+    // 2-opt: reverse stretches while it shortens the day
+    for (let better = true, rounds = 0; better && rounds < 50; rounds++) {
+      better = false;
+      for (let i = 0; i < order.length - 1; i++)
+        for (let j = i + 1; j < order.length; j++) {
+          const o = [...order.slice(0, i), ...order.slice(i, j + 1).reverse(), ...order.slice(j + 1)];
+          if (cost(o) + 1 < cost(order)) {
+            order.splice(0, order.length, ...o);
+            better = true;
+          }
+        }
+    }
+    const after = [...head, ...order.map((k) => free[k]), ...lost, ...tail].flat().map((x) => x.s);
+    if (after.every((s, i) => s === before[i])) return toast("現在的次序已經最順路。");
+    const fixed = legsChanged(before, after);
+    changeDay(day, hasTimes(before) ? retimed(fixed) : fixed, hasTimes(before) ? "已按距離排順路，並重新推算時間" : "已按距離排順路");
+  }
+
+  // Drag a time slot by its handle to a new place in the day.
+  function moveGroup(day, from, to) {
+    const before = stopsFor(day),
+      gs = stopGroups(before),
+      [g] = gs.splice(from, 1);
+    gs.splice(to, 0, g);
+    const after = legsChanged(before, gs.flat().map((x) => x.s));
+    changeDay(day, hasTimes(before) ? retimed(after) : after, hasTimes(before) ? "已調整次序，並重新推算時間" : "已調整次序");
+  }
+  document.addEventListener("pointerdown", (e) => {
+    const grip = e.target.closest(".stop-grip");
+    if (!grip || e.button > 0) return;
+    e.preventDefault();
+    const card = grip.closest("article.stop"),
+      items = [...card.parentElement.querySelectorAll(":scope > article.stop")],
+      from = items.indexOf(card),
+      y0 = e.clientY,
+      s0 = scrollY;
+    let to = from,
+      lastY = y0,
+      timer = 0;
+    card.classList.add("dragging");
+    grip.setPointerCapture(e.pointerId);
+    const place = () => {
+      card.style.transform = `translateY(${lastY - y0 + scrollY - s0}px)`;
+      const r = card.getBoundingClientRect(),
+        mid = (r.top + r.bottom) / 2;
+      to = items.filter((x) => x !== card).filter((x) => {
+        const q = x.getBoundingClientRect();
+        return mid > (q.top + q.bottom) / 2;
+      }).length;
+      items.forEach((x) => x.classList.remove("drop-before", "drop-after"));
+      const rest = items.filter((x) => x !== card);
+      if (to !== from) to < rest.length ? rest[to].classList.add("drop-before") : rest.at(-1).classList.add("drop-after");
+    };
+    // Scroll while the finger is near the top or the bottom bar
+    const edge = () => {
+      const dy = lastY < 90 ? -14 : lastY > innerHeight - 130 ? 14 : 0;
+      if (dy) {
+        scrollBy(0, dy);
+        place();
+      }
+      timer = requestAnimationFrame(edge);
+    };
+    timer = requestAnimationFrame(edge);
+    const move = (ev) => {
+      lastY = ev.clientY;
+      place();
+    };
+    const up = () => {
+      cancelAnimationFrame(timer);
+      grip.removeEventListener("pointermove", move);
+      items.forEach((x) => x.classList.remove("drop-before", "drop-after"));
+      card.classList.remove("dragging");
+      card.style.transform = "";
+      if (to !== from) moveGroup(selectedDay, from, to);
+    };
+    grip.addEventListener("pointermove", move);
+    grip.addEventListener("pointerup", up, { once: true });
+    grip.addEventListener("pointercancel", up, { once: true });
+  });
+
+  // 查全日交通: every leg without transport (or all of them, when asked), short walks worked out here and the rest by
+  // the AI in one request (Google offers no public transport routes for Japan to other sites).
+  const placeForAi = (s) => {
+    const p = pointOf(s);
+    return { name: s.title || s.name, address: s.target || s.address || "", ...(p ? { lat: p.lat, lng: p.lng } : {}) };
+  };
+  const walkText = (m) => `🚶 步行約 ${Math.max(3, Math.ceil((m * 1.3) / 75))} 分（約 ${Math.round((m * 1.3) / 50) * 50} 米）`;
+  const legText = (l) => `${l.steps.map(aiStep).join(" → ")}｜約 ${l.minutes} 分${l.fare ? ` · ${fareText(l)}` : ""}（AI 估算）`;
+  function dayLegs(day, all) {
+    const list = stopsFor(day),
+      gs = stopGroups(list),
+      start = !gs[0]?.[0].s.hotelId && dayStartHotel(day);
+    const legs = [];
+    gs.forEach((g, n) => {
+      const from = n ? gs[n - 1][0].s : start ? { title: start.name, target: `${start.name} ${start.address || ""}`.trim(), ...(Number.isFinite(start.lat) ? { lat: start.lat, lng: start.lng } : {}) } : null;
+      if (from) for (const { s, i } of g) if (all || !s.transport) legs.push({ i, from, to: s, time: endClock(from.time) });
+    });
+    return legs;
+  }
+  async function fillRoutes(day, all = false) {
+    let legs = dayLegs(day, all);
+    if (!legs.length) {
+      if (!dayLegs(day, true).length) return toast("最少要有兩個站點（或住宿）才可以查交通。");
+      if (!(await UI.confirm("全部交通已經填好", { text: "要重新查詢全日的交通嗎？", ok: "重新查詢" }))) return;
+      return fillRoutes(day, true);
+    }
+    const info = $("#planToolsInfo"),
+      found = {};
+    for (const l of legs) {
+      const a = pointOf(l.from),
+        b = pointOf(l.to),
+        m = a && b ? window.Nearby.distance(a, b) : null;
+      if (m != null && m < 800) found[l.i] = walkText(m);
+    }
+    const ask = legs.filter((l) => !found[l.i]);
+    if (ask.length) {
+      const done = Kit.busy(info, { text: `AI 正在查詢 ${ask.length} 段交通…`, seconds: 10 + ask.length * 4 });
+      try {
+        const d = days[day - 1],
+          r = await window.Together.planDay({
+            mode: "routes",
+            date: isoDash(d),
+            weekday: d.weekday,
+            region: meta.destination || d.region,
+            currency: meta.currency || "JPY",
+            legs: ask.map((l) => ({ k: String(l.i), from: placeForAi(l.from), to: placeForAi(l.to), time: l.time })),
+          });
+        for (const l of r.legs) found[l.k] = legText(l);
+      } catch (e) {
+        toast(fnError(e, "未能查詢交通，請稍後再試。"));
+      } finally {
+        done();
+      }
+    }
+    const list = stopsFor(day),
+      n = Object.keys(found).length;
+    if (!n) return;
+    changeDay(day, list.map((s, i) => (found[i] ? { ...s, transport: found[i].slice(0, 500) } : s)), `已填入 ${n} 段交通${ask.length ? "（AI 估算，出發前請再確認）" : ""}`);
+  }
+
+  // ✨ AI 安排: order, times and transport for the whole day in one go, shown first and applied only when accepted.
+  let aiPlan = null;
+  function aiArrangeForm(day) {
+    const timed = stopsFor(day).filter((s) => startMinute(s.time) != null).length;
+    openDialog(
+      `${Kit.sheetHead("AI 安排這天", `D${day}`)}<p class="note">AI 會按距離、營業時間、星期幾及用餐時間，排好次序、時間及每段交通，並提示休息日或趕不及的地方。看過結果才決定是否套用。</p><form class="tg-form" id="aiPlanForm" data-day="${day}">${timed ? `<label class="tg-check"><input type="checkbox" name="keep"> 保留我已填的時間（例如已預約的餐廳）</label>` : ""}${Kit.btn("開始安排", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form><div id="aiPlanOut"></div>`,
+    );
+  }
+  async function aiArrange(day, keep) {
+    const out = $("#aiPlanOut"),
+      list = stopsFor(day),
+      gs = stopGroups(list),
+      d = days[day - 1];
+    if (gs.length < 2) return (out.innerHTML = '<p class="note">最少要有兩個站點。</p>');
+    const start = !gs[0][0].s.hotelId && dayStartHotel(day),
+      end = dayEndHotel(day);
+    out.innerHTML = Kit.progress({ text: "AI 正在安排，大約需要 20–60 秒…", seconds: 45 });
+    $("#aiPlanForm").hidden = true;
+    try {
+      const r = await window.Together.planDay({
+        mode: "arrange",
+        date: isoDash(d),
+        weekday: d.weekday,
+        region: meta.destination || d.region,
+        currency: meta.currency || "JPY",
+        start: start ? { k: "start", ...placeForAi({ title: start.name, address: start.address, lat: start.lat, lng: start.lng }) } : null,
+        end: end ? { k: "end", ...placeForAi({ title: end.name, address: end.address, lat: end.lat, lng: end.lng }) } : null,
+        stops: gs.map((g, n) => {
+          const s = g[0].s,
+            p = placeOf(s);
+          return {
+            k: String(n),
+            ...placeForAi(s),
+            name: g.map((x) => x.s.title).join(" / "),
+            type: s.hotelId ? "住宿" : p?.v[2] || p?.cats.join("、") || "",
+            hours: String(p?.v[5] || "").slice(0, 300),
+            time: s.time || "",
+            fixed: (keep && startMinute(s.time) != null) || (n === 0 && !!s.hotelId),
+            stay: /\d:\d{2}\s*[–~\-－至到]/.test(s.time || "") ? stayOf(s) : 0,
+          };
+        }),
+      });
+      aiPlan = { day, gs, r, before: list };
+      const legOf = (k) => r.legs.find((l) => l.k === k);
+      out.innerHTML = `${r.advice ? `<div class="route-ai-head"><b>${icon("sparkles")} AI 建議</b><p>${esc(r.advice)}</p></div>` : ""}<ol class="ai-plan">${r.order
+        .map((k, j) => {
+          const g = gs[Number(k)],
+            leg = j ? legOf(k) : null;
+          return `${leg ? `<li class="ai-plan-leg">${esc(legText(leg))}</li>` : ""}<li class="ai-plan-stop"><b>${esc(r.times[k] || "")}</b><span>${g.map((x) => esc(x.s.title)).join(" / ")}</span>${r.warnings[k] ? `<small class="stop-warn">${icon("clock")}<span>${esc(r.warnings[k])}</span></small>` : ""}</li>`;
+        })
+        .join("")}</ol><p class="note">時間、交通及車費由 AI 估算，出發前請再確認。</p><div class="detail-actions">${Kit.btn("套用", { variant: "primary", icon: "check", attrs: { "data-ai-plan-apply": true } })}${Kit.btn("重新安排", { icon: "redo", attrs: { "data-ai-plan-again": true } })}</div>`;
+    } catch (e) {
+      console.error(e);
+      out.innerHTML = `<p class="note">${esc(fnError(e, "AI 未能安排，請稍後再試。"))}</p>`;
+      $("#aiPlanForm").hidden = false;
+    }
+  }
+  function applyAiPlan() {
+    const a = aiPlan;
+    if (!a) return;
+    const { r, gs } = a;
+    const after = r.order.flatMap((k, j) => {
+      const leg = j ? r.legs.find((l) => l.k === k) : null;
+      return gs[Number(k)].map(({ s }) => ({ ...s, time: r.times[k] || s.time, transport: leg ? legText(leg).slice(0, 500) : j ? "" : s.transport, warn: r.warnings[k] || "" }));
+    });
+    $("#detail").close();
+    aiPlan = null;
+    changeDay(a.day, after, "已套用 AI 安排");
+  }
+
+  function planTools(stops) {
+    return `<div class="plan-tools" role="toolbar" aria-label="安排這天">${[
+      ["排順路", "route", "data-plan-order"],
+      ["查全日交通", "train", "data-plan-routes"],
+      ["AI 安排", "sparkles", "data-plan-ai"],
+      ["推算時間", "clock", "data-plan-times"],
+    ]
+      .map(([label, ic, attr]) => Kit.btn(label, { size: "sm", variant: attr === "data-plan-ai" ? "secondary" : "outline", icon: ic, attrs: { [attr]: true, ...(stops.length < 2 && attr !== "data-plan-routes" ? { disabled: true } : {}) } }))
+      .join("")}</div><p class="note" id="planToolsInfo" hidden></p>`;
+  }
+  document.addEventListener("click", (e) => {
+    const el = e.target.closest("button");
+    if (!el) return;
+    const day = selectedDay;
+    if (el.dataset.planInsert !== undefined) {
+      const g = stopGroups(stopsFor(day))[Number(el.dataset.planInsert)];
+      if (g) pickPlaceForPlan(day, null, g[0].i);
+    }
+    if (el.dataset.planOrder !== undefined) orderByDistance(day);
+    if (el.dataset.planRoutes !== undefined) fillRoutes(day);
+    if (el.dataset.planAi !== undefined) aiArrangeForm(day);
+    if (el.dataset.planTimes !== undefined) {
+      const list = stopsFor(day);
+      changeDay(day, retimed(list), "已按交通及停留時間推算");
+    }
+    if (el.dataset.aiPlanApply !== undefined) applyAiPlan();
+    if (el.dataset.aiPlanAgain !== undefined && aiPlan) aiArrange(aiPlan.day, $("#aiPlanForm")?.elements.keep?.checked);
+    if (el.dataset.ppAiAgain !== undefined) {
+      ppAi = null;
+      ppResults();
+    }
+  });
+  document.addEventListener("submit", (e) => {
+    if (e.target.id !== "aiPlanForm") return;
+    e.preventDefault();
+    aiArrange(Number(e.target.dataset.day), e.target.elements.keep?.checked);
   });
   // ---- 資料簿 (notebook): everything in the trip, searchable ----
   let notebookSearch = "",

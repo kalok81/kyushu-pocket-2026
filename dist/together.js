@@ -1295,6 +1295,11 @@ window.Together = (() => {
     if (!navigator.onLine) throw new Error("offline");
     return (await (await callable("aiRoutes", 120000))(data)).data;
   }
+  // The plan page's day tools (routes for every leg, AI arrangement, suggestions): one AI use each.
+  async function planDay(data) {
+    if (!navigator.onLine) throw new Error("offline");
+    return (await (await callable("planDay", 120000))(data)).data;
+  }
   async function suggestRoutes(data) {
     if (!navigator.onLine) throw new Error("offline");
     return (await (await callable("suggestRoutes", 45000))(data)).data;
@@ -2785,6 +2790,7 @@ window.Together = (() => {
     lookupPlace,
     suggestRoutes,
     aiRoutes,
+    planDay,
     savePlace,
     deletePlace,
     savePlanDay,

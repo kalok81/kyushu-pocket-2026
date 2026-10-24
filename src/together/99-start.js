@@ -20,6 +20,7 @@
     lookupPlace,
     suggestRoutes,
     aiRoutes,
+    planDay,
     savePlace,
     deletePlace,
     savePlanDay,

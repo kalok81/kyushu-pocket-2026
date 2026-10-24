@@ -364,6 +364,42 @@ try {
   await page.waitForFunction(() => !document.querySelector('#detail').open);
   await page.waitForFunction(() => getComputedStyle(document.body).overflowY !== 'hidden' && !document.querySelector('.swal2-container'));
  });
+ await step('plan tools: insert between stops, all transport, AI arrangement, times, drag', async () => {
+  for (const name of ['上野公園', '東京國立博物館', '阿美橫丁']) {
+   await page.goto(base + '/#explore'); await page.click('[data-place-new]');
+   await page.fill('#placeForm [name=f0]', '上野'); await page.fill('#placeForm [name=f1]', name); await page.locator('#placeForm [name=cats]').first().check(); await page.click('#placeForm button[type=submit]');
+  }
+  await page.goto(base + '/#plan?day=3'); await page.waitForSelector('.journey-day');
+  const titles = () => page.locator('.timeline h3').allInnerTexts();
+  await page.click('[data-plan-pick]');
+  for (let k = 0; k < 3; k++) await page.locator('[data-pp-add]').first().click();
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 3);
+  assert.equal(await page.locator('.plan-tools button').count(), 4);
+  // ✨ AI 推薦 in the picker gives reasons; the ＋ between two stops inserts there
+  const before = await titles();
+  await page.locator('.stop-link .link-add').nth(1).click(); await page.waitForSelector('#ppList');
+  assert.match(await page.locator('#detail .note').first().innerText(), new RegExp(`加在「${before[1].split('\n')[0]}」之前`));
+  await page.click('[data-pp-cat="✨ AI 推薦"]'); await page.waitForSelector('.pp-reason');
+  assert.equal((await page.evaluate(() => window.planRequest)).mode, 'suggest');
+  await page.locator('#ppList [data-pp-add]').first().click(); await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 4);
+  const four = await titles(); assert.equal(four[0], before[0]); assert.equal(four[2], before[1]);
+  // 查全日交通 fills every leg in one request
+  await page.click('[data-plan-routes]'); await page.waitForFunction(() => document.querySelectorAll('.route-dot.has-route').length >= 3);
+  assert.match(await page.locator('.route-dot.has-route').last().innerText(), /AI 估算|步行/);
+  // AI 安排: preview, then apply (with its warning), then undo
+  await page.click('[data-plan-ai]'); await page.click('#aiPlanForm button[type=submit]'); await page.waitForSelector('[data-ai-plan-apply]');
+  assert.ok(await page.locator('.ai-plan-stop').count() === 4); assert.ok(await page.locator('#aiPlanForm').isHidden());
+  await page.click('[data-ai-plan-apply]'); await page.waitForSelector('.timeline .stop-warn');
+  assert.deepEqual(await titles(), [...four].reverse()); assert.match(await page.locator('.timeline .time').first().innerText(), /09:00–10:00/);
+  await page.click('.snack-action'); await page.waitForFunction((t) => document.querySelector('.timeline h3').innerText === t, four[0]);
+  // 推算時間 and dragging the first slot to the end
+  await page.click('[data-plan-times]'); await page.waitForFunction(() => /^09:00–\d\d:\d\d/.test(document.querySelector('.timeline .time').innerText));
+  const grip = await page.locator('.stop-grip').first().boundingBox(), last = await page.locator('article.stop').last().boundingBox();
+  await page.mouse.move(grip.x + 10, grip.y + 10); await page.mouse.down(); await page.mouse.move(grip.x + 10, last.y + last.height + 40, { steps: 12 }); await page.mouse.up();
+  await page.waitForFunction((t) => document.querySelector('.timeline h3').innerText !== t, four[0]);
+  assert.equal((await titles()).at(-1), four[0]);
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }
