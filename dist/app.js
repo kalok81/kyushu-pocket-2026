@@ -1815,12 +1815,15 @@ window.startTrip = (meta = {}) => {
   // ✨ AI 安排: order, times and transport for the whole day in one go, shown first and applied only when accepted.
   let aiPlan = null;
   function aiArrangeForm(day) {
-    const timed = stopsFor(day).filter((s) => startMinute(s.time) != null).length;
+    const list = stopsFor(day),
+      timed = list.filter((s) => startMinute(s.time) != null).length,
+      first = startMinute(list[0]?.time),
+      startAt = first != null ? hm(first) : "09:00";
     openDialog(
-      `${Kit.sheetHead("AI 安排這天", `D${day}`)}<p class="note">AI 會按距離、營業時間、星期幾及用餐時間，排好次序、時間及每段交通，並提示休息日或趕不及的地方。看過結果才決定是否套用。</p><form class="tg-form" id="aiPlanForm" data-day="${day}">${timed ? `<label class="tg-check"><input type="checkbox" name="keep"> 保留我已填的時間（例如已預約的餐廳）</label>` : ""}${Kit.btn("開始安排", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form><div id="aiPlanOut"></div>`,
+      `${Kit.sheetHead("AI 安排這天", `D${day}`)}<p class="note">AI 會按距離、營業時間、星期幾及用餐時間，排好次序、時間及每段交通，並提示休息日或趕不及的地方。看過結果才決定是否套用。</p><form class="tg-form" id="aiPlanForm" data-day="${day}"><label>出發時間<input name="start" type="time" value="${startAt}" required></label>${timed ? `<label class="tg-check"><input type="checkbox" name="keep"> 保留我已填的時間（例如已預約的餐廳）</label>` : ""}${Kit.btn("開始安排", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form><div id="aiPlanOut"></div>`,
     );
   }
-  async function aiArrange(day, keep) {
+  async function aiArrange(day, keep, startTime = "") {
     const out = $("#aiPlanOut"),
       list = stopsFor(day),
       gs = stopGroups(list),
@@ -1837,6 +1840,7 @@ window.startTrip = (meta = {}) => {
         weekday: d.weekday,
         region: meta.destination || d.region,
         currency: meta.currency || "JPY",
+        startTime,
         start: start ? { k: "start", ...placeForAi({ title: start.name, address: start.address, lat: start.lat, lng: start.lng }) } : null,
         end: end ? { k: "end", ...placeForAi({ title: end.name, address: end.address, lat: end.lat, lng: end.lng }) } : null,
         stops: gs.map((g, n) => {
@@ -1910,7 +1914,7 @@ window.startTrip = (meta = {}) => {
       changeDay(day, after, late ? `已推算；最後一站 ${end[0]}，太夜了，可以考慮刪減` : "已按交通及停留時間推算（車站只計 5 分鐘）");
     }
     if (el.dataset.aiPlanApply !== undefined) applyAiPlan();
-    if (el.dataset.aiPlanAgain !== undefined && aiPlan) aiArrange(aiPlan.day, $("#aiPlanForm")?.elements.keep?.checked);
+    if (el.dataset.aiPlanAgain !== undefined && aiPlan) aiArrange(aiPlan.day, $("#aiPlanForm")?.elements.keep?.checked, $("#aiPlanForm")?.elements.start?.value || "");
     if (el.dataset.ppAiAgain !== undefined) {
       ppAi = null;
       ppResults();
@@ -1919,7 +1923,7 @@ window.startTrip = (meta = {}) => {
   document.addEventListener("submit", (e) => {
     if (e.target.id !== "aiPlanForm") return;
     e.preventDefault();
-    aiArrange(Number(e.target.dataset.day), e.target.elements.keep?.checked);
+    aiArrange(Number(e.target.dataset.day), e.target.elements.keep?.checked, e.target.elements.start.value);
   });
   // ---- 資料簿 (notebook): everything in the trip, searchable ----
   let notebookSearch = "",

@@ -395,7 +395,8 @@ try {
   await page.click('[data-plan-routes]'); await page.waitForFunction(() => document.querySelectorAll('.route-dot.has-route').length >= 3);
   assert.match(await page.locator('.route-dot.has-route').last().innerText(), /AI 估算|步行/);
   // AI 安排: preview, then apply (with its warning), then undo
-  await page.click('[data-plan-ai]'); await page.click('#aiPlanForm button[type=submit]'); await page.waitForSelector('[data-ai-plan-apply]');
+  await page.click('[data-plan-ai]'); await page.fill('#aiPlanForm [name=start]', '08:00'); await page.click('#aiPlanForm button[type=submit]'); await page.waitForSelector('[data-ai-plan-apply]');
+  assert.equal((await page.evaluate(() => window.planRequest)).startTime, '08:00', 'the departure time goes to the AI');
   assert.ok(await page.locator('.ai-plan-stop').count() === 4); assert.ok(await page.locator('#aiPlanForm').isHidden());
   await page.click('[data-ai-plan-apply]'); await page.waitForSelector('.timeline .stop-warn');
   assert.deepEqual(await titles(), [...four].reverse()); assert.match(await page.locator('.timeline .time').first().innerText(), /09:00–10:00/);

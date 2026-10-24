@@ -891,6 +891,7 @@ export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true
  const start = point(d.start), end = point(d.end);
  const cur = typeof d.currency === 'string' && /^[A-Z]{3}$/.test(d.currency) ? d.currency : 'JPY';
  const date = /^\d{4}-\d{2}-\d{2}$/.test(d.date || '') ? d.date : '', where = text(d.region, 80), weekday = text(d.weekday, 10);
+ const startTime = /^\d{2}:\d{2}$/.test(d.startTime || '') ? d.startTime : '';
  const day = `${date} (${weekday})${where ? ` in ${where}` : ''}`;
  const placeLine = p => `${p.k}: ${placeText(p)}`;
  // Google walking times for close legs (at most 12 per request, one maps use)
@@ -932,7 +933,7 @@ ${LEG_RULES(cur)}`;
   await useQuota(req.auth.uid, 'ai');
   prompt = `You plan a day of sightseeing for Hong Kong travellers on ${day}.
 Put the stops below in a sensible order and give each a visit time, so the day flows with little back-tracking, places are visited while open (mind the weekday and closing days), meals fall at meal times (lunch about 11:30–13:30, dinner about 18:00–20:00) and there is time to get between them.
-${start ? `The day starts from ${placeText(start)}${stops[0]?.fixed && stops[0].time ? '' : ' at about 09:00'}.` : 'The day starts at about 09:00.'}${end ? `\nThe night is spent at ${placeText(end)}.` : ''}
+${start ? `The day starts from ${placeText(start)} at ${startTime || '09:00'}.` : `The day starts at ${startTime || '09:00'}${stops[0]?.type.startsWith('hotel: where the day starts') ? `, leaving ${stops[0].name}` : ''}; nothing before that time.`}${end ? `\nThe night is spent at ${placeText(end)}.` : ''}
 Stops (k: name, address, position; type; opening hours as noted by the traveller; time = fixed means it must stay at that time; stay = minutes the traveller plans there):
 ${stops.map(s => `${placeLine(s)}${s.type ? `; ${s.type}` : ''}${s.hours ? `; hours: ${s.hours.replace(/\s+/g, ' ')}` : ''}${s.time ? (s.fixed ? `; time = fixed ${s.time}` : `; planned ${s.time}`) : ''}${s.stay ? `; stay ${s.stay} min` : ''}`).join('\n')}
 Reply with JSON only:
@@ -978,6 +979,8 @@ Reply with JSON only: {"picks": [{"k": string, "reason": string}], "advice": str
  if (startK != null && order[0] !== startK) order.splice(0, order.length, startK, ...order.filter(k => k !== startK));
  // fixed times stay as the traveller set them (the model sometimes moves them anyway), e.g. leaving the hotel
  for (const st of stops) if (st.fixed && clock.test(st.time.replace(/\s+/g, ''))) times[st.k] = st.time.replace(/\s*[~\-－]\s*/, '–');
+ // the departure time chosen on the form is when the starting hotel is left
+ if (startTime && startK != null) times[startK] = startTime;
  // a hotel at the start or end of the day is a time only (leaving, getting back)
  for (const k of [order[0], order.at(-1)]) if (/^hotel: where the day/.test(stops.find(x => x.k === k)?.type || '') && times[k]) times[k] = times[k].split('–')[0];
  const warnings = Object.fromEntries(Object.entries(r?.warnings && typeof r.warnings === 'object' ? r.warnings : {}).filter(([k, v]) => keys.has(k) && typeof v === 'string' && v.trim()).map(([k, v]) => [k, v.trim().slice(0, 80)]));
