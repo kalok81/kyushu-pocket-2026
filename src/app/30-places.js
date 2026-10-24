@@ -100,7 +100,7 @@
   function placeCat(p) {
     const c0 = p.cats.find((x) => x !== "手信") || p.cats[0] || p.v[6],
       c = c0 === "手信" ? "手信店" : c0;
-    return [c, { 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c] || ""];
+    return [c, { 餐廳: "food", 景點: "sights", 商店: "shop", 交通: "transit", 手信店: "gift" }[c] || ""];
   }
   function placeCard(p, near) {
     const [c, cls] = placeCat(p),

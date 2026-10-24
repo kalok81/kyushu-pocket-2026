@@ -21,6 +21,7 @@ main{max-width:1144px;margin:0 auto}
 .badge{background:var(--sage)}
 .badge.food{background:#f5e5d7;color:#955236}
 .badge.sights{background:#e3ece4;color:#37745e}
+.badge.transit{background:#e2e8f0;color:#3c5a7a}
 .badge.shop{background:#e5e9f1;color:#50657d}
 .badge.gift{background:#eee4ec;color:#885b79}
 .place h3{overflow-wrap:anywhere}

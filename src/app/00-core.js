@@ -16,7 +16,8 @@
     link = (u, label) => Kit.btn(esc(label), { href: u, external: true, size: "sm" }),
     maps = (s) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s),
     route = (s) => "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(s);
-  const categories = ["餐廳", "景點", "商店", "手信"];
+  // 交通: stations, bus terminals, airports and piers — only where travellers change (plan tools count 5 minutes there).
+  const categories = ["餐廳", "景點", "商店", "交通", "手信"];
   // 手信 places are souvenir shops: explore lists them under 商店; the products themselves are on the shopping page.
   const exploreCats = categories.filter((c) => c !== "手信"),
     giftShop = (p) => p.cats.includes("手信") || p.v[6] === "手信",

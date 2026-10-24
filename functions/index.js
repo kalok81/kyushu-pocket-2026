@@ -482,6 +482,7 @@ const district = p => {
 
 function category(types = []) {
  const t = types.join(' ');
+ if (/train_station|subway_station|bus_station|transit_station|transit_depot|light_rail_station|airport|ferry_terminal/.test(t)) return '交通';
  if (/restaurant|cafe|coffee|bakery|bar\b|food|meal|ramen|sushi|izakaya|dessert|confectionery/.test(t)) return '餐廳';
  if (/tourist_attraction|park|museum|shrine|temple|place_of_worship|zoo|aquarium|hot_spring|spa|observation|landmark|garden|beach/.test(t)) return '景點';
  if (/store|shop|mall|market|supermarket|department/.test(t)) return '商店';
@@ -931,7 +932,7 @@ Reply with JSON only:
 {"order": [k, ...], "times": {"k": "HH:MM–HH:MM"}, "legs": [${LEG_SHAPE}], "warnings": {"k": string}, "advice": string}
 - order: every stop exactly once. A stop marked fixed keeps its time; order the others around it. A hotel stop that starts the day goes first.
 - "planned" times show the part of the day the traveller meant (breakfast, lunch, dinner, hotel check-in, evening walks, night views): keep each stop in that part of the day unless a clearly better order needs a small shift. Hotel check-in not before 15:00; evening and night spots after dark.
-- times: start–end for each stop, using the planned stay or a usual visit length (meal about 60 min, café 40, viewpoint or tower 30, shrine or park 45, museum or ropeway 60–90, shop 30–60). Stations, bus stops and airports are only where they change: 5 minutes. A hotel where the day starts or ends gets one time only ("HH:MM": leaving, or getting back), no range; a hotel in the middle of the day is a check-in or luggage stop of about 15 minutes, unless the traveller planned a meal or bath there (a planned range or the name says so). Times must not overlap, and the gap before a stop must fit its leg.
+- times: start–end for each stop, using the planned stay or a usual visit length (meal about 60 min, café 40, viewpoint or tower 30, shrine or park 45, museum or ropeway 60–90, shop 30–60). Stations, bus stops and airports (type "transport stop") are only where they change: 5 minutes. A hotel where the day starts or ends gets one time only ("HH:MM": leaving, or getting back), no range; a hotel in the middle of the day is a check-in or luggage stop of about 15 minutes, unless the traveller planned a meal or bath there (a planned range or the name says so). Times must not overlap, and the gap before a stop must fit its leg.
 - legs: one leg per stop after the first (k = that stop), the way from the stop before it.
 - warnings: only real problems, in Traditional Chinese as used in Hong Kong, short (e.g. "星期一休息", "18:00 關門，可能趕不及", "要預約"). Leave out stops without problems.
 - advice: one or two sentences in Traditional Chinese (Hong Kong) about the plan, e.g. what to book or what could be dropped.

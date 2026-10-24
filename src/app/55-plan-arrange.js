@@ -30,7 +30,7 @@
   const STATION = /(駅|站|車站|バス停|バスターミナル|空港|機場|港|ターミナル|station|terminal)$/i;
   const isStation = (s) => {
     const p = placeOf(s);
-    return STATION.test(String(s.title).trim()) || /駅|車站|バス停|空港|機場|フェリー乗り場|train station|bus station|airport/i.test(p?.v[2] || "");
+    return p?.cats.includes("交通") || STATION.test(String(s.title).trim()) || /駅|車站|バス停|空港|機場|フェリー乗り場|train station|bus station|airport/i.test(p?.v[2] || "");
   };
   // A hotel that starts or ends the day is only a time; in the middle of the day it is a check-in or luggage stop.
   function stayOf(s, role = "") {
@@ -281,7 +281,7 @@
             k: String(n),
             ...placeForAi(s),
             name: g.map((x) => x.s.title).join(" / "),
-            type: s.hotelId ? (n === 0 ? "hotel: where the day starts" : n === gs.length - 1 ? "hotel: where the day ends" : "hotel: check-in or leaving luggage on the way") : p?.v[2] || p?.cats.join("、") || "",
+            type: isStation(s) ? "transport stop (station, bus stop, airport): only where they change trains or buses" : s.hotelId ? (n === 0 ? "hotel: where the day starts" : n === gs.length - 1 ? "hotel: where the day ends" : "hotel: check-in or leaving luggage on the way") : p?.v[2] || p?.cats.join("、") || "",
             hours: String(p?.v[5] || "").slice(0, 300),
             time: s.time || "",
             fixed: (keep && startMinute(s.time) != null) || (n === 0 && !!s.hotelId),

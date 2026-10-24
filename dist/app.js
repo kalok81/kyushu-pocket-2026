@@ -20,7 +20,8 @@ window.startTrip = (meta = {}) => {
     link = (u, label) => Kit.btn(esc(label), { href: u, external: true, size: "sm" }),
     maps = (s) => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(s),
     route = (s) => "https://www.google.com/maps/dir/?api=1&destination=" + encodeURIComponent(s);
-  const categories = ["餐廳", "景點", "商店", "手信"];
+  // 交通: stations, bus terminals, airports and piers — only where travellers change (plan tools count 5 minutes there).
+  const categories = ["餐廳", "景點", "商店", "交通", "手信"];
   // 手信 places are souvenir shops: explore lists them under 商店; the products themselves are on the shopping page.
   const exploreCats = categories.filter((c) => c !== "手信"),
     giftShop = (p) => p.cats.includes("手信") || p.v[6] === "手信",
@@ -396,7 +397,7 @@ window.startTrip = (meta = {}) => {
   function placeCat(p) {
     const c0 = p.cats.find((x) => x !== "手信") || p.cats[0] || p.v[6],
       c = c0 === "手信" ? "手信店" : c0;
-    return [c, { 餐廳: "food", 景點: "sights", 商店: "shop", 手信店: "gift" }[c] || ""];
+    return [c, { 餐廳: "food", 景點: "sights", 商店: "shop", 交通: "transit", 手信店: "gift" }[c] || ""];
   }
   function placeCard(p, near) {
     const [c, cls] = placeCat(p),
@@ -1593,7 +1594,7 @@ window.startTrip = (meta = {}) => {
   const STATION = /(駅|站|車站|バス停|バスターミナル|空港|機場|港|ターミナル|station|terminal)$/i;
   const isStation = (s) => {
     const p = placeOf(s);
-    return STATION.test(String(s.title).trim()) || /駅|車站|バス停|空港|機場|フェリー乗り場|train station|bus station|airport/i.test(p?.v[2] || "");
+    return p?.cats.includes("交通") || STATION.test(String(s.title).trim()) || /駅|車站|バス停|空港|機場|フェリー乗り場|train station|bus station|airport/i.test(p?.v[2] || "");
   };
   // A hotel that starts or ends the day is only a time; in the middle of the day it is a check-in or luggage stop.
   function stayOf(s, role = "") {
@@ -1844,7 +1845,7 @@ window.startTrip = (meta = {}) => {
             k: String(n),
             ...placeForAi(s),
             name: g.map((x) => x.s.title).join(" / "),
-            type: s.hotelId ? (n === 0 ? "hotel: where the day starts" : n === gs.length - 1 ? "hotel: where the day ends" : "hotel: check-in or leaving luggage on the way") : p?.v[2] || p?.cats.join("、") || "",
+            type: isStation(s) ? "transport stop (station, bus stop, airport): only where they change trains or buses" : s.hotelId ? (n === 0 ? "hotel: where the day starts" : n === gs.length - 1 ? "hotel: where the day ends" : "hotel: check-in or leaving luggage on the way") : p?.v[2] || p?.cats.join("、") || "",
             hours: String(p?.v[5] || "").slice(0, 300),
             time: s.time || "",
             fixed: (keep && startMinute(s.time) != null) || (n === 0 && !!s.hotelId),
