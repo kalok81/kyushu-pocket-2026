@@ -120,7 +120,7 @@ Reply with JSON only, in this shape:
 {"name": string, "shownName": string, "spec": string, "detail": string, "category": "drug" | "food" | "fashion" | "home" | "stationery" | "toys" | "electronics" | "other", "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
 - name: ${local ? `the name it is sold under in ${local[1]}'s shops, in ${local[0]} as on the local package (brand first, e.g. "${local[2]}"), but only when that ${local[0]} name is actually shown in the photo, the page or the search results. Otherwise keep the name exactly as shown (English or Chinese): never translate a name into ${local[0]} yourself or make one up` : 'the product name in its original language, as printed on the package or product page (brand first)'}, at most 80 characters. Do not translate it into Chinese and do not add a translation in brackets: a Traditional Chinese translation is added separately.
 - shownName: the product name exactly as it is written in the photo, page or results (any language), at most 80 characters.
-- spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, mint), at most 30 characters; empty if unknown.
+- spec: size, quantity or variant printed on it, at most 30 characters, in numbers and Traditional Chinese only (Hong Kong usage; units such as g, ml, cm may stay), e.g. 100g, 30 片裝, 12 個裝, 薄荷味, 清爽型; translate Japanese or English (30枚入 → 30 片裝, mint → 薄荷味); empty if unknown.
 - detail: one short line on what it is or what it is for, at most 60 characters, always in Traditional Chinese as used in Hong Kong (translate it when the photo or page is in Japanese, English or another language; never Japanese).
 - category: drug for cosmetics, skincare, hair care, beauty tools, medicine, patches and supplements (drugstore goods); food for snacks, sweets, drinks, instant food and condiments; fashion for clothes, shoes, bags, wallets and accessories; home for kitchen and household goods; stationery for pens, notebooks and office goods; toys for toys, games, figures, character and idol goods; electronics for gadgets and appliances; other otherwise.
 - price: only if a price tag or label with this product's price is visible (tax-included price if both are shown); otherwise null.
@@ -148,12 +148,20 @@ const localNamePrompt = (t, item, results) => `Travellers photographed this prod
 From the web search results below, give the name this same product is sold under in ${LOCAL_NAMES[t.country][1]}, in ${LOCAL_NAMES[t.country][0]} exactly as written in the results (brand first, same variant).
 Reply with JSON only: {"name": string}. Empty name if the results do not show this product's ${LOCAL_NAMES[t.country][0]} name; never translate it yourself.
 Search results: ${JSON.stringify(results)}`;
-// 備註 (detail) is for the travellers: Traditional Chinese only. One with kana or hangul left in it is translated.
+// 備註 (detail) and 數量／規格 (qty) are for the travellers: Traditional Chinese (and numbers) only. Kana or hangul left
+// in either, or Japanese counters (枚入) and English words in the spec, are translated.
+const NOT_ZH = { detail: /[\u3040-\u30ff\uac00-\ud7af]/, qty: /[\u3040-\u30ff\uac00-\ud7af]|[A-Za-z]{3,}|[枚入]/ };
 async function zhDetail(item, t) {
- if (!/[\u3040-\u30ff\uac00-\ud7af]/.test(item.detail || '')) return item;
- const r = await askDeepSeek(`Rewrite this product note in Traditional Chinese as used in Hong Kong, at most 60 characters; keep brand and product names as written. Reply with JSON only: {"detail": string}\nNote: ${JSON.stringify(item.detail)}`, [], { think: false }).catch(() => null);
- const detail = typeof r?.detail === 'string' ? r.detail.trim().slice(0, 500) : '';
- return detail ? { ...item, detail } : item;
+ const bad = Object.keys(NOT_ZH).filter(k => NOT_ZH[k].test(item[k] || ''));
+ if (!bad.length) return item;
+ const r = await askDeepSeek(`Rewrite these fields of a shopping list item in Traditional Chinese as used in Hong Kong; keep brand and product names as written, and numbers and units (g, ml).
+- detail: a product note, at most 60 characters.
+- qty: size, quantity or variant, numbers and Chinese only, at most 30 characters (30枚入 → 30 片裝, 12個入 → 12 個裝, mint → 薄荷味, refill → 補充裝).
+Reply with JSON only: {${bad.map(k => `"${k}": string`).join(', ')}}
+Fields: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, item[k]])))}`, [], { think: false }).catch(() => null);
+ const out = { ...item };
+ for (const k of bad) if (typeof r?.[k] === 'string' && r[k].trim()) out[k] = r[k].trim().slice(0, k === 'qty' ? 30 : 500);
+ return out;
 }
 async function withLocalName(item, t) {
  item = await zhDetail(item, t);
