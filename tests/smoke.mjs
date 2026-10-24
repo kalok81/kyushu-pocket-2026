@@ -440,10 +440,12 @@ try {
   await page.mouse.click(10, 10); await page.waitForFunction(() => !document.querySelector('#detail').open);
   // unsaved typing: tapping outside asks first
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.fill('[data-tg-form=shop] [name=name]', '草莓大福'); await page.waitForTimeout(300);
-  await page.mouse.click(10, 10); await page.waitForSelector('.ui-pop'); assert.match(await page.locator('.ui-pop').innerText(), /放棄未儲存的內容/);
+  // tap outside once the sheet has finished opening (again if the first tap came during its animation)
+  const tapOutside = async () => { for (let k = 0; k < 3 && !(await page.locator('.ui-pop').isVisible()); k++) { await page.mouse.click(10, 10); await page.waitForTimeout(500); } };
+  await tapOutside(); assert.match(await page.locator('.ui-pop').innerText(), /放棄未儲存的內容/);
   await page.click('.ui-pop button:has-text("繼續編輯")'); await page.waitForSelector('.swal2-container', { state: 'detached' });
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '草莓大福');
-  await page.mouse.click(10, 10); await page.click('.ui-pop button:has-text("放棄")'); await page.waitForFunction(() => !document.querySelector('#detail').open);
+  await tapOutside(); await page.click('.ui-pop button:has-text("放棄")'); await page.waitForFunction(() => !document.querySelector('#detail').open);
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');

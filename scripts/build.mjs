@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 // Builds dist/kit.js, dist/app.js and dist/together.js from the feature files in src/ui, src/app and src/together: the files are joined in
 // file-name order inside one function each, so they share its variables (no modules or bundler needed).
 // Run after editing src/: `node scripts/build.mjs`. `--check` only reports whether dist is up to date (used by validate).
@@ -34,6 +35,18 @@ for (const b of bundles) {
  if (current === text) continue;
  if (check) stale.push(b.out);
  else { writeFileSync(b.out, text); console.log(`Built ${b.out} from ${files.length} files.`); }
+}
+// index.html loads each file as name?v=<hash of its content>, so phones fetch a changed file at once instead of
+// keeping the cached copy (GitHub Pages lets browsers cache for 10 minutes).
+{
+ const page = 'dist/index.html', html = readFileSync(page, 'utf8');
+ const stamped = html.replace(/((?:src|href)=")([\w.-]+\.(?:js|css))\?v=[^"]*"/g, (m, attr, file) => {
+  try { return `${attr}${file}?v=${createHash('sha1').update(readFileSync(`dist/${file}`)).digest('hex').slice(0, 10)}"`; } catch { return m; }
+ });
+ if (stamped !== html) {
+  if (check) stale.push(page);
+  else { writeFileSync(page, stamped); console.log(`Stamped file versions in ${page}.`); }
+ }
 }
 if (stale.length) {
  console.error(`${stale.join(', ')} out of date: run node scripts/build.mjs`);
