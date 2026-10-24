@@ -40,6 +40,7 @@
     placeId: String(s.placeId || "").slice(0, 40),
     ...(s.warn ? { warn: String(s.warn).slice(0, 80) } : {}),
     ...(s.note ? { note: String(s.note).slice(0, 500) } : {}),
+    ...(s.manual ? { manual: true } : {}),
     ...(s.hotelId ? { hotelId: String(s.hotelId).slice(0, 40) } : {}),
     ...(Number.isFinite(s.lat) && Number.isFinite(s.lng) ? { lat: s.lat, lng: s.lng } : {}),
   });
@@ -134,7 +135,8 @@
       list = [...stopsFor(day)],
       old = list[index];
     if (!old) return;
-    const stop = { ...old, time: get("time"), transport: get("transport"), note: get("note") };
+    // a time typed here is the traveller's own: 推算時間 keeps its length
+    const stop = { ...old, time: get("time"), transport: get("transport"), note: get("note"), manual: get("time") !== (old.time || "") ? !!get("time") : !!old.manual };
     if (!old.linked) {
       if (!get("title")) return;
       Object.assign(stop, { area: get("area"), title: get("title"), detail: get("detail"), target: get("target") });

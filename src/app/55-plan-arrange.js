@@ -24,20 +24,31 @@
     return after.map((s) => (was.has(stopKey(s)) && was.get(stopKey(s)) === now.get(s) ? s : { ...s, transport: "", warn: "" }));
   }
 
-  // Minutes planned at a stop: its time range, else a usual visit length for its kind of place.
+  // Minutes planned at a stop: a time range the traveller typed (修改), else a usual visit length for its kind of place.
+  // Stations, bus stops, airports and piers are only where the travellers change (5 minutes, shown as the arrival time).
+  // Ranges worked out here or by the AI are not kept, so a wrong guess is not repeated by the next 推算時間.
+  const STATION = /(駅|站|車站|バス停|バスターミナル|空港|機場|港|ターミナル|station|terminal)$/i;
+  const isStation = (s) => {
+    const p = placeOf(s);
+    return STATION.test(String(s.title).trim()) || /駅|車站|バス停|空港|機場|フェリー乗り場|train station|bus station|airport/i.test(p?.v[2] || "");
+  };
   function stayOf(s) {
-    const m = String(s.time || "").match(/(\d{1,2}):(\d{2})\s*[–~\-－至到]+\s*(\d{1,2}):(\d{2})/);
+    if (s.hotelId) return 0;
+    if (isStation(s)) return 5;
+    const m = s.manual && String(s.time || "").match(/(\d{1,2}):(\d{2})\s*[–~\-－至到]+\s*(\d{1,2}):(\d{2})/);
     if (m) {
       const d = Number(m[3]) * 60 + Number(m[4]) - (Number(m[1]) * 60 + Number(m[2]));
       if (d > 0) return d;
     }
-    if (s.hotelId) return 0;
     const p = placeOf(s),
-      t = `${p?.v[2] || ""} ${p?.cats.join(" ") || ""} ${s.area || ""}`;
-    if (/咖啡|甜品|cafe|茶|雪糕|布甸/i.test(t)) return 40;
-    if (/餐廳|拉麵|食|居酒屋|燒肉|壽司|鍋|麵/.test(t)) return 60;
-    if (/商店|購物|百貨|藥妝|手信/.test(t)) return 45;
-    if (/景點|溫泉|公園|神社|寺|博物館|美術館/.test(t)) return 90;
+      t = `${s.title} ${p?.v[2] || ""} ${p?.cats.join(" ") || ""}`;
+    if (/展望|足湯|鳥居|タワー|塔$|塔 /.test(t)) return 30;
+    if (/博物館|美術館|水族館|纜車|ロープウェイ|地獄|動物園|樂園|テーマパーク/.test(t)) return 75;
+    if (/溫泉|温泉|湯$|浴場/.test(t)) return 60;
+    if (/咖啡|甜品|cafe|カフェ|喫茶|茶屋|雪糕|布甸|ジェラート/i.test(t)) return 40;
+    if (/公園|神社|寺|稻荷|稲荷|庭園|老街|商店街|街道|通り/.test(t)) return 45;
+    if (/餐廳|拉麵|ラーメン|食堂|居酒屋|燒肉|焼肉|壽司|寿司|鍋|麵|うどん|そば|料理/.test(t)) return 60;
+    if (/商店|購物|百貨|藥妝|手信|ショップ|モール/.test(t)) return 45;
     return 60;
   }
   // Minutes to get to a stop: its saved transport ("約 14 分"), else a guess from the distance.
@@ -57,7 +68,7 @@
     stopGroups(list).forEach((g, n, gs) => {
       if (n) t = Math.ceil((t + legMinutes(gs[n - 1][0].s, g[0].s)) / 5) * 5;
       const stay = Math.max(...g.map(({ s }) => stayOf(s)));
-      for (const { s, i } of g) out[i] = { ...s, time: stay ? `${hm(t)}–${hm(t + stay)}` : hm(t) };
+      for (const { s, i } of g) out[i] = { ...s, time: stay > 5 ? `${hm(t)}–${hm(t + stay)}` : hm(t), manual: false };
       t += stay;
     });
     return out;
@@ -272,7 +283,7 @@
             hours: String(p?.v[5] || "").slice(0, 300),
             time: s.time || "",
             fixed: (keep && startMinute(s.time) != null) || (n === 0 && !!s.hotelId),
-            stay: /\d:\d{2}\s*[–~\-－至到]/.test(s.time || "") ? stayOf(s) : 0,
+            stay: s.manual || isStation(s) ? stayOf(s) : 0,
           };
         }),
       });
@@ -297,7 +308,7 @@
     const { r, gs } = a;
     const after = r.order.flatMap((k, j) => {
       const leg = j ? r.legs.find((l) => l.k === k) : null;
-      return gs[Number(k)].map(({ s }) => ({ ...s, time: r.times[k] || s.time, transport: leg ? legText(leg).slice(0, 500) : j ? "" : s.transport, warn: r.warnings[k] || "" }));
+      return gs[Number(k)].map(({ s }) => ({ ...s, manual: false, time: r.times[k] || s.time, transport: leg ? legText(leg).slice(0, 500) : j ? "" : s.transport, warn: r.warnings[k] || "" }));
     });
     $("#detail").close();
     aiPlan = null;
@@ -326,8 +337,10 @@
     if (el.dataset.planRoutes !== undefined) fillRoutes(day);
     if (el.dataset.planAi !== undefined) aiArrangeForm(day);
     if (el.dataset.planTimes !== undefined) {
-      const list = stopsFor(day);
-      changeDay(day, retimed(list), "已按交通及停留時間推算");
+      const after = retimed(stopsFor(day)),
+        end = after.at(-1)?.time.match(/(\d{1,2}):(\d{2})\s*$/),
+        late = end && (Number(end[1]) >= 22 || Number(end[1]) < 5);
+      changeDay(day, after, late ? `已推算；最後一站 ${end[0]}，太夜了，可以考慮刪減` : "已按交通及停留時間推算（車站只計 5 分鐘）");
     }
     if (el.dataset.aiPlanApply !== undefined) applyAiPlan();
     if (el.dataset.aiPlanAgain !== undefined && aiPlan) aiArrange(aiPlan.day, $("#aiPlanForm")?.elements.keep?.checked);

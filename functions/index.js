@@ -931,7 +931,7 @@ Reply with JSON only:
 {"order": [k, ...], "times": {"k": "HH:MM–HH:MM"}, "legs": [${LEG_SHAPE}], "warnings": {"k": string}, "advice": string}
 - order: every stop exactly once. A stop marked fixed keeps its time; order the others around it. A hotel stop that starts the day goes first.
 - "planned" times show the part of the day the traveller meant (breakfast, lunch, dinner, hotel check-in, evening walks, night views): keep each stop in that part of the day unless a clearly better order needs a small shift. Hotel check-in not before 15:00; evening and night spots after dark.
-- times: start–end for each stop, using the planned stay or a usual visit length (meal about 60 min, café 40, sight 60–120, shop 30–60). Times must not overlap, and the gap before a stop must fit its leg.
+- times: start–end for each stop, using the planned stay or a usual visit length (meal about 60 min, café 40, viewpoint or tower 30, shrine or park 45, museum or ropeway 60–90, shop 30–60). Stations, bus stops and airports are only where they change: 5 minutes. Times must not overlap, and the gap before a stop must fit its leg.
 - legs: one leg per stop after the first (k = that stop), the way from the stop before it.
 - warnings: only real problems, in Traditional Chinese as used in Hong Kong, short (e.g. "星期一休息", "18:00 關門，可能趕不及", "要預約"). Leave out stops without problems.
 - advice: one or two sentences in Traditional Chinese (Hong Kong) about the plan, e.g. what to book or what could be dropped.
