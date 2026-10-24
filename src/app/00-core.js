@@ -66,9 +66,10 @@
   const fnError = (e, fallback) =>
     e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
       ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
-      : String(e?.code || "").startsWith("functions/") && e.message
+      : // the function's own (Chinese) message; a bare SDK code such as "internal" means the server could not be reached
+        String(e?.code || "").startsWith("functions/") && e.message && !/^[a-z-]+$/.test(e.message)
         ? e.message.replace(/\s*\[\d+\]$/, "")
-        : fallback;
+        : `${fallback}（伺服器未能處理請求）`;
   function toast(s) {
     window.UI.toast(s);
   }
