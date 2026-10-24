@@ -840,3 +840,19 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 #detailBody>form{clear:right}
 .stop-note{display:flex;gap:6px;align-items:flex-start;margin:2px 0 6px;font-size:14px;color:var(--muted-foreground)}
 .stop-note svg{flex:none;width:16px;height:16px;margin-top:2px}
+/* ✨ AI 推薦新地點 */
+.field-label{display:block;margin:0 0 6px;font-size:14px;font-weight:600}
+.discover-list{display:grid;gap:10px;margin-top:6px}
+.discover-card{display:grid;grid-template-columns:96px 1fr;gap:12px;padding:10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}
+.discover-card>img,.discover-ph{width:96px;height:96px;border-radius:10px;object-fit:cover;background:var(--muted-bg)}
+.discover-ph{display:flex;align-items:center;justify-content:center;color:var(--muted-foreground)}
+.discover-card h3{margin:0 0 2px;font-size:16px;line-height:1.35}
+.discover-card>div{min-width:0}
+.discover-meta{display:flex;gap:4px;align-items:flex-start;margin:2px 0;font-size:13px;color:var(--muted-foreground)}
+.discover-meta svg{flex:none;width:14px;height:14px;margin-top:2px}
+.discover-reason{margin:4px 0;font-size:14px;font-weight:600;color:var(--primary)}
+.discover-card .links{margin-top:6px}
+.discover-credit{display:block;margin-top:4px;font-size:11px;color:var(--muted-foreground)}
+#discoverForm{grid-template-columns:minmax(0,1fr)}
+#discoverForm .chips{flex-wrap:wrap;overflow:visible}
+#detail #discoverForm>.btn-block[type=submit]{position:static;box-shadow:none}

@@ -1297,6 +1297,11 @@ window.Together = (() => {
     return (await (await callable("aiRoutes", 120000))(data)).data;
   }
   // The plan page's day tools (routes for every leg, AI arrangement, suggestions): one AI use each.
+  // ✨ AI 推薦新地點 (explore page and the plan picker).
+  async function discoverPlaces(data) {
+    if (!navigator.onLine) throw new Error("offline");
+    return (await (await callable("discoverPlaces", 120000))({ ...data, trip: tripId })).data;
+  }
   async function planDay(data) {
     if (!navigator.onLine) throw new Error("offline");
     return (await (await callable("planDay", 120000))(data)).data;
@@ -2826,6 +2831,7 @@ window.Together = (() => {
     suggestRoutes,
     aiRoutes,
     planDay,
+    discoverPlaces,
     savePlace,
     deletePlace,
     savePlanDay,

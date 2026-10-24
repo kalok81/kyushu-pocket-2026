@@ -63,6 +63,7 @@ for(const w of [320,390,768,1280]){
   ['notesheet','#together?tab=notes',async()=>{await pg.click('[data-tg=newEntry]');await pg.click('[data-note-kind=coupon]')}],
   ['expensesheet','#together?tab=expenses',async()=>{await pg.click('[data-tg=newEntry]')}],
   ['shopsheet','#shopping',async()=>{await pg.click('[data-tg=shopAdd]')}],
+  ['discover','#explore',async()=>{await pg.click('[data-discover]');await pg.fill('#discoverForm [name=area]','上野');await pg.click('#discoverForm [type=submit]');await pg.waitForSelector('.discover-card')}],
   ['hotelform','#hotels',async()=>{await pg.click('[data-hotel-new]')}],
   ['flightform','#flights',async()=>{await pg.click('[data-flight-new]')}],
   ['docs','#hotels',async()=>{await pg.locator('[data-docs]').nth(1).click();await pg.waitForTimeout(400)}],
@@ -70,7 +71,9 @@ for(const w of [320,390,768,1280]){
   ['ratePrompt','#together?tab=expenses',async()=>{await pg.locator('.tg-fx summary').click();await pg.locator('[data-fx-set]').first().click();await pg.waitForSelector('.ui-pop');await pg.waitForTimeout(500)}],
  ];
  for(const [k,h,open] of dialogs){try{await pg.goto(base+'/'+h);await pg.waitForTimeout(700);await open();await pg.waitForTimeout(400);await shot(pg,`${w}-dlg-${k}`,false);report[`${w} dlg-${k}`]=await pg.evaluate(checks)}catch(e){report[`${w} dlg-${k}`]=[['SCRIPT',String(e).slice(0,150)]]}
-  await pg.keyboard.press('Escape');await pg.keyboard.press('Escape')}
+  // a popup closes with Esc; a sheet with its ✕ (Esc or tapping outside would ask about unsaved changes)
+  if(await pg.locator('.ui-pop').isVisible())await pg.keyboard.press('Escape');await pg.waitForTimeout(300);
+  if(await pg.evaluate(()=>document.querySelector('#detail').open))await pg.click('#detail .dialog-close',{timeout:3000}).catch(()=>{})}
  if(errs.length)report[`${w} page-errors`]=errs.map(e=>['PAGEERROR',e]);
  await pg.close();
 }

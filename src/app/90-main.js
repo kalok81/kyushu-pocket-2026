@@ -64,9 +64,6 @@
     window.scrollTo({ top: 0, behavior: "instant" });
   }
   $("#detail .dialog-close").onclick = () => $("#detail").close();
-  $("#detail").addEventListener("click", (e) => {
-    if (e.target === $("#detail")) $("#detail").close();
-  });
   // ☰ menu: the pages without a tab, sharing, and the signed-in account.
   function openMenu() {
     const row = (href, ic, title, sub) =>

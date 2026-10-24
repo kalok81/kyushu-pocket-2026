@@ -118,10 +118,34 @@ window.Kit = (() => {
     `${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h2 class="detailtitle">${title}</h2>`;
   // ---- Sheets, menus and the undo bar ----
   // Sheet: the one #detail dialog (a bottom sheet on phones) shows forms and details.
+  // What the sheet's fields hold (typed or filled in by the AI), to tell whether anything would be lost.
+  const sheetState = () =>
+    [...$("#detailBody").querySelectorAll("form input, form textarea, form select")]
+      .map((e) => (e.type === "checkbox" || e.type === "radio" ? e.checked : e.value))
+      .concat($("#detailBody").querySelectorAll("form img").length)
+      .join("\u0001");
+  let sheetStart = "";
   function open(html) {
     $("#detailBody").innerHTML = html;
+    sheetStart = sheetState();
     if (!$("#detail").open) $("#detail").showModal();
   }
+  // Tapping outside the sheet, Esc or the back gesture: never while an AI or map lookup is running (its progress
+  // bar), and only after asking when the form has unsaved changes. The ✕ always closes.
+  const sheetBusy = () => !!$("#detailBody .ai-progress:not(.done)");
+  async function closeSoftly() {
+    if (sheetBusy()) return window.UI.toast("AI 正在處理，完成後才可關閉；要放棄請按右上角 ✕。");
+    if (sheetState() !== sheetStart && !(await window.UI.confirm("放棄未儲存的內容？", { text: "已輸入或 AI 已填入的資料會消失。", ok: "放棄", cancel: "繼續編輯", danger: true }))) return;
+    close();
+  }
+  addEventListener("DOMContentLoaded", () => {
+    const d = $("#detail");
+    d.addEventListener("click", (e) => e.target === d && closeSoftly());
+    d.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      closeSoftly();
+    });
+  });
   function close() {
     if ($("#detail").open) $("#detail").close();
   }

@@ -26,6 +26,8 @@ await page.route('**/vendor/firebase/*.js', r => r.fulfill({ path: fake + r.requ
 await page.route('https://api.open-meteo.com/**', r => r.fulfill({ json: weather, headers: { 'Access-Control-Allow-Origin': '*' } }));
 await page.route('https://open.er-api.com/**', r => r.fulfill({ json: rates, headers: { 'Access-Control-Allow-Origin': '*' } }));
 await page.route(/^https:\/\/(tile\.openstreetmap|www\.google)/, r => r.abort());
+// The ✕ closes a sheet even with unsaved changes (tapping outside or Esc would ask first); Esc otherwise (menus).
+const closeSheet = async () => ((await page.evaluate(() => document.querySelector('#detail').open)) ? page.click('#detail .dialog-close') : page.keyboard.press('Escape'));
 const addShop = async (name, place) => {
  await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
  await page.fill('[data-tg-form=shop] [name=name]', name); await page.click('.shop-more summary'); await page.fill('[data-tg-form=shop] [name=place]', place); await page.click('[data-tg-form=shop] button[type=submit]');
@@ -54,7 +56,7 @@ try {
   await page.fill('#placeForm [name=f0]', '淺草'); await page.locator('#placeForm [name=cats]').nth(1).check(); await page.fill('#placeForm [name=f3]', '東京都台東区浅草2-3-1'); await page.click('#placeForm button[type=submit]');
   await page.waitForSelector('.timeline h3'); assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), ['淺草寺']);
   await page.waitForSelector('.timeline [data-place]'); await page.click('.timeline [data-place]'); await page.waitForSelector('#detail .detailtitle');
-  assert.equal(await page.locator('#detail .detailtitle').innerText(), '淺草寺'); await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#detail .detailtitle').innerText(), '淺草寺'); await closeSheet();
   await page.goto(base + '/#explore'); await page.waitForSelector('#results .card.place'); assert.match(await page.locator('#results').innerText(), /淺草寺/);
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
   await page.waitForSelector('.dayintro .weather:not([hidden])'); assert.match(await page.locator('.dayintro .weather').innerText(), /18°C · 降雨機會 80%/);
@@ -89,7 +91,7 @@ try {
   await page.click('[data-pp-cat=住宿]'); await page.waitForSelector('[data-pp-hotel]');
   await page.fill('#ppTime', '21:00'); await page.click('[data-pp-hotel]'); await page.waitForSelector('#ppList .badge');
   await page.fill('#ppTime', '09:00'); await page.click('[data-pp-hotel]'); await page.waitForFunction(() => /2 次/.test(document.querySelector('#ppList .badge')?.textContent || ''));
-  await page.keyboard.press('Escape'); await page.waitForSelector('.timeline h3');
+  await closeSheet(); await page.waitForSelector('.timeline h3');
   assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), ['上野酒店', '上野酒店']);
   assert.deepEqual(await page.locator('.timeline .time').allInnerTexts(), ['09:00', '21:00']);
   assert.equal(await page.locator('.timeline .stop a[href="#hotels"]').count(), 2);
@@ -97,7 +99,7 @@ try {
  });
  await step('plan: route suggestions into 交通', async () => {
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
-  await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=住宿]'); await page.fill('#ppTime', '08:00'); await page.click('[data-pp-hotel]'); await page.keyboard.press('Escape');
+  await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=住宿]'); await page.fill('#ppTime', '08:00'); await page.click('[data-pp-hotel]'); await closeSheet();
   await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 2);
   // one link before the first slot (from the hotel) and one between the two slots
   assert.equal(await page.locator('[data-route-link]').count(), 2); assert.match(await page.locator('[data-route-link]').first().innerText(), /由酒店出發/);
@@ -118,11 +120,11 @@ try {
   await page.fill('#routeManual textarea', '🚇 銀座線 上野 → 淺草｜約 14 分'); await page.click('#routeManual button[type=submit]');
   await page.waitForSelector('.route-dot.has-route'); assert.match(await page.locator('[data-route-link]').nth(1).innerText(), /銀座線 上野 → 淺草/);
   // a second choice at 10:00: the link asks which destination
-  await page.locator('[data-stop-more]').nth(1).click(); await page.click('[data-stop-alt]:visible'); await page.click('[data-pp-cat=住宿]'); await page.click('[data-pp-hotel]'); await page.keyboard.press('Escape');
+  await page.locator('[data-stop-more]').nth(1).click(); await page.click('[data-stop-alt]:visible'); await page.click('[data-pp-cat=住宿]'); await page.click('[data-pp-hotel]'); await closeSheet();
   await page.waitForSelector('.stop-group'); await page.locator('[data-route-link]').nth(1).click(); await page.waitForSelector('#routeTo');
   assert.deepEqual(await page.locator('#routeTo option').allInnerTexts(), ['淺草寺', '上野酒店']);
   await page.selectOption('#routeTo', { label: '上野酒店' }); assert.equal(await page.inputValue('#routeManual textarea'), '');
-  await page.keyboard.press('Escape');
+  await closeSheet();
  });
  await step('shopping list shows on explore and plan', async () => {
   await page.goto(base + '/#explore'); await page.click('[data-place-new]');
@@ -134,7 +136,7 @@ try {
   assert.match(await page.locator('#results .card.place', { hasText: '淺草寺' }).locator('.buy-here').innerText(), /要買：御守/);
   await page.click('[data-cat=購物清單]'); assert.equal(await page.locator('#results .card.place').count(), 2);
   await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('[data-place]').click(); await page.waitForSelector('#detail .detail-section >> text=購物清單（1）');
-  await page.click('#detail [data-shop-open]'); await page.waitForFunction(() => /人形燒/.test(document.querySelector('#detailBody').textContent)); await page.keyboard.press('Escape');
+  await page.click('#detail [data-shop-open]'); await page.waitForFunction(() => /人形燒/.test(document.querySelector('#detailBody').textContent)); await closeSheet();
   // a 購買地點 that is not an explore place: its own card, and 加入探索 makes it one
   await page.goto(base + '/#shopping'); await addShop('蘋果批', 'RINGO 上野店');
   await page.goto(base + '/#explore'); await page.click('[data-cat=購物清單]'); await page.waitForSelector('.shop-spot');
@@ -147,7 +149,7 @@ try {
   assert.match(await page.locator('.stopcontent', { hasText: '淺草寺' }).first().innerText(), /要買：御守/);
   await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=購物清單]'); await page.waitForSelector('[data-pp-spot]');
   assert.match(await page.locator('#ppList').innerText(), /仲見世通り\s*要買：人形燒/);
-  await page.locator('#ppList .pp-row', { hasText: '仲見世通り' }).locator('[data-pp-spot]').click(); await page.keyboard.press('Escape');
+  await page.locator('#ppList .pp-row', { hasText: '仲見世通り' }).locator('[data-pp-spot]').click(); await closeSheet();
   await page.waitForFunction(() => [...document.querySelectorAll('.timeline h3')].some(h => h.textContent === '仲見世通り'));
   assert.match(await page.locator('.stopcontent', { hasText: '仲見世通り' }).first().innerText(), /要買：人形燒/);
  });
@@ -158,9 +160,9 @@ try {
   assert.equal(await page.locator('#moreNotebook').count(), 0);
   assert.doesNotMatch(await page.locator('#app').innerText(), /資料快照/);
   await page.click('[data-notebook-type=行程]'); assert.match(await page.locator('#notebookResults').innerText(), /D1 1\/4\/2030 · 10:00/);
-  await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detail a[href^="#plan?day="]'); await page.keyboard.press('Escape');
+  await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detail a[href^="#plan?day="]'); await closeSheet();
   await page.click('[data-notebook-type=購物]'); await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detailBody .shop-item');
-  await page.keyboard.press('Escape');
+  await closeSheet();
  });
  await step('plan stops follow their explore place', async () => {
   await page.goto(base + '/#explore'); await page.locator('#results .card.place', { hasText: '淺草寺' }).locator('[data-place]').click();
@@ -201,9 +203,9 @@ try {
   await page.click('[data-note-filter=coupon]'); assert.equal(await page.locator('.tg-list .tg-item').count(), 1);
   await c.locator('[data-coupon-used]').click(); await page.waitForSelector('.tg-item.coupon.used');
   await c.locator('[data-note-photo]').click(); await page.waitForSelector('#detail .note-photo-full'); assert.match(await page.locator('#detail').innerText(), /BIC2030/);
-  await page.keyboard.press('Escape');
+  await closeSheet();
   await page.goto(base + '/#explore'); await page.locator('#results .card.place', { hasText: '淺草寺（雷門）' }).locator('[data-place]').click();
-  await page.waitForSelector('#detail .tg-item.coupon'); await page.keyboard.press('Escape');
+  await page.waitForSelector('#detail .tg-item.coupon'); await closeSheet();
  });
  await step('shopping categories: grouped list and filter', async () => {
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
@@ -257,7 +259,7 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-tg-form=note] [name=text]').value.startsWith('一蘭 上野店\n24 小時營業'));
  });
  await step('delete with undo; ☰ menu', async () => {
-  await page.keyboard.press('Escape'); await page.goto(base + '/#together?tab=notes'); await page.waitForSelector('.tg-item');
+  await closeSheet(); await page.goto(base + '/#together?tab=notes'); await page.waitForSelector('.tg-item');
   const n = await page.locator('.tg-list .tg-item').count();
   const delFirst = async () => { await page.locator('.tg-list .tg-item .more summary').first().click(); await page.click('[data-tg-del]:visible'); };
   await delFirst(); await page.waitForSelector('#toast.snack');
@@ -284,7 +286,7 @@ try {
    const id = Object.keys(docs).find((k) => (docs[k].name || docs[k].fields?.[1]) === name);
    await fs.updateDoc({ c, id }, { zh, zhFor: name });
   }, [c, name, zh]);
-  await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await addShop('じゃがポックル', '新千歳空港');
+  await closeSheet(); await page.goto(base + '/#shopping'); await addShop('じゃがポックル', '新千歳空港');
   await translate('shopping', 'じゃがポックル', '薯條三兄弟');
   await page.waitForFunction(() => /じゃがポックル\s*薯條三兄弟/.test(document.querySelector('.tg-list').innerText));
   await page.fill('#shopSearch', '薯條'); await page.waitForFunction(() => document.querySelectorAll('.shop-item').length === 1);
@@ -298,7 +300,7 @@ try {
  });
  await step('a place keeps its Google Maps link when edited; AI fills 必吃・必買・特色', async () => {
   const link = 'https://maps.app.goo.gl/abc123';
-  await page.keyboard.press('Escape'); await page.goto(base + '/#explore'); await page.click('[data-place-new]');
+  await closeSheet(); await page.goto(base + '/#explore'); await page.click('[data-place-new]');
   await page.fill('#placeForm [name=mapsUrl]', link); await page.fill('#placeForm [name=f1]', '風雷神門'); await page.fill('#placeForm [name=f0]', '淺草'); await page.locator('#placeForm [name=cats]').nth(1).check();
   await page.fill('#placeForm [name=f2]', '舊類型');
   await page.locator('#placeForm [name=f2] + .field-clear').click(); assert.equal(await page.inputValue('#placeForm [name=f2]'), '', 'the × empties the field');
@@ -319,10 +321,10 @@ try {
   assert.equal(await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('.place-thumb').count(), 1, 'the card shows the place photo');
   await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('[data-place]').click();
   assert.match(await page.locator('#detail .info-list').first().innerText(), /網站\s*kaminarimon\.example\.jp[\s\S]*食評及訂座\s*Tabelog/);
-  await page.keyboard.press('Escape');
+  await closeSheet();
  });
  await step('shopping: several 購買地點, AI finds where to buy', async () => {
-  await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
+  await closeSheet(); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
   await page.fill('[data-tg-form=shop] [name=name]', '雷門せんべい'); await page.click('.shop-more summary'); await page.fill('[data-tg-form=shop] [name=place] >> nth=0', '仲見世通り');
   await page.click('[data-tg=shopFindAll]'); await page.waitForFunction(() => /AI 建議/.test(document.querySelector('#shopPlaceInfo').textContent));
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '雷門せんべい（雷門煎餅）', 'a fuller name of the same product');
@@ -342,7 +344,7 @@ try {
   for (const name of ['仲見世通り', '淺草寺（雷門）']) assert.match(await page.locator('#results .card.place', { hasText: name }).first().locator('.buy-here').innerText(), /雷門せんべい/);
  });
  await step('shopping: an article link lists its products to pick from', async () => {
-  await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
+  await closeSheet(); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
   await page.fill('[data-tg-form=shop] [name=name]', 'https://news.example.com/fukuoka-10'); await page.click('[data-tg=shopFindAll]');
   await page.evaluate(async () => {
    const fs = await import('./vendor/firebase/firebase-firestore.js'), jobs = globalThis.__fakeStore.receiptJobs || {};
@@ -359,7 +361,7 @@ try {
   await page.waitForSelector('.shop-item:has-text("二◯加煎餅")'); assert.equal(await page.locator('.shop-item:has-text("博多通饅頭")').count(), 0);
  });
  await step('the page still scrolls after deleting from a sheet', async () => {
-  await page.keyboard.press('Escape'); await page.goto(base + '/#explore'); await page.click('[data-place-new]');
+  await closeSheet(); await page.goto(base + '/#explore'); await page.click('[data-place-new]');
   await page.fill('#placeForm [name=f1]', '刪除測試'); await page.fill('#placeForm [name=f0]', '淺草'); await page.locator('#placeForm [name=cats]').first().check();
   await page.click('#placeForm button[type=submit]');
   await page.locator('#results .card.place', { hasText: '刪除測試' }).locator('[data-place]').click();
@@ -376,7 +378,7 @@ try {
   const titles = () => page.locator('.timeline h3').evaluateAll((hs) => hs.map((h) => h.firstChild.textContent.trim()));
   await page.click('[data-plan-pick]');
   for (let k = 0; k < 3; k++) await page.locator('[data-pp-add]').first().click();
-  await page.keyboard.press('Escape'); await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 3);
+  await closeSheet(); await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 3);
   assert.equal(await page.locator('.plan-tools button').count(), 4);
   // ✨ AI 推薦 in the picker gives reasons; the ＋ between two stops inserts there
   const before = await titles();
@@ -384,7 +386,7 @@ try {
   assert.match(await page.locator('#detail .note').first().innerText(), new RegExp(`加在「${before[1]}」之前`));
   await page.click('[data-pp-cat="✨ AI 推薦"]'); await page.waitForSelector('.pp-reason');
   assert.equal((await page.evaluate(() => window.planRequest)).mode, 'suggest');
-  await page.locator('#ppList [data-pp-add]').first().click(); await page.keyboard.press('Escape');
+  await page.locator('#ppList [data-pp-add]').first().click(); await closeSheet();
   await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 4);
   const four = await titles(); assert.equal(four[0], before[0]); assert.equal(four[2], before[1]);
   // 查全日交通 fills every leg in one request
@@ -409,6 +411,35 @@ try {
   await page.waitForTimeout(500); await page.locator('[data-stop-more]').first().click(); await page.click('[data-stop-edit]:visible');
   await page.fill('#stopForm [name=note]', '僅收現金'); await page.click('#stopForm button[type=submit]');
   await page.waitForSelector('.timeline .stop-note'); assert.match(await page.locator('.timeline .stop-note').first().innerText(), /僅收現金/);
+ });
+ await step('AI 推薦新地點: from 探索 and from a day of the plan', async () => {
+  await page.goto(base + '/#explore'); await page.click('[data-discover]'); await page.fill('#discoverForm [name=area]', '上野');
+  await page.click('[data-discover-kind=sight]'); await page.click('[data-discover-pref=kids]'); await page.click('#discoverForm [type=submit]');
+  await page.waitForSelector('.discover-card'); assert.equal(await page.locator('.discover-card').count(), 2);
+  const req = await page.evaluate(() => window.discoverRequest); assert.equal(req.area, '上野'); assert.equal(req.kind, 'sight'); assert.deepEqual(req.prefs, ['kids']); assert.ok(req.have.length > 0);
+  await page.locator('[data-discover-add]').first().click(); await page.waitForSelector('#placeForm');
+  assert.equal(await page.inputValue('#placeForm [name=mapsUrl]'), 'https://maps.google.com/?cid=111'); assert.equal(await page.inputValue('#placeForm [name=f1]'), '上野東照宮');
+  await closeSheet();
+  await page.goto(base + '/#plan?day=1'); await page.click('[data-plan-pick]'); await page.click('#detail [data-discover]');
+  await page.click('#discoverForm [type=submit]'); await page.waitForSelector('.discover-card');
+  const r2 = await page.evaluate(() => window.discoverRequest); assert.ok(Number.isFinite(r2.near?.lat)); assert.ok(r2.weekday);
+  assert.match(await page.locator('.discover-card').first().innerText(), /9時00分～17時30分/, "the day's opening hours");
+  assert.match(await page.locator('[data-discover-add]').first().innerText(), /加入 D1/);
+  await closeSheet();
+ });
+ await step('a sheet with an AI progress bar stays open when tapping outside', async () => {
+  await page.goto(base + '/#explore'); await page.click('[data-discover]'); await page.waitForSelector('#discoverForm');
+  await page.evaluate(() => document.querySelector('#discoverOut').insertAdjacentHTML('beforeend', Kit.progress({ text: '處理中' })));
+  await page.mouse.click(10, 10); await page.waitForTimeout(300); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'kept open while busy');
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'Esc kept open while busy');
+  await page.evaluate(() => document.querySelector('#discoverOut .ai-progress').remove());
+  await page.mouse.click(10, 10); await page.waitForFunction(() => !document.querySelector('#detail').open);
+  // unsaved typing: tapping outside asks first
+  await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.fill('[data-tg-form=shop] [name=name]', '草莓大福');
+  await page.mouse.click(10, 10); await page.waitForSelector('.ui-pop'); assert.match(await page.locator('.ui-pop').innerText(), /放棄未儲存的內容/);
+  await page.click('.ui-pop button:has-text("繼續編輯")'); await page.waitForTimeout(300);
+  assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '草莓大福');
+  await page.mouse.click(10, 10); await page.click('.ui-pop button:has-text("放棄")'); await page.waitForFunction(() => !document.querySelector('#detail').open);
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');

@@ -48,7 +48,7 @@
   }
   function renderExplore() {
     const chip = (c, label, ic) => ({ label, icon: ic, active: category === c, attrs: { "data-cat": c } });
-    return `${header("探索", "", Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" }))}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋店名、美食、地址…" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
+    return `${header("探索", "", `${Kit.btn("AI 推薦", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-discover": "" } })}${Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" })}`)}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋店名、美食、地址…" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
       [
         ...["全部", ...exploreCats].map((c) => chip(c, c)),
         chip("購物清單", "購物清單", "bag"),
