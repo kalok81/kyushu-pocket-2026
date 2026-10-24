@@ -117,8 +117,9 @@ async function deepseekTool(tool, body) {
 const LOCAL_NAMES = { JP: ['Japanese', 'Japan', '東京ばな奈 見ぃつけたっ", "肌ラボ 極潤 ヒアルロン液'], KR: ['Korean', 'Korea', '이니스프리 그린티 씨드 세럼'] };
 const productPrompt = t => { const { place, cur, home } = tripInfo(t), local = LOCAL_NAMES[t?.country]; return `You identify products that travellers in ${place} photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
 Reply with JSON only, in this shape:
-{"name": string, "spec": string, "detail": string, "category": "drug" | "food" | "fashion" | "home" | "stationery" | "toys" | "electronics" | "other", "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
-- name: ${local ? `the name it is sold under in ${local[1]}'s shops, in ${local[0]} as on the local package (brand first, e.g. "${local[2]}"). If the photo or page only shows an English or Chinese name (an export or overseas version), still give the ${local[0]} name of that same product (same type: a face wash stays a face wash); if you are not sure of its exact local name, write the brand as written locally plus a plain ${local[0]} description of what it is (e.g. "プリマヴィスタ 洗顔ジェル"), never the name of a different product; keep only brand names that are written in Latin letters locally` : 'the product name in its original language, as printed on the package or product page (brand first)'}, at most 80 characters. Do not translate it into Chinese and do not add a translation in brackets: a Traditional Chinese translation is added separately.
+{"name": string, "shownName": string, "spec": string, "detail": string, "category": "drug" | "food" | "fashion" | "home" | "stationery" | "toys" | "electronics" | "other", "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
+- name: ${local ? `the name it is sold under in ${local[1]}'s shops, in ${local[0]} as on the local package (brand first, e.g. "${local[2]}"), but only when that ${local[0]} name is actually shown in the photo, the page or the search results. Otherwise keep the name exactly as shown (English or Chinese): never translate a name into ${local[0]} yourself or make one up` : 'the product name in its original language, as printed on the package or product page (brand first)'}, at most 80 characters. Do not translate it into Chinese and do not add a translation in brackets: a Traditional Chinese translation is added separately.
+- shownName: the product name exactly as it is written in the photo, page or results (any language), at most 80 characters.
 - spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, mint), at most 30 characters; empty if unknown.
 - detail: one short Traditional Chinese line on what it is or what it is for, at most 60 characters.
 - category: drug for cosmetics, skincare, hair care, beauty tools, medicine, patches and supplements (drugstore goods); food for snacks, sweets, drinks, instant food and condiments; fashion for clothes, shoes, bags, wallets and accessories; home for kitchen and household goods; stationery for pens, notebooks and office goods; toys for toys, games, figures, character and idol goods; electronics for gadgets and appliances; other otherwise.
@@ -127,12 +128,18 @@ Reply with JSON only, in this shape:
 - place: a shop name only if it is visible in the photo (price tag, shelf sign, bag); otherwise empty.
 - confidence: low if the photo is unclear or shows no identifiable product.`; };
 
-function cleanProduct(r, t) {
+// source: the text the model read (page, search results), when there is one. A Japanese name (with kana) is kept only
+// when it is in that text; otherwise the model translated or guessed it, and the name as shown (or typed) is used.
+function cleanProduct(r, t, source = '', typed = '') {
  const { cur, home } = tripInfo(t);
  const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ const flat = v => String(v).normalize('NFKC').replace(/\s+/g, '');
+ const kana = flat(text(r.name, 80)).match(/[\u3040-\u30ff]{2,}/g) || [];
+ const found = !source || kana.every(k => flat(source).includes(k));
+ const name = found ? text(r.name, 80) : text(r.shownName, 80) || typed || text(r.name, 80);
  const price = typeof r.price === 'number' && Number.isFinite(r.price) && r.price > 0 && r.price <= 1e7 ? Math.round(r.price * 100) / 100 : null;
  const cats = ['drug', 'food', 'fashion', 'home', 'stationery', 'toys', 'electronics', 'other'];
- return { name: text(r.name, 80), qty: text(r.spec, 30), detail: text(r.detail, 500), cat: cats.includes(r.category) ? r.category : 'other', place: text(r.place, 200), price, currency: r.currency === home ? home : cur, confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
+ return { name, qty: text(r.spec, 30), detail: text(r.detail, 500), cat: cats.includes(r.category) ? r.category : 'other', place: text(r.place, 200), price, currency: r.currency === home ? home : cur, confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
 }
 
 // ---- Products from a web link: a product page (title, description, price, main picture) or a picture itself ----
@@ -234,7 +241,7 @@ Page: ${JSON.stringify({ site: f.site, title: f.title, brand: f.brand, descripti
 // pictures as ![](url)), the model lists each product, and each gets a small picture for the traveller to choose from.
 const articlePrompt = (t, page, pics) => `${productPrompt(t)}
 This time the traveller pasted a link to an article or list that recommends several products. List every specific product it recommends, in the order of the article, instead of one product.
-Reply with JSON only: {"items": [{"name": string, "spec": string, "detail": string, "category": string, "price": number or null, "currency": string, "place": string, "image": string}]}
+Reply with JSON only: {"items": [{"name": string, "shownName": string, "spec": string, "detail": string, "category": string, "price": number or null, "currency": string, "place": string, "image": string}]}
 - Up to 15 items; same rules as above for each field. detail: what it is and why the article recommends it, at most 60 characters.
 - place: where the article says to buy it (shop, station, airport), at most 80 characters; empty if not said.
 - image: the number of the article's picture of that product from the Pictures list (by its heading and alt text); 0 if none.
@@ -259,7 +266,7 @@ async function articleItems(url, t, pics) {
  const page = await deepseekTool('fetch', { url });
  if (!page?.content) return null;
  const r = await askDeepSeek(articlePrompt(t, page, pics), [], { think: false });
- const items = (Array.isArray(r?.items) ? r.items : []).slice(0, 15).map(x => ({ ...cleanProduct({ ...x, confidence: 'high' }, t), image: pics?.[Number(x?.image) - 1]?.url || '' }))
+ const items = (Array.isArray(r?.items) ? r.items : []).slice(0, 15).map(x => ({ ...cleanProduct({ ...x, confidence: 'high' }, t, page.content), image: pics?.[Number(x?.image) - 1]?.url || '' }))
   .filter(x => x.name);
  // Pictures: 480px JPEGs, fetched in parallel (the job document stays well under Firestore's 1 MB). The article's own
  // picture when it has one; else the main picture of a product page found by searching the product's name.
@@ -363,7 +370,7 @@ cloudEvent('processReceipt', async event => {
     throw new HttpsError('unavailable', '未能開啟這個網址（網站可能不允許讀取），可以改為截圖上載。');
    });
    const pics = got.image ? [got.image] : [];
-   const { confidence, ...item } = cleanProduct(await askDeepSeek(got.facts ? pagePrompt(tripDoc, got.facts) : productPrompt(tripDoc), pics), tripDoc);
+   const { confidence, ...item } = cleanProduct(await askDeepSeek(got.facts ? pagePrompt(tripDoc, got.facts) : productPrompt(tripDoc), pics), tripDoc, got.facts ? [got.facts.title, got.facts.description, got.facts.text].join(' ') : '');
    if (!item.name || confidence === 'low') {
     // Not one product: an article or list ("福岡手信10大推介"). The traveller picks from the products it names.
     const list = got.facts ? await articleItems(job.url, tripDoc, got.html && articlePictures(got.html, got.base)) : null;
@@ -1095,7 +1102,7 @@ export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck
   results.length ? askDeepSeek(buyPrompt(trip, item, results), [], { think: false }) : {},
   full && about.length ? askDeepSeek(productInfoPrompt(trip, item.name, about), [], { think: false }).catch(() => null) : null,
  ]);
- const product = info && info.confidence !== 'low' ? cleanProduct(info, trip) : null;
+ const product = info && info.confidence !== 'low' ? cleanProduct(info, trip, JSON.stringify(about), item.name) : null;
  // A picture for the item: the main image of the product page the model chose, else of the next product results.
  let photo = null;
  if (product && d.photo === true) {
