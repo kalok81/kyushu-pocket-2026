@@ -114,7 +114,7 @@ async function deepseekTool(tool, body) {
  return res.json();
 }
 // Product names as sold locally (Japanese in Japan, Korean in Korea), so they match the shelves; Chinese goes under it.
-const LOCAL_NAMES = { JP: ['Japanese', 'Japan', '東京ばな奈 見ぃつけたっ", "肌ラボ 極潤 ヒアルロン液'], KR: ['Korean', 'Korea', '이니스프리 그린티 씨드 세럼'] };
+const LOCAL_NAMES = { JP: ['Japanese', 'Japan', '東京ばな奈 見ぃつけたっ", "肌ラボ 極潤 ヒアルロン液', /[\u3040-\u30ff]{2,}/g], KR: ['Korean', 'Korea', '이니스프리 그린티 씨드 세럼', /[\uac00-\ud7af]{2,}/g] };
 const productPrompt = t => { const { place, cur, home } = tripInfo(t), local = LOCAL_NAMES[t?.country]; return `You identify products that travellers in ${place} photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
 Reply with JSON only, in this shape:
 {"name": string, "shownName": string, "spec": string, "detail": string, "category": "drug" | "food" | "fashion" | "home" | "stationery" | "toys" | "electronics" | "other", "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
@@ -128,18 +128,36 @@ Reply with JSON only, in this shape:
 - place: a shop name only if it is visible in the photo (price tag, shelf sign, bag); otherwise empty.
 - confidence: low if the photo is unclear or shows no identifiable product.`; };
 
-// source: the text the model read (page, search results), when there is one. A Japanese name (with kana) is kept only
-// when it is in that text; otherwise the model translated or guessed it, and the name as shown (or typed) is used.
+// source: the text the model read (page, search results), when there is one. A Japanese name (with kana; hangul for
+// Korea) is kept only when it is in that text; otherwise the model translated or guessed it, and the name as shown
+// (or typed) is used.
 function cleanProduct(r, t, source = '', typed = '') {
  const { cur, home } = tripInfo(t);
  const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
  const flat = v => String(v).normalize('NFKC').replace(/\s+/g, '');
- const kana = flat(text(r.name, 80)).match(/[\u3040-\u30ff]{2,}/g) || [];
+ const kana = flat(text(r.name, 80)).match(LOCAL_NAMES[t?.country]?.[3] || /[\u3040-\u30ff]{2,}/g) || [];
  const found = !source || kana.every(k => flat(source).includes(k));
  const name = found ? text(r.name, 80) : text(r.shownName, 80) || typed || text(r.name, 80);
  const price = typeof r.price === 'number' && Number.isFinite(r.price) && r.price > 0 && r.price <= 1e7 ? Math.round(r.price * 100) / 100 : null;
  const cats = ['drug', 'food', 'fashion', 'home', 'stationery', 'toys', 'electronics', 'other'];
  return { name, qty: text(r.spec, 30), detail: text(r.detail, 500), cat: cats.includes(r.category) ? r.category : 'other', place: text(r.place, 200), price, currency: r.currency === home ? home : cur, confidence: ['high', 'medium', 'low'].includes(r.confidence) ? r.confidence : 'low' };
+}
+// A product read from a photo or page with no local name on it (an English label): search the web for the name it is
+// sold under at the destination, kept only when the search results show it (never a translation).
+const localNamePrompt = (t, item, results) => `Travellers photographed this product: ${JSON.stringify({ name: item.name, spec: item.qty, detail: item.detail })}.
+From the web search results below, give the name this same product is sold under in ${LOCAL_NAMES[t.country][1]}, in ${LOCAL_NAMES[t.country][0]} exactly as written in the results (brand first, same variant).
+Reply with JSON only: {"name": string}. Empty name if the results do not show this product's ${LOCAL_NAMES[t.country][0]} name; never translate it yourself.
+Search results: ${JSON.stringify(results)}`;
+async function withLocalName(item, t) {
+ const script = LOCAL_NAMES[t?.country]?.[3];
+ if (!script || !item.name || String(item.name).normalize('NFKC').match(script)) return item;
+ const s = await deepseekTool('search', { query: `${item.name.replace(/[（(].*?[)）]/g, ' ').trim()} ${t.country === 'KR' ? '정품' : '公式'}`.slice(0, 128), count: 6 });
+ const results = (s?.results || []).slice(0, 6).map(r => ({ title: String(r.title || '').slice(0, 120), summary: String(r.summary || r.snippet || '').slice(0, 500) }));
+ if (!results.length) return item;
+ const r = await askDeepSeek(localNamePrompt(t, item, results), [], { think: false }).catch(() => null);
+ const name = typeof r?.name === 'string' ? r.name.trim().slice(0, 80) : '';
+ const flat = v => String(v).normalize('NFKC').replace(/\s+/g, ''), runs = flat(name).match(script) || [];
+ return runs.length && runs.every(k => flat(JSON.stringify(results)).includes(k)) ? { ...item, name } : item;
 }
 
 // ---- Products from a web link: a product page (title, description, price, main picture) or a picture itself ----
@@ -378,7 +396,7 @@ cloudEvent('processReceipt', async event => {
     await ref.update({ status: 'done', result: list, doneAt: Date.now() });
     return;
    }
-   await getFirestore().collection(`trips/${trip}/shopping`).add({ ...item, url: got.link.slice(0, 500), photo: got.image && got.image.length <= 400000 ? got.image : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
+   await getFirestore().collection(`trips/${trip}/shopping`).add({ ...(await withLocalName(item, tripDoc)), url: got.link.slice(0, 500), photo: got.image && got.image.length <= 400000 ? got.image : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
    await ref.delete();
    return;
   }
@@ -386,15 +404,17 @@ cloudEvent('processReceipt', async event => {
   await useQuota(job.by, 'ai');
   if (job.kind === 'productFill') {
    // Photo added in the shopping form: return the details so the page can fill the empty fields.
-   const { confidence: _c, ...result } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
-   if (!result.name) throw new HttpsError('not-found', '認不出物品，請手動輸入。');
+   const { confidence: _c, ...read } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
+   if (!read.name) throw new HttpsError('not-found', '認不出物品，請手動輸入。');
+   const result = await withLocalName(read, tripDoc);
    await ref.update({ status: 'done', result, images: FieldValue.delete(), doneAt: Date.now() });
    return;
   }
   if (job.kind === 'product') {
    // Product photo: add the item straight to the shared shopping list (with the photo) and drop the job.
-   const { confidence: _confidence, ...item } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
-   if (!item.name) throw new HttpsError('not-found', '認不出物品，可以重試或手動輸入。');
+   const { confidence: _confidence, ...read } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
+   if (!read.name) throw new HttpsError('not-found', '認不出物品，可以重試或手動輸入。');
+   const item = await withLocalName(read, tripDoc);
    const db = getFirestore();
    await db.collection(`trips/${trip}/shopping`).add({ ...item, photo: images[0].length <= 400000 ? images[0] : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
    await ref.delete();
