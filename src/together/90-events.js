@@ -164,6 +164,7 @@
       const item = {
         name: str("name").slice(0, 80),
         qty: str("qty").slice(0, 30),
+        forWhom: str("forWhom").slice(0, 60),
         detail: str("detail").slice(0, 500),
         // several addresses, one per line (empty and repeated rows dropped)
         place: [...new Set(v.getAll("place").map((t) => String(t).trim().slice(0, 200)).filter(Boolean))].slice(0, 6).join("\n"),

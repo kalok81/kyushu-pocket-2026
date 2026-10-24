@@ -211,12 +211,13 @@ try {
  });
  await step('shopping categories: grouped list and filter', async () => {
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
-  await page.fill('[data-tg-form=shop] [name=name]', '化妝水'); await page.click('.shop-more summary'); await page.selectOption('[data-tg-form=shop] [name=cat]', 'drug'); await page.click('[data-tg-form=shop] button[type=submit]');
+  await page.fill('[data-tg-form=shop] [name=name]', '化妝水'); await page.click('.shop-more summary'); await page.selectOption('[data-tg-form=shop] [name=cat]', 'drug'); await page.fill('[data-tg-form=shop] [name=forWhom]', '媽媽'); await page.fill('[data-tg-form=shop] [name=detail]', '敏感肌用'); await page.click('[data-tg-form=shop] button[type=submit]');
   await page.click('[data-shop-filter=all]'); await page.waitForSelector('.shop-cat-head');
   const heads = await page.locator('.shop-cat-head').allInnerTexts();
   assert.ok(heads[0].startsWith('💄 藥妝') && heads.some((h) => h.startsWith('🍱 食品')), heads.join(','));
   await page.click('[data-shop-cat=drug]'); await page.waitForTimeout(200);
   assert.deepEqual(await page.locator('.shop-item h3').allInnerTexts(), ['化妝水']);
+  assert.match(await page.locator('.shop-item', { hasText: '化妝水' }).innerText(), /給：媽媽[\s\S]*敏感肌用/);
   await page.click('[data-shop-cat=all]');
  });
  await step('shopping: product link and pasted picture go to the AI', async () => {
