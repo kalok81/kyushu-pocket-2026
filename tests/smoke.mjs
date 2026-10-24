@@ -397,7 +397,10 @@ try {
   await page.click('.snack-action'); await page.waitForFunction((t) => document.querySelector('.timeline h3').innerText === t, four[0]);
   // 推算時間 and dragging the first slot to the end
   await page.click('[data-plan-times]'); await page.waitForFunction(() => /^09:00–\d\d:\d\d/.test(document.querySelector('.timeline .time').innerText));
-  const grip = await page.locator('.stop-grip').first().boundingBox(), last = await page.locator('article.stop').last().boundingBox();
+  // the page re-renders after each save: wait until it settles before measuring
+  await page.waitForTimeout(500);
+  let grip, last;
+  for (let k = 0; k < 10 && !(grip && last); k++) [grip, last] = [await page.locator('.stop-grip').first().boundingBox(), await page.locator('article.stop').last().boundingBox()];
   await page.mouse.move(grip.x + 10, grip.y + 10); await page.mouse.down(); await page.mouse.move(grip.x + 10, last.y + last.height + 40, { steps: 12 }); await page.mouse.up();
   await page.waitForFunction((t) => document.querySelector('.timeline h3').innerText !== t, four[0]);
   assert.equal((await titles()).at(-1), four[0]);
