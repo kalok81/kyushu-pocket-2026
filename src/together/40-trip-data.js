@@ -19,9 +19,9 @@
   }
   // highlights: also ask for 必吃・必買・特色 from Google's description and reviews (place form).
   // photo: also the place's first Google Maps photo (place form, when the place has none yet).
-  async function lookupPlace(url, { highlights = false, photo = false } = {}) {
+  async function lookupPlace(url, { highlights = false, photo = false, name = "" } = {}) {
     if (!navigator.onLine) throw new Error("offline");
-    return (await (await callable("lookupPlace", 70000))({ url, country: state.meta?.country || "", ...(highlights ? { highlights: true, trip: tripId } : {}), ...(photo ? { photo: true } : {}) })).data;
+    return (await (await callable("lookupPlace", 70000))({ url, country: state.meta?.country || "", ...(highlights ? { highlights: true, trip: tripId } : {}), ...(photo ? { photo: true } : {}), ...(name ? { name } : {}) })).data;
   }
   // Places: trips/{t}/places documents. A new one gets its id here so a plan stop can point at it straight away.
   function savePlace({ place, fields, cats, lat, lng, points = [], mapsUrl, photo = null, photoBy = "" }) {

@@ -254,7 +254,7 @@
     info.textContent = wantHighlights ? "正在查詢 Google 地圖，並由 AI 整理評論…" : "正在查詢 Google 地圖…";
     const done = Kit.busy(info, { seconds: wantHighlights ? 12 : 5 });
     try {
-      const r = await window.Together.lookupPlace(url, { highlights: wantHighlights, photo: !el.photo.value }),
+      const r = await window.Together.lookupPlace(url, { highlights: wantHighlights, photo: !el.photo.value, name: `${el.f1.value} ${el.f3.value}`.trim() }),
         put = (name, value) => {
           if (value && !el[name].value.trim()) el[name].value = value;
         };

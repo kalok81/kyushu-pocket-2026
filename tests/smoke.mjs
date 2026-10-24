@@ -420,7 +420,8 @@ try {
   await page.waitForSelector('.discover-card'); assert.equal(await page.locator('.discover-card').count(), 2);
   const req = await page.evaluate(() => window.discoverRequest); assert.equal(req.area, '上野'); assert.equal(req.kind, 'sight'); assert.deepEqual(req.prefs, ['kids']); assert.ok(req.have.length > 0);
   await page.locator('[data-discover-add]').first().click(); await page.waitForSelector('#placeForm');
-  assert.equal(await page.inputValue('#placeForm [name=mapsUrl]'), 'https://maps.google.com/?cid=111'); assert.equal(await page.inputValue('#placeForm [name=f1]'), '上野東照宮');
+  assert.match(await page.inputValue('#placeForm [name=mapsUrl]'), /maps\/search\/\?api=1&query=.*&query_place_id=ChIJtoshogu$/); assert.equal(await page.inputValue('#placeForm [name=f1]'), '上野東照宮');
+  assert.equal((await page.evaluate(() => window.lookupRequest)).name, '上野東照宮', '自動填寫 also sends the name for links without one');
   await closeSheet();
   await page.goto(base + '/#plan?day=1'); await page.click('[data-plan-pick]'); await page.click('#detail [data-discover]');
   await page.click('#discoverForm [type=submit]'); await page.waitForSelector('.discover-card');

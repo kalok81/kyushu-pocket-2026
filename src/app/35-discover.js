@@ -103,7 +103,8 @@
     if (!p) return;
     placeForm(null, discover.day ? { day: discover.day, slot: null } : null);
     const el = $("#placeForm").elements;
-    el.mapsUrl.value = p.mapsUrl;
+    // a Maps link with the place id, so 自動填寫 finds exactly this place (Google's ?cid= links carry no name)
+    el.mapsUrl.value = p.placeId ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name)}&query_place_id=${p.placeId}` : p.mapsUrl;
     el.f1.value = p.name;
     if (Number.isFinite(p.lat)) {
       el.lat.value = p.lat;

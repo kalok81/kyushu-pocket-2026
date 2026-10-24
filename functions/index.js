@@ -429,7 +429,9 @@ function parseMapsUrl(url) {
  const q = url.searchParams.get('q') || url.searchParams.get('query');
  const coords = q?.match(/^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/);
  const at = pin ? { lat: +pin[1], lng: +pin[2] } : coords ? { lat: +coords[1], lng: +coords[2] } : null;
- return { query: name || (coords ? null : q) || null, at };
+ // Maps URLs with a place id (…/maps/search/?api=1&query=…&query_place_id=…, or q=place_id:…) name the place exactly
+ const placeId = url.searchParams.get('query_place_id') || q?.match(/^place_id:([\w-]+)/)?.[1] || null;
+ return { query: placeId ? null : name || (coords ? null : q) || null, at, placeId };
 }
 
 // Hours and type label in Chinese; name and address in the language chosen by langFor.
@@ -522,11 +524,16 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
  const raw = req.data?.url;
  if (typeof raw !== 'string' || raw.length > 2000) throw new HttpsError('invalid-argument', '請貼上 Google 地圖的連結。');
  const url = await resolveMapsUrl(raw.trim().match(/https:\/\/\S+/)?.[0] || raw.trim());
- const { query, at } = parseMapsUrl(url);
+ const { query, at, placeId } = parseMapsUrl(url);
  const bias = at && { circle: { center: { latitude: at.lat, longitude: at.lng }, radius: 300 } };
- const place = query
+ // name: the form's name and address, for links that carry neither (Google's own …/?cid=… links)
+ const hint = typeof req.data?.name === 'string' ? req.data.name.trim().slice(0, 200) : '';
+ const place = placeId
+  ? await placesApi(`places/${placeId}?languageCode=${langFor(country)}`, SEARCH_FIELDS.replace(/places\./g, '')).catch(() => null)
+  : query
   ? await search('searchText', { textQuery: query, ...(bias && { locationBias: bias }) }, country)
-  : at ? await search('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }, country) : null;
+  : at ? await search('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }, country)
+  : hint ? await search('searchText', { textQuery: hint }, country) : null;
  if (!place) throw new HttpsError('not-found', '找不到這個地點，請手動輸入。');
  // highlights: the place form asks for 必吃・必買・特色 too (one AI use; left out when the day's AI uses are spent).
  const wantHighlights = req.data?.highlights === true;
@@ -843,7 +850,7 @@ Search results: ${JSON.stringify(results)}`;
   } catch (e) { console.error('discover photo', e?.message); }
   return { id: g.id, name: g.displayName.text.slice(0, 100), reason: p.reason, type: p.type || text(g.primaryTypeDisplayName?.text, 20), address: String(g.formattedAddress || '').slice(0, 200), lat: g.location?.latitude ?? null, lng: g.location?.longitude ?? null, mapsUrl: String(g.googleMapsUri || '').slice(0, 300), website: String(g.websiteUri || '').slice(0, 300), rating: typeof g.rating === 'number' ? g.rating : null, ratings: g.userRatingCount || 0, hours: (g.regularOpeningHours?.weekdayDescriptions || []).slice(0, 7), photo: photo && photo.length < 120000 ? photo : null, photoBy };
  }));
- const places = found.filter((p, i) => p && found.findIndex(q => q?.id === p.id) === i).slice(0, 6).map(({ id: _id, ...p }) => p);
+ const places = found.filter((p, i) => p && found.findIndex(q => q?.id === p.id) === i).slice(0, 6).map(({ id, ...p }) => ({ ...p, placeId: id }));
  return { places, dropped: named.length - found.filter(Boolean).length };
 });
 

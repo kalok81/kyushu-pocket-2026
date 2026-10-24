@@ -551,7 +551,7 @@ window.startTrip = (meta = {}) => {
     info.textContent = wantHighlights ? "正在查詢 Google 地圖，並由 AI 整理評論…" : "正在查詢 Google 地圖…";
     const done = Kit.busy(info, { seconds: wantHighlights ? 12 : 5 });
     try {
-      const r = await window.Together.lookupPlace(url, { highlights: wantHighlights, photo: !el.photo.value }),
+      const r = await window.Together.lookupPlace(url, { highlights: wantHighlights, photo: !el.photo.value, name: `${el.f1.value} ${el.f3.value}`.trim() }),
         put = (name, value) => {
           if (value && !el[name].value.trim()) el[name].value = value;
         };
@@ -772,7 +772,8 @@ window.startTrip = (meta = {}) => {
     if (!p) return;
     placeForm(null, discover.day ? { day: discover.day, slot: null } : null);
     const el = $("#placeForm").elements;
-    el.mapsUrl.value = p.mapsUrl;
+    // a Maps link with the place id, so 自動填寫 finds exactly this place (Google's ?cid= links carry no name)
+    el.mapsUrl.value = p.placeId ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(p.name)}&query_place_id=${p.placeId}` : p.mapsUrl;
     el.f1.value = p.name;
     if (Number.isFinite(p.lat)) {
       el.lat.value = p.lat;
