@@ -405,6 +405,10 @@ try {
   await page.mouse.move(grip.x + 10, grip.y + 10); await page.mouse.down(); await page.mouse.move(grip.x + 10, last.y + last.height + 40, { steps: 12 }); await page.mouse.up();
   await page.waitForFunction((t) => document.querySelector('.timeline h3').firstChild.textContent.trim() !== t, four[0]);
   assert.equal((await titles()).at(-1), four[0]);
+  // a stop's own note (備註) shows on the card
+  await page.waitForTimeout(500); await page.locator('[data-stop-more]').first().click(); await page.click('[data-stop-edit]:visible');
+  await page.fill('#stopForm [name=note]', '僅收現金'); await page.click('#stopForm button[type=submit]');
+  await page.waitForSelector('.timeline .stop-note'); assert.match(await page.locator('.timeline .stop-note').first().innerText(), /僅收現金/);
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
