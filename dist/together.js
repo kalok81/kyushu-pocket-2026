@@ -1692,7 +1692,7 @@ window.Together = (() => {
   }
   const shopPreview = () =>
     shopPhoto
-      ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片"><span class="links">${Kit.btn("用相片重新 AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-tg": "shopPhotoAgain" } })}${Kit.btn("移除相片", { size: "sm", icon: "x", attrs: { "data-tg": "shopPhotoClear" } })}</span>`
+      ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片">${Kit.btn("移除相片", { size: "sm", icon: "x", iconOnly: true, cls: "shop-photo-del", attrs: { "data-tg": "shopPhotoClear" } })}`
       : "";
   const placeRow = (t) =>
     `<input name="place" maxlength="200" placeholder="店名、地址，或貼上 Google 地圖連結" aria-label="購買地點" value="${esc(t)}">`;
@@ -1701,7 +1701,7 @@ window.Together = (() => {
   async function findBuyPlaces(full = false) {
     const f = $('[data-tg-form="shop"]'),
       info = $("#shopPlaceInfo"),
-      btn = f?.querySelector(full ? '[data-tg="shopFindAll"]' : '[data-tg="shopFindPlaces"]'),
+      btn = f?.querySelector('[data-tg="shopFindAll"]'),
       name = f?.elements.name.value.trim();
     if (!f) return;
     if (!name) return toast("請先輸入物品名稱。");
@@ -1732,6 +1732,7 @@ window.Together = (() => {
           const pv = $("#shopPreview");
           if (pv) pv.innerHTML = shopPreview();
         }
+        f.querySelector(".shop-more").open = true;
         fillStatus(p ? `AI 已按網上資料填入空白欄位${r.photo ? "，並加入網上的產品相片" : ""}，請檢查。` : "網上找不到這件產品的資料，請自行填寫。", false);
       }
       const rows = $("#shopPlaceRows"),
@@ -1752,14 +1753,41 @@ window.Together = (() => {
       btn.disabled = false;
     }
   }
+  // One box for the item: its name, or a product page / article link. Two buttons: 相片 (photos; on a new item with no
+  // name, AI adds each photographed item to the list) and AI 填寫 (by link, name, or the form's photo). The other
+  // fields sit under 更多資料 until the AI has filled them or the item is edited.
+  const isLink = (t) => /^https?:\/\/\S+$/i.test(String(t).trim());
   function shopForm(x) {
     const v = (k) => esc(x?.[k] ?? "");
-    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo"><div id="shopPreview">${shopPreview()}</div>${x ? Kit.btn(shopPhoto ? "更換相片" : "加相片", { icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopPhoto" } }) : ""}<input type="file" accept="image/*" id="shopPhotoInput" hidden><p class="note" id="shopFillInfo">${x ? "加相片後可按「用相片重新 AI 分析」；" : ""}輸入物品名稱後按「AI 按名稱填寫」，AI 會上網找資料填入空白欄位。</p></div><label>物品<input name="name" maxlength="80" required placeholder="例如：明太子禮盒" value="${v("name")}"></label>${Kit.btn("AI 按名稱填寫", { size: "sm", variant: "secondary", icon: "sparkles", cls: "shop-find-all", attrs: { "data-tg": "shopFindAll" } })}<div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
+    return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo" id="shopPreview">${shopPreview()}</div><label>物品<input name="name" maxlength="500" required placeholder="${x ? "物品名稱" : "物品名稱，或貼上產品網址"}" value="${v("name")}"></label><div class="shop-actions">${Kit.btn("相片", { icon: "camera", attrs: { "data-tg": "shopPic" } })}${Kit.btn("AI 填寫", { variant: "secondary", icon: "sparkles", attrs: { "data-tg": "shopFindAll" } })}</div><input type="file" accept="image/*" id="shopPicInput" multiple hidden><p class="note" id="shopFillInfo">${
+      x ? "按「AI 填寫」：AI 按名稱（或相片）上網找資料、相片及購買地點，只填空白欄位。" : "輸入名稱後按「AI 填寫」，AI 會上網找資料、相片及購買地點。貼上產品網址、或未輸入名稱時按「相片」（可多張），AI 會認出物品直接加入清單。"
+    }</p><details class="shop-more"${x ? " open" : ""}><summary>更多資料（數量、購買地點、價錢…）</summary><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰／備註<input name="detail" maxlength="500" placeholder="例如：媽媽、要辣味" value="${v("detail")}"></label></div><label>分類<select name="cat">${Object.entries(SHOP_CATS)
       .map(([k, v]) => `<option value="${k}"${(x ? shopCat(x) : "food") === k ? " selected" : ""}>${v}</option>`)
-      .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div><div class="links">${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}${Kit.btn("AI 找購買地點", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-tg": "shopFindPlaces" } })}</div><p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。「AI 找購買地點」會上網搜尋目的地有售的地方。</p></fieldset><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
+      .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div>${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}<p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。</p></fieldset><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
       .map((p) => `<option value="${esc(p.id)}"${x?.placeId === p.id ? " selected" : ""}>${esc(p.v[1])}${p.v[0] ? ` · ${esc(p.v[0])}` : ""}</option>`)
-      .join("")}</select></label><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
+      .join("")}</select></label><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div></details>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
+  }
+  // AI 填寫: a link goes to the AI as a product page (or an article to pick from); a name is searched on the web; with
+  // only a photo, the photo is read again.
+  function shopAiFill() {
+    const f = $('[data-tg-form="shop"]');
+    if (!f) return;
+    const name = f.elements.name.value.trim();
+    if (isLink(name)) {
+      queueProductLink(name);
+      Kit.close();
+    } else if (name) findBuyPlaces(true);
+    else if (shopPhoto) requestFill(shopPhoto);
+    else toast("請先輸入物品名稱、貼上網址，或加相片。");
+  }
+  // 相片: on a new item with nothing typed, each photo becomes its own item (AI); otherwise the first is this item's photo.
+  function shopPics(files) {
+    const f = $('[data-tg-form="shop"]');
+    if (!state.shopEdit && !f?.elements.name.value.trim()) {
+      if (state.status === "ready") queueProducts(files);
+      Kit.close();
+    } else pickShopPhoto(files[0]);
   }
   function shopItem(x) {
     const price = x.price != null ? `<b class="shop-price">${esc(S.format(S.toMinor(x.price, x.currency), x.currency))}</b>` : "";
@@ -1778,7 +1806,7 @@ window.Together = (() => {
       `${Kit.sheetHead(x ? "修改物品" : "加入購物清單")}${
         x
           ? ""
-          : `<section class="shop-ai"><p class="shop-ai-title">${icon("sparkles")}<b>AI 認物品，自動加入</b></p>${Kit.btn("影相／上載相片（可多張）", { variant: "primary", icon: "camera", cls: "btn-block", attrs: { "data-tg": "shopAi" } })}<input type="file" accept="image/*" id="shopAiInput" multiple hidden><form class="tg-form shop-link" data-tg-form="shopLink"><label>或貼上產品網頁／圖片連結<span class="searchrow"><input name="url" class="search" type="url" inputmode="url" autocomplete="off" placeholder="https://…" required>${Kit.btn("讀取", { type: "submit", variant: "secondary" })}</span></label></form><p class="note">手機會讓你選擇影相或從相簿揀相。AI 會認出物品、規格及價錢並加入清單，之後可以修改；也可以在購物頁直接貼上截圖。產品網頁、圖片，或「手信推介」一類列出多款產品的文章都可以貼上。</p></section><p class="form-divider"><span>或自己輸入</span></p>`
+          : ""
       }${shopForm(x)}`,
     );
   }
@@ -2100,6 +2128,7 @@ window.Together = (() => {
           put("price", r.price);
           if (r.cat && SHOP_CATS[r.cat]) el.cat.value = r.cat;
           if (r.price != null && r.currency) el.currency.value = r.currency;
+          f.querySelector(".shop-more").open = true;
           fillStatus("AI 已填入空白欄位，請檢查。", false);
         }
       }
@@ -2396,8 +2425,8 @@ window.Together = (() => {
       else go();
       return;
     }
-    if (f.dataset.tgForm === "shopLink") {
-      queueProductLink(str("url"));
+    if (f.dataset.tgForm === "shop" && isLink(str("name")) && !state.shopEdit) {
+      queueProductLink(str("name"));
       Kit.close();
       return;
     }
@@ -2566,8 +2595,7 @@ window.Together = (() => {
       const [name, id] = d.tgDel.split(":");
       remove(name, id);
     }
-    if (d.tg === "shopPhoto") $("#shopPhotoInput")?.click();
-    if (d.tg === "shopAi") $("#shopAiInput")?.click();
+    if (d.tg === "shopPic") $("#shopPicInput")?.click();
     if (d.tg === "shopPhotoClear") {
       shopPhoto = null;
       $("#shopPreview").innerHTML = "";
@@ -2590,9 +2618,7 @@ window.Together = (() => {
         rows.lastElementChild.querySelector("input")?.focus();
       }
     }
-    if (d.tg === "shopFindPlaces") findBuyPlaces();
-    if (d.tg === "shopFindAll") findBuyPlaces(true);
-    if (d.tg === "shopPhotoAgain" && shopPhoto) requestFill(shopPhoto);
+    if (d.tg === "shopFindAll") shopAiFill();
     if (d.tg === "newEntry") openForm();
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
@@ -2637,14 +2663,9 @@ window.Together = (() => {
       e.target.value = "";
       Kit.close();
     }
-    if (e.target.id === "shopPhotoInput" && e.target.files[0]) {
-      pickShopPhoto(e.target.files[0]);
+    if (e.target.id === "shopPicInput" && e.target.files.length) {
+      shopPics([...e.target.files]);
       e.target.value = "";
-    }
-    if (e.target.id === "shopAiInput" && e.target.files.length) {
-      if (state.status === "ready") queueProducts([...e.target.files]);
-      e.target.value = "";
-      Kit.close();
     }
   });
   document.addEventListener("change", (e) => {

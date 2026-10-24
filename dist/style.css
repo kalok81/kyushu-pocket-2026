@@ -182,9 +182,6 @@ html{scroll-behavior:auto}
 .tg-google{width:100%}
 .tg-scan{display:grid;gap:4px}
 .tg-scan .note{margin:0}
-.shop-photo{display:grid;gap:8px}
-#shopPreview{display:flex;gap:10px;align-items:flex-end}
-#shopPreview img{width:96px;height:96px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
 .shop-item{display:grid;grid-template-columns:84px 1fr;gap:14px}
 .shop-item:not(:has(.shop-thumb)){grid-template-columns:1fr}
 .shop-thumb{width:84px;height:84px;min-height:0;padding:0;border:0;border-radius:10px;overflow:hidden;background:none;box-shadow:none;cursor:zoom-in}
@@ -219,9 +216,6 @@ html{scroll-behavior:auto}
 .tg-merge button{justify-self:start}
 .tg-pick{margin-left:auto;display:flex;align-items:center;gap:4px;color:var(--ink)}
 .tg-pick input{width:18px;height:18px}
-.shop-ai{display:grid;gap:6px;margin:14px 0 0}
-.shop-ai .note{margin:0}
-.shop-ai .links{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .buy-here{background:var(--sage);border-radius:8px;padding:6px 10px}
 .receipt-photos{display:grid;gap:10px}
 .receipt-photos img{width:100%;border-radius:8px;border:1px solid var(--line)}
@@ -723,11 +717,6 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .view-toggle{flex:none;padding:0}
 .view-toggle .chip{padding:6px 10px}
 .shop-place{display:flex;align-items:flex-start;gap:4px}
-.shop-ai-title{display:flex;align-items:center;gap:8px;margin:0 0 10px}
-.shop-ai-title .icon{color:#c9a227}
-.shop-ai .links>.btn{flex:1}
-.shop-link{margin:12px 0 0}
-.shop-link .searchrow{flex-direction:row}
 /* ---- 住宿 and 機票 ---- */
 .card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:-6px -8px 0 0}
 .hotel h2{margin:6px 0 10px;font-size:19px;font-weight:650}
@@ -785,10 +774,8 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .shop-place{align-items:center}
 .shop-place>span{flex:1;min-width:0}
 .shop-place>.btn-icon{margin:-6px -6px -6px 0}
-#shopPreview{flex-wrap:wrap}
 #detailBody .shop-detail-photo{display:block;width:100%;max-height:60vh;object-fit:contain;border-radius:12px;background:var(--muted-bg);margin:4px 0 14px}
 #detailBody .shop-item>div{min-width:0}
-.shop-find-all{justify-self:start;margin-top:-4px}
 /* AI progress (Kit.progress / Kit.busy): time-based bar, 100% when done */
 .ai-progress{display:grid;gap:4px;margin:6px 0}
 .ai-progress-bar{height:6px;border-radius:999px;background:var(--muted-bg);overflow:hidden}
@@ -840,3 +827,14 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .time .stop-grip{margin:0 0 0 auto;width:32px;height:30px}
 }
 .tg-form[hidden]{display:none}
+/* 購物 form: one box, two buttons, the rest under 更多資料 */
+.shop-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:-4px}
+.shop-photo{position:relative}
+.shop-photo:empty{display:none}
+.shop-photo img{display:block;width:100%;max-height:220px;object-fit:contain;border-radius:12px;background:var(--muted-bg)}
+.shop-photo .shop-photo-del{position:absolute;top:8px;right:8px;background:var(--card);border-radius:50%}
+.shop-more{border:1px solid var(--border);border-radius:var(--radius);padding:0 12px}
+.shop-more>summary{padding:12px 0;font-weight:600;cursor:pointer;list-style-position:inside}
+.shop-more[open]{display:grid;gap:12px;padding-bottom:12px}
+.shop-more[open]>summary{border-bottom:1px solid var(--border)}
+#detailBody>form{clear:right}

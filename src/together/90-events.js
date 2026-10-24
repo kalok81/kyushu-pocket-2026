@@ -152,8 +152,8 @@
       else go();
       return;
     }
-    if (f.dataset.tgForm === "shopLink") {
-      queueProductLink(str("url"));
+    if (f.dataset.tgForm === "shop" && isLink(str("name")) && !state.shopEdit) {
+      queueProductLink(str("name"));
       Kit.close();
       return;
     }
@@ -322,8 +322,7 @@
       const [name, id] = d.tgDel.split(":");
       remove(name, id);
     }
-    if (d.tg === "shopPhoto") $("#shopPhotoInput")?.click();
-    if (d.tg === "shopAi") $("#shopAiInput")?.click();
+    if (d.tg === "shopPic") $("#shopPicInput")?.click();
     if (d.tg === "shopPhotoClear") {
       shopPhoto = null;
       $("#shopPreview").innerHTML = "";
@@ -346,9 +345,7 @@
         rows.lastElementChild.querySelector("input")?.focus();
       }
     }
-    if (d.tg === "shopFindPlaces") findBuyPlaces();
-    if (d.tg === "shopFindAll") findBuyPlaces(true);
-    if (d.tg === "shopPhotoAgain" && shopPhoto) requestFill(shopPhoto);
+    if (d.tg === "shopFindAll") shopAiFill();
     if (d.tg === "newEntry") openForm();
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
@@ -393,14 +390,9 @@
       e.target.value = "";
       Kit.close();
     }
-    if (e.target.id === "shopPhotoInput" && e.target.files[0]) {
-      pickShopPhoto(e.target.files[0]);
+    if (e.target.id === "shopPicInput" && e.target.files.length) {
+      shopPics([...e.target.files]);
       e.target.value = "";
-    }
-    if (e.target.id === "shopAiInput" && e.target.files.length) {
-      if (state.status === "ready") queueProducts([...e.target.files]);
-      e.target.value = "";
-      Kit.close();
     }
   });
   document.addEventListener("change", (e) => {

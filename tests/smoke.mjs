@@ -28,7 +28,7 @@ await page.route('https://open.er-api.com/**', r => r.fulfill({ json: rates, hea
 await page.route(/^https:\/\/(tile\.openstreetmap|www\.google)/, r => r.abort());
 const addShop = async (name, place) => {
  await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
- await page.fill('[data-tg-form=shop] [name=name]', name); await page.fill('[data-tg-form=shop] [name=place]', place); await page.click('[data-tg-form=shop] button[type=submit]');
+ await page.fill('[data-tg-form=shop] [name=name]', name); await page.click('.shop-more summary'); await page.fill('[data-tg-form=shop] [name=place]', place); await page.click('[data-tg-form=shop] button[type=submit]');
  await page.waitForFunction(() => !document.querySelector('#detail').open);
 };
 const step = async (name, fn) => { try { await fn(); console.log('✓', name); } catch (e) { console.error('✗', name); throw e; } };
@@ -175,7 +175,7 @@ try {
  });
  await step('shopping item linked to a chosen explore place', async () => {
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
-  await page.fill('[data-tg-form=shop] [name=name]', '雷門煎餅'); await page.selectOption('[data-tg-form=shop] [name=placeId]', { label: '淺草寺（雷門） · 淺草' });
+  await page.fill('[data-tg-form=shop] [name=name]', '雷門煎餅'); await page.click('.shop-more summary'); await page.selectOption('[data-tg-form=shop] [name=placeId]', { label: '淺草寺（雷門） · 淺草' });
   await page.click('[data-tg-form=shop] button[type=submit]');
   await page.waitForSelector('.shop-item:has-text("雷門煎餅") .shop-place');
   assert.match(await page.locator('.shop-item', { hasText: '雷門煎餅' }).innerText(), /探索：\s*淺草寺（雷門）[\s\S]*淺草寺（雷門） 東京都台東区浅草2-3-1/);
@@ -207,7 +207,7 @@ try {
  });
  await step('shopping categories: grouped list and filter', async () => {
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
-  await page.fill('[data-tg-form=shop] [name=name]', '化妝水'); await page.selectOption('[data-tg-form=shop] [name=cat]', 'drug'); await page.click('[data-tg-form=shop] button[type=submit]');
+  await page.fill('[data-tg-form=shop] [name=name]', '化妝水'); await page.click('.shop-more summary'); await page.selectOption('[data-tg-form=shop] [name=cat]', 'drug'); await page.click('[data-tg-form=shop] button[type=submit]');
   await page.click('[data-shop-filter=all]'); await page.waitForSelector('.shop-cat-head');
   const heads = await page.locator('.shop-cat-head').allInnerTexts();
   assert.ok(heads[0].startsWith('💄 藥妝') && heads.some((h) => h.startsWith('🍱 食品')), heads.join(','));
@@ -216,8 +216,10 @@ try {
   await page.click('[data-shop-cat=all]');
  });
  await step('shopping: product link and pasted picture go to the AI', async () => {
-  await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shopLink]');
-  await page.fill('[data-tg-form=shopLink] [name=url]', 'https://shop.example.jp/item/123'); await page.click('[data-tg-form=shopLink] button[type=submit]');
+  await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
+  // one box for names and links; only 相片 and AI 填寫, the rest folded away
+  assert.deepEqual(await page.locator('#detail .shop-actions .btn').allInnerTexts(), ['相片', 'AI 填寫']); assert.ok(await page.locator('[data-tg-form=shop] [name=qty]').isHidden());
+  await page.fill('[data-tg-form=shop] [name=name]', 'https://shop.example.jp/item/123'); await page.click('[data-tg-form=shop] button[type=submit]');
   await page.waitForFunction(() => /shop\.example\.jp/.test(document.querySelector('[data-tg-live=jobs]')?.textContent || ''));
   await page.evaluate(async () => {
    const c = Object.assign(document.createElement('canvas'), { width: 8, height: 8 }), blob = await new Promise((r) => c.toBlob(r, 'image/png'));
@@ -321,7 +323,7 @@ try {
  });
  await step('shopping: several 購買地點, AI finds where to buy', async () => {
   await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
-  await page.fill('[data-tg-form=shop] [name=name]', '雷門せんべい'); await page.fill('[data-tg-form=shop] [name=place] >> nth=0', '仲見世通り');
+  await page.fill('[data-tg-form=shop] [name=name]', '雷門せんべい'); await page.click('.shop-more summary'); await page.fill('[data-tg-form=shop] [name=place] >> nth=0', '仲見世通り');
   await page.click('[data-tg=shopFindAll]'); await page.waitForFunction(() => /AI 建議/.test(document.querySelector('#shopPlaceInfo').textContent));
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '雷門せんべい（雷門煎餅）', 'a fuller name of the same product');
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=qty]'), '12枚入'); assert.equal(await page.inputValue('[data-tg-form=shop] [name=price]'), '1080');
@@ -340,7 +342,7 @@ try {
  });
  await step('shopping: an article link lists its products to pick from', async () => {
   await page.keyboard.press('Escape'); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
-  await page.fill('[data-tg-form=shopLink] [name=url]', 'https://news.example.com/fukuoka-10'); await page.click('[data-tg-form=shopLink] button[type=submit]');
+  await page.fill('[data-tg-form=shop] [name=name]', 'https://news.example.com/fukuoka-10'); await page.click('[data-tg=shopFindAll]');
   await page.evaluate(async () => {
    const fs = await import('./vendor/firebase/firebase-firestore.js'), jobs = globalThis.__fakeStore.receiptJobs || {};
    const id = Object.keys(jobs).find((k) => jobs[k].url === 'https://news.example.com/fukuoka-10');
