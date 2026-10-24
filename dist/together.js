@@ -1732,8 +1732,9 @@ window.Together = (() => {
             if (v != null && v !== "" && !String(el[k].value).trim()) el[k].value = v;
           };
         if (p) {
-          // a fuller name of the same product (brand, original name) replaces what was typed
-          if (p.name && norm(p.name).includes(norm(name))) el.name.value = p.name;
+          // the product's name in its original language (as on the package) replaces what was typed; the Chinese
+          // translation is added under it (translateNames)
+          if (p.name) el.name.value = p.name;
           put("qty", p.qty);
           put("detail", p.detail);
           put("price", p.price);

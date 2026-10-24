@@ -116,7 +116,7 @@ async function deepseekTool(tool, body) {
 const productPrompt = t => { const { place, cur, home } = tripInfo(t); return `You identify products that travellers in ${place} photograph to put on a shopping list (packages, labels, price tags, shelves, screenshots).
 Reply with JSON only, in this shape:
 {"name": string, "spec": string, "detail": string, "category": "drug" | "food" | "fashion" | "home" | "stationery" | "toys" | "electronics" | "other", "price": number or null, "currency": "${cur}" | "${home}", "place": string, "confidence": "high" | "medium" | "low"}
-- name: the product in Traditional Chinese (Hong Kong usage), with the brand and the original-language product name in brackets when different, at most 80 characters.
+- name: the product name in its original language, as printed on the package or product page (brand first, e.g. "東京ばな奈 見ぃつけたっ", "肌ラボ 極潤 ヒアルロン液"), at most 80 characters. Do not translate it and do not add a translation in brackets: a Traditional Chinese translation is added separately.
 - spec: size, quantity or variant printed on it (e.g. 100g, 30枚入, mint), at most 30 characters; empty if unknown.
 - detail: one short Traditional Chinese line on what it is or what it is for, at most 60 characters.
 - category: drug for cosmetics, skincare, hair care, beauty tools, medicine, patches and supplements (drugstore goods); food for snacks, sweets, drinks, instant food and condiments; fashion for clothes, shoes, bags, wallets and accessories; home for kitchen and household goods; stationery for pens, notebooks and office goods; toys for toys, games, figures, character and idol goods; electronics for gadgets and appliances; other otherwise.

@@ -328,14 +328,14 @@ try {
  });
  await step('shopping: several 購買地點, AI finds where to buy', async () => {
   await closeSheet(); await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]');
-  await page.fill('[data-tg-form=shop] [name=name]', '雷門せんべい'); await page.click('.shop-more summary'); await page.fill('[data-tg-form=shop] [name=place] >> nth=0', '仲見世通り');
+  await page.fill('[data-tg-form=shop] [name=name]', '雷門煎餅'); await page.click('.shop-more summary'); await page.fill('[data-tg-form=shop] [name=place] >> nth=0', '仲見世通り');
   await page.click('[data-tg=shopFindAll]'); await page.waitForFunction(() => /AI 建議/.test(document.querySelector('#shopPlaceInfo').textContent));
-  assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '雷門せんべい（雷門煎餅）', 'a fuller name of the same product');
+  assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '浅草 雷門せんべい', 'the original-language name replaces the typed one');
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=qty]'), '12枚入'); assert.equal(await page.inputValue('[data-tg-form=shop] [name=price]'), '1080');
   assert.equal((await page.evaluate(() => window.buyRequest)).full, true);
   await page.fill('[data-tg-form=shop] [name=name]', '雷門せんべい');
   assert.deepEqual(await page.locator('[data-tg-form=shop] [name=place]').evaluateAll((els) => els.map((e) => e.value)), ['仲見世通り', '淺草寺 本堂', '東京駅 一番街']);
-  assert.equal((await page.evaluate(() => window.buyRequest)).name, '雷門せんべい');
+  assert.equal((await page.evaluate(() => window.buyRequest)).name, '雷門煎餅');
   assert.match(await page.locator('#shopPlaceInfo').innerText(), /已用 Google 地圖核實[\s\S]*另有 1 間在 Google 地圖找不到/);
   await page.click('[data-tg=shopPlaceAdd]'); await page.fill('[data-tg-form=shop] [name=place] >> nth=3', '仲見世通り');
   await page.click('[data-tg-form=shop] button[type=submit]'); await page.waitForFunction(() => !document.querySelector('#detail').open);
