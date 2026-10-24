@@ -372,7 +372,7 @@ try {
    await page.fill('#placeForm [name=f0]', '上野'); await page.fill('#placeForm [name=f1]', name); await page.locator('#placeForm [name=cats]').first().check(); await page.click('#placeForm button[type=submit]');
   }
   await page.goto(base + '/#plan?day=3'); await page.waitForSelector('.journey-day');
-  const titles = () => page.locator('.timeline h3').allInnerTexts();
+  const titles = () => page.locator('.timeline h3').evaluateAll((hs) => hs.map((h) => h.firstChild.textContent.trim()));
   await page.click('[data-plan-pick]');
   for (let k = 0; k < 3; k++) await page.locator('[data-pp-add]').first().click();
   await page.keyboard.press('Escape'); await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 3);
@@ -380,7 +380,7 @@ try {
   // ✨ AI 推薦 in the picker gives reasons; the ＋ between two stops inserts there
   const before = await titles();
   await page.locator('.stop-link .link-add').nth(1).click(); await page.waitForSelector('#ppList');
-  assert.match(await page.locator('#detail .note').first().innerText(), new RegExp(`加在「${before[1].split('\n')[0]}」之前`));
+  assert.match(await page.locator('#detail .note').first().innerText(), new RegExp(`加在「${before[1]}」之前`));
   await page.click('[data-pp-cat="✨ AI 推薦"]'); await page.waitForSelector('.pp-reason');
   assert.equal((await page.evaluate(() => window.planRequest)).mode, 'suggest');
   await page.locator('#ppList [data-pp-add]').first().click(); await page.keyboard.press('Escape');
@@ -394,7 +394,7 @@ try {
   assert.ok(await page.locator('.ai-plan-stop').count() === 4); assert.ok(await page.locator('#aiPlanForm').isHidden());
   await page.click('[data-ai-plan-apply]'); await page.waitForSelector('.timeline .stop-warn');
   assert.deepEqual(await titles(), [...four].reverse()); assert.match(await page.locator('.timeline .time').first().innerText(), /09:00–10:00/);
-  await page.click('.snack-action'); await page.waitForFunction((t) => document.querySelector('.timeline h3').innerText === t, four[0]);
+  await page.click('.snack-action'); await page.waitForFunction((t) => document.querySelector('.timeline h3').firstChild.textContent.trim() === t, four[0]);
   // 推算時間 and dragging the first slot to the end
   await page.click('[data-plan-times]'); await page.waitForFunction(() => /^09:00–\d\d:\d\d/.test(document.querySelector('.timeline .time').innerText));
   // the page re-renders after each save: wait until it settles before measuring
@@ -402,7 +402,7 @@ try {
   let grip, last;
   for (let k = 0; k < 10 && !(grip && last); k++) [grip, last] = [await page.locator('.stop-grip').first().boundingBox(), await page.locator('article.stop').last().boundingBox()];
   await page.mouse.move(grip.x + 10, grip.y + 10); await page.mouse.down(); await page.mouse.move(grip.x + 10, last.y + last.height + 40, { steps: 12 }); await page.mouse.up();
-  await page.waitForFunction((t) => document.querySelector('.timeline h3').innerText !== t, four[0]);
+  await page.waitForFunction((t) => document.querySelector('.timeline h3').firstChild.textContent.trim() !== t, four[0]);
   assert.equal((await titles()).at(-1), four[0]);
  });
  assert.deepEqual(errors, [], 'page errors');
