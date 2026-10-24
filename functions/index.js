@@ -973,6 +973,11 @@ Reply with JSON only: {"picks": [{"k": string, "reason": string}], "advice": str
  for (const s of stops) if (!order.includes(s.k)) order.push(s.k);
  const clock = /^\d{1,2}:\d{2}(\s*[–~\-－]\s*\d{1,2}:\d{2})?$/;
  const times = Object.fromEntries(Object.entries(r?.times && typeof r.times === 'object' ? r.times : {}).filter(([k, v]) => keys.has(k) && typeof v === 'string' && clock.test(v.trim())).map(([k, v]) => [k, v.trim().replace(/\s*[~\-－]\s*/, '–')]));
+ // the hotel the day starts from stays first
+ const startK = stops.find(x => x.fixed && /^hotel: where the day starts/.test(x.type))?.k;
+ if (startK != null && order[0] !== startK) order.splice(0, order.length, startK, ...order.filter(k => k !== startK));
+ // fixed times stay as the traveller set them (the model sometimes moves them anyway), e.g. leaving the hotel
+ for (const st of stops) if (st.fixed && clock.test(st.time.replace(/\s+/g, ''))) times[st.k] = st.time.replace(/\s*[~\-－]\s*/, '–');
  // a hotel at the start or end of the day is a time only (leaving, getting back)
  for (const k of [order[0], order.at(-1)]) if (/^hotel: where the day/.test(stops.find(x => x.k === k)?.type || '') && times[k]) times[k] = times[k].split('–')[0];
  const warnings = Object.fromEntries(Object.entries(r?.warnings && typeof r.warnings === 'object' ? r.warnings : {}).filter(([k, v]) => keys.has(k) && typeof v === 'string' && v.trim()).map(([k, v]) => [k, v.trim().slice(0, 80)]));
