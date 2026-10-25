@@ -506,7 +506,8 @@ function parseMapsUrl(url) {
  const at = pin ? { lat: +pin[1], lng: +pin[2] } : coords ? { lat: +coords[1], lng: +coords[2] } : null;
  // Maps URLs with a place id (…/maps/search/?api=1&query=…&query_place_id=…, or q=place_id:…) name the place exactly
  const placeId = url.searchParams.get('query_place_id') || q?.match(/^place_id:([\w-]+)/)?.[1] || null;
- return { query: placeId ? null : name || (coords ? null : q) || null, at, placeId };
+ // exact: the place's own pin (!3d…!4d…), not just where the map was looking (@…)
+ return { query: placeId ? null : name || (coords ? null : q) || null, at, exact: /!3d-?\d/.test(url.href), placeId };
 }
 
 // Hours and type label in Chinese; name and address in the language chosen by langFor.
@@ -549,6 +550,12 @@ async function placesApi(path, fields, body) {
 // Names and addresses in Japanese for trips in Japan (as on signs); elsewhere in Traditional Chinese.
 // Local script where travellers need it to match signs and show drivers (Japan, Korea); Chinese elsewhere.
 const langFor = country => ({ JP: 'ja', KR: 'ko' })[country] || 'zh-TW';
+const metersApart = (a, b) => {
+ if (!a || !b) return 0;
+ const r = Math.PI / 180, la = a.latitude ?? a.lat, lo = a.longitude ?? a.lng;
+ const h = Math.sin(((b.lat - la) * r) / 2) ** 2 + Math.cos(la * r) * Math.cos(b.lat * r) * Math.sin(((b.lng - lo) * r) / 2) ** 2;
+ return 12742000 * Math.asin(Math.sqrt(h));
+};
 const search = async (kind, body, country) => (await placesApi(`places:${kind}`, SEARCH_FIELDS, { languageCode: langFor(country), maxResultCount: 1, ...(country && kind === 'searchText' ? { regionCode: country } : {}), ...body })).places?.[0];
 // The neighbourhood name: in Japan the town (浅草) is sublocality_level_2 and the deeper levels are block numbers (２丁目, ３).
 const district = p => {
@@ -607,16 +614,24 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
  const raw = req.data?.url;
  if (typeof raw !== 'string' || raw.length > 2000) throw new HttpsError('invalid-argument', '請貼上 Google 地圖的連結。');
  const url = await resolveMapsUrl(raw.trim().match(/https:\/\/\S+/)?.[0] || raw.trim());
- const { query, at, placeId } = parseMapsUrl(url);
+ const { query, at, exact, placeId } = parseMapsUrl(url);
  const bias = at && { circle: { center: { latitude: at.lat, longitude: at.lng }, radius: 300 } };
  // name: the form's name and address, for links that carry neither (Google's own …/?cid=… links)
  const hint = typeof req.data?.name === 'string' ? req.data.name.trim().slice(0, 200) : '';
- const place = placeId
+ let place = placeId
   ? await placesApi(`places/${placeId}?languageCode=${langFor(country)}`, SEARCH_FIELDS.replace(/places\./g, '')).catch(() => null)
   : query
   ? await search('searchText', { textQuery: query, ...(bias && { locationBias: bias }) }, country)
   : at ? await search('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }, country)
   : hint ? await search('searchText', { textQuery: hint }, country) : null;
+ // A shared place named only by an area word ("博多" → 博多区) or found far from its own pin: the place at the pin
+ // (博多駅) is the one meant
+ const AREA = /^(political|locality|sublocality.*|administrative_area.*|neighborhood|route|postal_code|country)$/;
+ if (place && query && exact && ((place.types || []).every(t => AREA.test(t)) || metersApart(place.location, at) > 300)) {
+  const d = 0.001; // about 100 m: the name searched again only right around the pin
+  const pinned = await search('searchText', { textQuery: query, locationRestriction: { rectangle: { low: { latitude: at.lat - d, longitude: at.lng - d }, high: { latitude: at.lat + d, longitude: at.lng + d } } } }, country).catch(() => null);
+  if (pinned) place = pinned;
+ }
  if (!place) throw new HttpsError('not-found', '找不到這個地點，請手動輸入。');
  // photos: up to 8 of the place's Google Maps photos, to pick another one when the first is wrong
  if (req.data?.photos === true) {
