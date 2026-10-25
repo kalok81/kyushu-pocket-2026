@@ -137,7 +137,7 @@
       ],
       buys = buysAt({ placeId: p.id });
     openDialog(
-      `${p.photo ? `<figure class="place-photo detail-photo"><img src="data:image/jpeg;base64,${p.photo}" alt=""><figcaption>${p.photoBy ? `相片：${esc(p.photoBy)} · Google 地圖` : "相片：Google 地圖"}</figcaption></figure>` : ""}<div class="detail-badges">${Kit.badge(esc(cat), catCls)}<span>${esc(areaOf(p) || p.v[0])}</span></div><h2 class="detailtitle">${esc(p.v[1])}${zhLine(p.zh)}</h2>${p.v[9]?.includes("已閉店") ? '<p class="closed">已結業 · 保留原有記錄</p>' : ""}<div class="detail-actions">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}<button class="save btn btn-outline btn-icon${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"}" aria-pressed="${on}">${icon("star")}</button>${Kit.btn("編輯", { icon: "edit", iconOnly: true, attrs: { "data-place-edit": p.id } })}${Kit.menu([
+      `${p.photo ? `<figure class="place-photo detail-photo"><img src="data:image/jpeg;base64,${p.photo}" alt=""><figcaption>${esc(photoCredit(p.photoBy))}</figcaption></figure>` : ""}<div class="detail-badges">${Kit.badge(esc(cat), catCls)}<span>${esc(areaOf(p) || p.v[0])}</span></div><h2 class="detailtitle">${esc(p.v[1])}${zhLine(p.zh)}</h2>${p.v[9]?.includes("已閉店") ? '<p class="closed">已結業 · 保留原有記錄</p>' : ""}<div class="detail-actions">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}<button class="save btn btn-outline btn-icon${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"}" aria-pressed="${on}">${icon("star")}</button>${Kit.btn("編輯", { icon: "edit", iconOnly: true, attrs: { "data-place-edit": p.id } })}${Kit.menu([
         { label: "複製地址", icon: "copy", attrs: { "data-copy": p.v[3] || p.v[1] } },
         { label: "刪除地點", icon: "trash", danger: true, attrs: { "data-place-delete": p.id } },
       ])}</div><div class="info-list">${[
@@ -245,10 +245,48 @@
     }
   }
   // The place form's photo (from 自動填寫): kept in hidden fields, shown with its Google credit and a remove button.
+  // A wrong photo: pick another of the place's Google Maps photos, or upload one's own.
+  const OWN_PHOTO = "旅伴上載";
+  const photoCredit = (by) => (by === OWN_PHOTO ? "相片：旅伴上載" : by ? `相片：${by} · Google 地圖` : "相片：Google 地圖");
   const placePhotoHtml = (photo, by) =>
-    photo
-      ? `<figure class="place-photo"><img src="data:image/jpeg;base64,${photo}" alt=""><figcaption>${by ? `相片：${esc(by)} · Google 地圖` : "相片：Google 地圖"}</figcaption>${Kit.btn("移除相片", { icon: "x", iconOnly: true, size: "sm", cls: "place-photo-del", attrs: { "data-place-photo-del": true } })}</figure>`
-      : "";
+    `${
+      photo
+        ? `<figure class="place-photo"><img src="data:image/jpeg;base64,${photo}" alt=""><figcaption>${esc(photoCredit(by))}</figcaption>${Kit.btn("移除相片", { icon: "x", iconOnly: true, size: "sm", cls: "place-photo-del", attrs: { "data-place-photo-del": true } })}</figure>`
+        : ""
+    }<div class="place-photo-actions">${Kit.btn(photo ? "換 Google 相片" : "選 Google 相片", { size: "sm", variant: "secondary", icon: "image", attrs: { "data-place-photo-pick": true } })}<label class="btn btn-sm btn-secondary">${icon("camera")}上載相片<input type="file" accept="image/*" class="sr-only" data-place-photo-file></label></div><div id="placePhotoPick"></div>`;
+  async function pickPlacePhoto() {
+    const f = $("#placeForm"),
+      box = $("#placePhotoPick"),
+      url = f.elements.mapsUrl.value.trim();
+    if (!url) return toast("請先貼上 Google 地圖連結。");
+    box.innerHTML = Kit.progress({ text: "正在載入 Google 地圖相片…", seconds: 8 });
+    try {
+      const list = await window.Together.placePhotos(url, `${f.elements.f1.value} ${f.elements.f3.value}`.trim());
+      pickedPhotos = list;
+      if (!$("#placePhotoPick")) return;
+      $("#placePhotoPick").innerHTML = list.length
+        ? `<p class="note">揀一張做地點相片：</p><div class="photo-pick">${list.map((p, k) => `<button type="button" data-place-photo-use="${k}" aria-label="用第 ${k + 1} 張相片"><img src="data:image/jpeg;base64,${p.photo}" alt=""></button>`).join("")}</div>`
+        : '<p class="note">Google 地圖沒有這個地點的其他相片，可以上載自己的相片。</p>';
+    } catch (e) {
+      console.error(e);
+      if ($("#placePhotoPick")) $("#placePhotoPick").innerHTML = `<p class="note">${esc(fnError(e, "未能載入相片，請稍後再試。"))}</p>`;
+    }
+  }
+  let pickedPhotos = [];
+  async function uploadPlacePhoto(file) {
+    if (!file) return;
+    try {
+      let b64 = await window.Together.shrink(file, 640, 0.75);
+      if (b64.length > 300000) b64 = await window.Together.shrink(file, 480, 0.65);
+      setPlacePhoto(b64, OWN_PHOTO);
+    } catch (e) {
+      console.error(e);
+      toast("未能讀取這張相片，請換一張再試。");
+    }
+  }
+  document.addEventListener("change", (e) => {
+    if (e.target.matches("[data-place-photo-file]")) uploadPlacePhoto(e.target.files[0]);
+  });
   function setPlacePhoto(photo, by = "") {
     const f = $("#placeForm");
     if (!f) return;

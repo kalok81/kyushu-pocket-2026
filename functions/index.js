@@ -584,6 +584,14 @@ function tabelogPage(results, name) {
  return '';
 }
 tabelogPage.wait = p => Promise.race([p, new Promise(r => setTimeout(() => r(''), 20_000))]);
+// One Google Maps photo as a 640px JPEG, with its author (Google asks for the credit to be shown).
+async function placePhotoJpeg(ph) {
+ const media = await (await fetch(`https://places.googleapis.com/v1/${ph.name}/media?maxWidthPx=800&skipHttpRedirect=true`, { headers: { 'X-Goog-Api-Key': PLACES_API_KEY.value().trim() }, signal: AbortSignal.timeout(15_000) })).json();
+ if (!media.photoUri) return null;
+ const buf = Buffer.from(await (await fetch(media.photoUri, { signal: AbortSignal.timeout(15_000) })).arrayBuffer());
+ const photo = (await sharp(buf, { failOn: 'none' }).rotate().resize(640, 640, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64');
+ return photo.length <= 300000 ? { photo, photoBy: String(ph.authorAttributions?.[0]?.displayName || '').slice(0, 60) } : null;
+}
 export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY, DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 60, maxInstances: 3 }, async req => {
  if (!req.auth) throw new HttpsError('unauthenticated', '請先登入。');
  if (!(await isMember(req.auth.token))) throw new HttpsError('permission-denied', '這個帳戶未在旅伴名單。');
@@ -610,21 +618,21 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
   : at ? await search('searchNearby', { rankPreference: 'DISTANCE', locationRestriction: { circle: { ...bias.circle, radius: 50 } } }, country)
   : hint ? await search('searchText', { textQuery: hint }, country) : null;
  if (!place) throw new HttpsError('not-found', '找不到這個地點，請手動輸入。');
+ // photos: up to 8 of the place's Google Maps photos, to pick another one when the first is wrong
+ if (req.data?.photos === true) {
+  const list = (await placesApi(`places/${place.id}`, 'photos').catch(() => ({}))).photos || [];
+  const photos = (await Promise.all(list.slice(0, 8).map(ph => placePhotoJpeg(ph).catch(() => null)))).filter(Boolean);
+  return { photos };
+ }
  // highlights: the place form asks for 必吃・必買・特色 too (one AI use; left out when the day's AI uses are spent).
  const wantHighlights = req.data?.highlights === true;
  const wantPhoto = req.data?.photo === true;
  const detail = await placesApi(`places/${place.id}?languageCode=zh-TW`, DETAIL_FIELDS + (wantHighlights ? HIGHLIGHT_FIELDS : '') + (wantPhoto ? ',photos' : '')).catch(() => ({}));
- // photo: the place's first Google Maps photo as a 640px JPEG, with its author (Google asks for the credit to be shown).
+ // photo: the place's first Google Maps photo
  let photo = null, photoBy = '';
  if (wantPhoto && detail.photos?.length)
   try {
-   const ph = detail.photos[0];
-   const media = await (await fetch(`https://places.googleapis.com/v1/${ph.name}/media?maxWidthPx=800&skipHttpRedirect=true`, { headers: { 'X-Goog-Api-Key': PLACES_API_KEY.value().trim() }, signal: AbortSignal.timeout(15_000) })).json();
-   if (media.photoUri) {
-    const buf = Buffer.from(await (await fetch(media.photoUri, { signal: AbortSignal.timeout(15_000) })).arrayBuffer());
-    photo = (await sharp(buf, { failOn: 'none' }).rotate().resize(640, 640, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64');
-    photoBy = String(ph.authorAttributions?.[0]?.displayName || '').slice(0, 60);
-   }
+   ({ photo = null, photoBy = '' } = (await placePhotoJpeg(detail.photos[0])) || {});
   } catch (e) {
    console.error('place photo', e?.message);
   }

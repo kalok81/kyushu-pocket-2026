@@ -203,6 +203,11 @@
     if (el.dataset.placeEdit) placeForm(places.find((p) => p.id === el.dataset.placeEdit));
     if (el.id === "placeLookup") lookupPlaceForm();
     if (el.dataset.placePhotoDel !== undefined) setPlacePhoto(null);
+    if (el.dataset.placePhotoPick !== undefined) pickPlacePhoto();
+    if (el.dataset.placePhotoUse) {
+      const p = pickedPhotos[Number(el.dataset.placePhotoUse)];
+      p && setPlacePhoto(p.photo, p.photoBy);
+    }
     if (el.dataset.branchAdd !== undefined) {
       $("#branchRows").insertAdjacentHTML("beforeend", branchRow());
       $("#branchRows").lastElementChild.querySelector("input").focus();

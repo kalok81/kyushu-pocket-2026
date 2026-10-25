@@ -339,6 +339,11 @@ try {
   assert.equal((await page.evaluate(() => window.lookupRequest)).highlights, true);
   assert.equal((await page.evaluate(() => window.lookupRequest)).photo, true);
   await page.waitForSelector('#placePhotoBox img'); assert.match(await page.locator('#placePhotoBox figcaption').innerText(), /Tester · Google 地圖/);
+  // a wrong photo: pick another Google one, or upload one's own
+  await page.click('[data-place-photo-pick]'); await page.locator('[data-place-photo-use="1"]').click();
+  assert.match(await page.locator('#placePhotoBox figcaption').innerText(), /Pic B · Google 地圖/);
+  await page.setInputFiles('[data-place-photo-file]', { name: 'own.png', mimeType: 'image/png', buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC', 'base64') });
+  await page.waitForFunction(() => /旅伴上載/.test(document.querySelector('#placePhotoBox figcaption')?.innerText || ''));
   await page.click('#placeForm button[type=submit]');
   await page.locator('#results .card.place', { hasText: '風雷神門' }).first().locator('[data-place]').click();
   await page.click('#detail [data-place-edit]'); assert.equal(await page.inputValue('#placeForm [name=mapsUrl]'), link);

@@ -23,6 +23,11 @@
     if (!navigator.onLine) throw new Error("offline");
     return (await (await callable("lookupPlace", 70000))({ url, country: state.meta?.country || "", ...(highlights ? { highlights: true, trip: tripId } : {}), ...(photo ? { photo: true } : {}), ...(name ? { name } : {}) })).data;
   }
+  // Up to 8 Google Maps photos of the linked place, to pick another one
+  async function placePhotos(url, name = "") {
+    if (!navigator.onLine) throw new Error("offline");
+    return (await (await callable("lookupPlace", 70000))({ url, photos: true, country: state.meta?.country || "", ...(name ? { name } : {}) })).data.photos || [];
+  }
   // Places: trips/{t}/places documents. A new one gets its id here so a plan stop can point at it straight away.
   function savePlace({ place, fields, cats, lat, lng, points = [], mapsUrl, photo = null, photoBy = "" }) {
     const { fs, db } = fb,

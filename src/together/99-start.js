@@ -18,6 +18,8 @@
     removeItem,
     setDayLabel,
     lookupPlace,
+    placePhotos,
+    shrink,
     suggestRoutes,
     aiRoutes,
     planDay,
