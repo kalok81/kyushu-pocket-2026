@@ -163,6 +163,34 @@ Fields: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, item[k]])))}`, [], 
  for (const k of bad) if (typeof r?.[k] === 'string' && r[k].trim()) out[k] = r[k].trim().slice(0, k === 'qty' ? 30 : 500);
  return out;
 }
+// 評價: what users say about the product (reviews in Chinese, English or Japanese on the web), summed up in Traditional
+// Chinese with the sites it comes from. Empty when the search finds no reviews of this product.
+const reviewPrompt = (item, results) => `Travellers are thinking of buying this product: ${JSON.stringify({ name: item.name, spec: item.qty, detail: item.detail })}.
+From the web search results below (reviews in any language), sum up what users say about this same product, in Traditional Chinese as used in Hong Kong.
+Reply with JSON only: {"reviews": string, "sites": [number, ...]}
+- reviews: at most 220 Chinese characters. First the rating if the results show a real score, with the number of reviews when shown (e.g. "@cosme 5.4/7（1,203 篇）", "Amazon 4.3/5"); leave out a score of 0 or a site with no score. Then 優點：… and 缺點：… in short points, then who it suits (適合…). Only what the results say about this product (not another product or variant). Empty if the results have no user reviews of it.
+- sites: the numbers of the results the summary comes from.
+Search results: ${JSON.stringify(results.map((r, i) => ({ n: i + 1, title: r.title, text: r.summary })))}`;
+async function productReviews(item, t) {
+ const name = String(item.name || '').replace(/[（(].*?[)）]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
+ if (!name) return '';
+ const queries = [`${name} 評價 心得`, `${name} review`, ...(t?.country === 'JP' ? [`${name} 口コミ`] : [])];
+ const searches = await Promise.all(queries.map(q => deepseekTool('search', { query: q.slice(0, 128), count: 5 })));
+ const results = searches.flatMap(r => r?.results || []).filter((r, i, all) => r.url && all.findIndex(x => x.url === r.url) === i).slice(0, 12)
+  .map(r => ({ url: r.url, title: String(r.title || '').slice(0, 120), summary: String(r.summary || r.snippet || '').slice(0, 600) }));
+ if (!results.length) return '';
+ const r = await askDeepSeek(reviewPrompt(item, results), [], { think: false }).catch(() => null);
+ const text = typeof r?.reviews === 'string' ? r.reviews.trim().slice(0, 600) : '';
+ if (!text) return '';
+ const sites = [...new Set((Array.isArray(r.sites) ? r.sites : []).map(n => results[Number(n) - 1]?.url).filter(Boolean).map(u => new URL(u).hostname.replace(/^www\./, '')))].slice(0, 3);
+ return `${text}${sites.length ? `\n來源：${sites.join('、')}` : ''}`.slice(0, 1000);
+}
+// The product's local name and Chinese fields, then its reviews.
+async function finishProduct(item, t) {
+ const done = await withLocalName(item, t);
+ const reviews = await productReviews(done, t).catch(() => '');
+ return reviews ? { ...done, reviews } : done;
+}
 async function withLocalName(item, t) {
  item = await zhDetail(item, t);
  const script = LOCAL_NAMES[t?.country]?.[3];
@@ -412,7 +440,7 @@ cloudEvent('processReceipt', async event => {
     await ref.update({ status: 'done', result: list, doneAt: Date.now() });
     return;
    }
-   await getFirestore().collection(`trips/${trip}/shopping`).add({ ...(await withLocalName(item, tripDoc)), url: got.link.slice(0, 500), photo: got.image && got.image.length <= 400000 ? got.image : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
+   await getFirestore().collection(`trips/${trip}/shopping`).add({ ...(await finishProduct(item, tripDoc)), url: got.link.slice(0, 500), photo: got.image && got.image.length <= 400000 ? got.image : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
    await ref.delete();
    return;
   }
@@ -422,7 +450,7 @@ cloudEvent('processReceipt', async event => {
    // Photo added in the shopping form: return the details so the page can fill the empty fields.
    const { confidence: _c, ...read } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
    if (!read.name) throw new HttpsError('not-found', '認不出物品，請手動輸入。');
-   const result = await withLocalName(read, tripDoc);
+   const result = await finishProduct(read, tripDoc);
    await ref.update({ status: 'done', result, images: FieldValue.delete(), doneAt: Date.now() });
    return;
   }
@@ -430,7 +458,7 @@ cloudEvent('processReceipt', async event => {
    // Product photo: add the item straight to the shared shopping list (with the photo) and drop the job.
    const { confidence: _confidence, ...read } = cleanProduct(await askDeepSeek(productPrompt(tripDoc), images), tripDoc);
    if (!read.name) throw new HttpsError('not-found', '認不出物品，可以重試或手動輸入。');
-   const item = await withLocalName(read, tripDoc);
+   const item = await finishProduct(read, tripDoc);
    const db = getFirestore();
    await db.collection(`trips/${trip}/shopping`).add({ ...item, photo: images[0].length <= 400000 ? images[0] : null, bought: false, boughtBy: null, boughtAt: null, ai: true, by: job.by, byName: job.byName, at: Date.now(), createdAt: FieldValue.serverTimestamp() });
    await ref.delete();
@@ -1134,9 +1162,10 @@ export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck
  const tidy = rs => rs.filter((r, i, all) => all.findIndex(x => x.url === r.url) === i).map(r => ({ title: String(r.title || '').slice(0, 120), url: r.url, summary: String(r.summary || r.snippet || '').slice(0, 700) }));
  const results = tidy(searches.slice(0, 2).flatMap(r => r?.results || [])).slice(0, 10), about = tidy(searches.slice(2).flatMap(r => r?.results || [])).slice(0, 8);
  if (!results.length && !about.length) throw new HttpsError('not-found', '網上找不到這件物品。');
- const [r, info] = await Promise.all([
+ const [r, info, reviews] = await Promise.all([
   results.length ? askDeepSeek(buyPrompt(trip, item, results), [], { think: false }) : {},
   full && about.length ? askDeepSeek(productInfoPrompt(trip, item.name, about), [], { think: false }).catch(() => null) : null,
+  full ? productReviews(item, trip).catch(() => '') : '',
  ]);
  const product = info && info.confidence !== 'low' ? await zhDetail(cleanProduct(info, trip, JSON.stringify(about), item.name), trip) : null;
  // A picture for the item: the main image of the product page the model chose, else of the next product results.
@@ -1151,5 +1180,5 @@ export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck
  const named = (Array.isArray(r?.places) ? r.places : []).slice(0, 6).map(p => ({ name: text(p?.name, 100), why: text(p?.why, 40) })).filter(p => p.name);
  const checked = await Promise.all(named.map(p => checkOnMaps(p, trip)));
  const places = checked.filter((p, i) => p && checked.findIndex(q => q?.id === p.id) === i).slice(0, 4).map(({ id: _id, ...p }) => p);
- return { places, dropped: named.length - checked.filter(Boolean).length, note: text(r?.note, 120), product, photo: photo && photo.length <= 400000 ? photo : null, sources: [...new Set([...results, ...about].slice(0, 3).map(x => new URL(x.url).hostname))] };
+ return { places, dropped: named.length - checked.filter(Boolean).length, note: text(r?.note, 120), product, reviews, photo: photo && photo.length <= 400000 ? photo : null, sources: [...new Set([...results, ...about].slice(0, 3).map(x => new URL(x.url).hostname))] };
 });

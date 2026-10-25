@@ -868,3 +868,6 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .day-pick-row b{flex:none;width:44px;font-size:16px;color:var(--primary)}
 .day-pick-row span{display:grid;font-size:15px}
 .day-pick-row small{font-size:13px;color:var(--muted-foreground)}
+.shop-reviews{margin:6px 0;font-size:14px}
+.shop-reviews summary{cursor:pointer;color:var(--primary);font-weight:500}
+.shop-reviews .tg-text{margin:6px 0 0;color:var(--muted-foreground)}

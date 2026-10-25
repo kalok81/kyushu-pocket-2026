@@ -41,7 +41,7 @@ const expenses = {
  e5: { title: '酒店', amount: 98000, currency: 'JPY', paidBy: 'u1', split: ['u1', 'u2', 'u3'], day: 3, category: 'stay', ...by, at: 1 },
 };
 const shopping = {
- s1: { name: '東京ばな奈「見ぃつけたっ」黑糖味 8 個入', qty: '2 盒', forWhom: '媽媽、公司同事', detail: '東京車站限定口味；保質期約 7 天', place: '東京駅 一番街 東京おかしランド', price: 1200, currency: 'JPY', photo: null, bought: false, boughtBy: null, boughtAt: null, ...by, at: 3 },
+ s1: { name: '東京ばな奈「見ぃつけたっ」黑糖味 8 個入', qty: '2 盒', forWhom: '媽媽、公司同事', reviews: '@cosme 5.2/7\n優點：香蕉味濃、口感鬆軟\n缺點：保質期短\n來源：cosme.net', detail: '東京車站限定口味；保質期約 7 天', place: '東京駅 一番街 東京おかしランド', price: 1200, currency: 'JPY', photo: null, bought: false, boughtBy: null, boughtAt: null, ...by, at: 3 },
  s2: { name: 'Supercalifragilisticexpialidocious-extra-long-product-name-without-spaces-0123456789', qty: '', detail: '', place: '', price: null, currency: 'JPY', photo: null, bought: false, boughtBy: null, boughtAt: null, ...by, at: 2 },
  s3: { name: '白い恋人', qty: '12 枚', detail: '', place: '新千歳空港', price: 1188, currency: 'JPY', photo: null, bought: true, boughtBy: 'Bob', boughtAt: 1, ...by, at: 1 },
 };

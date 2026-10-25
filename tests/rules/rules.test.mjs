@@ -64,6 +64,8 @@ test('shopping: valid items, explore place link, shared updates', async () => {
  await assertSucceeds(setDoc(doc(db(amy), `${T}/shopping/s4`), { ...item, cat: 'drug', ...owned('amy', 'Amy') }));
  await assertSucceeds(setDoc(doc(db(amy), `${T}/shopping/s5`), { ...item, forWhom: '媽媽', ...owned('amy', 'Amy') }));
  await assertFails(setDoc(doc(db(amy), `${T}/shopping/s6`), { ...item, forWhom: 'x'.repeat(61), ...owned('amy', 'Amy') }));
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/shopping/s7`), { ...item, reviews: '優點：好用', ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/shopping/s8`), { ...item, reviews: 'x'.repeat(1001), ...owned('amy', 'Amy') }));
  await assertFails(setDoc(doc(db(amy), `${T}/shopping/s5`), { ...item, cat: 'weapons', ...owned('amy', 'Amy') }));
  await assertSucceeds(updateDoc(doc(db(bob), `${T}/shopping/s1`), { bought: true, boughtBy: 'Bob', boughtAt: 2 }));
  await assertFails(updateDoc(doc(db(bob), `${T}/shopping/s1`), { by: 'bob' }));

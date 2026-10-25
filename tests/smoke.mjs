@@ -331,6 +331,7 @@ try {
   await page.fill('[data-tg-form=shop] [name=name]', '雷門煎餅'); await page.click('.shop-more summary'); await page.fill('[data-tg-form=shop] [name=place] >> nth=0', '仲見世通り');
   await page.click('[data-tg=shopFindAll]'); await page.waitForFunction(() => /AI 建議/.test(document.querySelector('#shopPlaceInfo').textContent));
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '浅草 雷門せんべい', 'the original-language name replaces the typed one');
+  assert.match(await page.inputValue('[data-tg-form=shop] [name=reviews]'), /優點：香脆不太甜/);
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=qty]'), '12枚入'); assert.equal(await page.inputValue('[data-tg-form=shop] [name=price]'), '1080');
   assert.equal((await page.evaluate(() => window.buyRequest)).full, true);
   await page.fill('[data-tg-form=shop] [name=name]', '雷門せんべい');
