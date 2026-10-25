@@ -12,8 +12,9 @@
     sheetStart = sheetState();
     if (!$("#detail").open) $("#detail").showModal();
   }
-  // Tapping outside the sheet, Esc or the back gesture: never while an AI or map lookup is running (its progress
-  // bar), and only after asking when the form has unsaved changes. The ✕ always closes.
+  // Tapping outside a sheet that is a form (add / edit) does nothing: only its ✕ (or saving) closes it. Tapping
+  // outside other sheets, Esc or the back gesture: never while an AI or map lookup is running (its progress bar),
+  // and only after asking when the form has unsaved changes. The ✕ always closes.
   const sheetBusy = () => !!$("#detailBody .ai-progress:not(.done)");
   async function closeSoftly() {
     if (sheetBusy()) return window.UI.toast("AI 正在處理，完成後才可關閉；要放棄請按右上角 ✕。");
@@ -22,7 +23,7 @@
   }
   addEventListener("DOMContentLoaded", () => {
     const d = $("#detail");
-    d.addEventListener("click", (e) => e.target === d && closeSoftly());
+    d.addEventListener("click", (e) => e.target === d && !$("#detailBody > form") && closeSoftly());
     d.addEventListener("cancel", (e) => {
       e.preventDefault();
       closeSoftly();

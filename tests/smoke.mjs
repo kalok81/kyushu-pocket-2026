@@ -179,7 +179,7 @@ try {
  });
  await step('shopping item linked to a chosen explore place', async () => {
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
-  await page.fill('[data-tg-form=shop] [name=name]', '雷門煎餅'); await page.click('.shop-more summary'); await page.selectOption('[data-tg-form=shop] [name=placeId]', { label: '淺草寺（雷門） · 淺草' });
+  await page.fill('[data-tg-form=shop] [name=name]', '雷門煎餅'); await page.click('.shop-more summary'); await page.fill('[data-tg-form=shop] [name=placeQ]', '淺草寺（雷門） · 淺草');
   await page.click('[data-tg-form=shop] button[type=submit]');
   await page.waitForSelector('.shop-item:has-text("雷門煎餅") .shop-place');
   assert.match(await page.locator('.shop-item', { hasText: '雷門煎餅' }).innerText(), /探索：\s*淺草寺（雷門）[\s\S]*淺草寺（雷門） 東京都台東区浅草2-3-1/);
@@ -439,11 +439,15 @@ try {
   await page.mouse.click(10, 10); await page.waitForTimeout(300); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'kept open while busy');
   await page.keyboard.press('Escape'); await page.waitForTimeout(300); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'Esc kept open while busy');
   await page.evaluate(() => document.querySelector('#discoverOut .ai-progress').remove());
-  await page.mouse.click(10, 10); await page.waitForFunction(() => !document.querySelector('#detail').open);
-  // unsaved typing: tapping outside asks first
+  await page.keyboard.press('Escape'); await page.waitForFunction(() => !document.querySelector('#detail').open);
+  // a form sheet (edit an item) stays open when tapping outside, even with nothing changed
+  await page.goto(base + '/#shopping'); await page.evaluate(() => document.querySelector('[data-shop-edit]').click()); await page.waitForSelector('[data-tg-form=shop]'); await page.waitForTimeout(500);
+  await page.mouse.click(10, 10); await page.waitForTimeout(400); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'edit sheet kept open');
+  await closeSheet(); await page.waitForFunction(() => !document.querySelector('#detail').open);
+  // unsaved typing: Esc (or the back gesture) asks first
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.fill('[data-tg-form=shop] [name=name]', '草莓大福'); await page.waitForTimeout(300);
-  // tap outside once the sheet has finished opening (again if the first tap came during its animation)
-  const tapOutside = async () => { for (let k = 0; k < 3 && !(await page.locator('.ui-pop').isVisible()); k++) { await page.mouse.click(10, 10); await page.waitForTimeout(500); } };
+  // Esc once the sheet has finished opening (again if the first one came during its animation)
+  const tapOutside = async () => { for (let k = 0; k < 3 && !(await page.locator('.ui-pop').isVisible()); k++) { await page.keyboard.press('Escape'); await page.waitForTimeout(500); } };
   await tapOutside(); assert.match(await page.locator('.ui-pop').innerText(), /放棄未儲存的內容/);
   await page.click('.ui-pop button:has-text("繼續編輯")'); await page.waitForSelector('.swal2-container', { state: 'detached' });
   assert.equal(await page.inputValue('[data-tg-form=shop] [name=name]'), '草莓大福');

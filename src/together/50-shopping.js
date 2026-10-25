@@ -287,16 +287,27 @@
   // name, AI adds each photographed item to the list) and AI 填寫 (by link, name, or the form's photo). The other
   // fields sit under 更多資料 until the AI has filled them or the item is edited.
   const isLink = (t) => /^https?:\/\/\S+$/i.test(String(t).trim());
+  // 探索地點: typed with suggestions ("名稱 · 區域"); empty = matched by the 購買地點 names, NO_PLACE = none ("-").
+  const NO_PLACE = "不連結探索地點";
+  const placeLabel = (p) => (p ? `${p.v[1]}${p.v[0] ? ` · ${p.v[0]}` : ""}` : "");
+  function placeIdOf(text) {
+    const t = String(text || "").trim();
+    if (!t) return "";
+    if (t === NO_PLACE) return "-";
+    const p = T().places.find((p) => placeLabel(p) === t) || T().places.find((p) => p.v[1] === t);
+    if (!p) toast(`找不到探索地點「${t}」，改為按購買地點自動配對。`);
+    return p?.id || "";
+  }
   function shopForm(x) {
     const v = (k) => esc(x?.[k] ?? "");
     return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo" id="shopPreview">${shopPreview()}</div><label>物品<input name="name" maxlength="500" required placeholder="${x ? "物品名稱" : "物品名稱，或貼上產品網址"}" value="${v("name")}"></label><div class="shop-actions">${Kit.btn("相片", { icon: "camera", attrs: { "data-tg": "shopPic" } })}${Kit.btn("AI 填寫", { variant: "secondary", icon: "sparkles", attrs: { "data-tg": "shopFindAll" } })}</div><input type="file" accept="image/*" id="shopPicInput" multiple hidden><p class="note" id="shopFillInfo">${
       x ? "按「AI 填寫」：AI 按名稱（或相片）上網找資料、使用評價、相片及購買地點，只填空白欄位。" : "輸入名稱後按「AI 填寫」，AI 會上網找資料、使用評價、相片及購買地點。貼上產品網址、或未輸入名稱時按「相片」（可多張），AI 會認出物品直接加入清單。"
     }</p><details class="shop-more"${x ? " open" : ""}><summary>更多資料（數量、購買地點、價錢…）</summary><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰<input name="forWhom" maxlength="60" placeholder="例如：媽媽、同事" value="${v("forWhom")}"></label></div><label>備註<input name="detail" maxlength="500" placeholder="例如：要辣味、限定口味" value="${v("detail")}"></label><label>使用評價<textarea name="reviews" rows="3" maxlength="1000" placeholder="按「AI 填寫」由 AI 上網找用家評價">${v("reviews")}</textarea></label><label>分類<select name="cat">${Object.entries(SHOP_CATS)
       .map(([k, v]) => `<option value="${k}"${(x ? shopCat(x) : "food") === k ? " selected" : ""}>${v}</option>`)
-      .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div>${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}<p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。</p></fieldset><label>探索地點<select name="placeId"><option value="">自動（按購買地點名稱配對）</option><option value="-"${x?.placeId === "-" ? " selected" : ""}>不連結探索地點</option>${[...T().places]
+      .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div>${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}<p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。</p></fieldset><label>探索地點<input name="placeQ" list="shopPlaceList" maxlength="120" autocomplete="off" placeholder="留空＝按購買地點名稱自動配對；可打字搜尋" value="${esc(x?.placeId === "-" ? NO_PLACE : placeLabel(T().places.find((p) => p.id === x?.placeId)))}"></label><datalist id="shopPlaceList"><option value="${NO_PLACE}">${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
-      .map((p) => `<option value="${esc(p.id)}"${x?.placeId === p.id ? " selected" : ""}>${esc(p.v[1])}${p.v[0] ? ` · ${esc(p.v[0])}` : ""}</option>`)
-      .join("")}</select></label><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div></details>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
+      .map((p) => `<option value="${esc(placeLabel(p))}">`)
+      .join("")}</datalist><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div></details>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
   }
   // AI 填寫: a link goes to the AI as a product page (or an article to pick from); a name is searched on the web; with
   // only a photo, the photo is read again.

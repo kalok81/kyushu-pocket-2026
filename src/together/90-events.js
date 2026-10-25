@@ -169,7 +169,7 @@
         reviews: str("reviews").slice(0, 1000),
         // several addresses, one per line (empty and repeated rows dropped)
         place: [...new Set(v.getAll("place").map((t) => String(t).trim().slice(0, 200)).filter(Boolean))].slice(0, 6).join("\n"),
-        placeId: str("placeId").slice(0, 40),
+        placeId: placeIdOf(str("placeQ")).slice(0, 40),
         cat: SHOP_CATS[str("cat")] ? str("cat") : "other",
         price: price == null ? null : Math.round(price * 100) / 100,
         currency: pickCur(String(v.get("currency"))),
