@@ -1202,10 +1202,10 @@ window.Together = (() => {
           { cls: "note-kind", label: "類型" },
         ),
         photos = `<div class="note-photo-edit"><div id="notePhotoPreview">${notePhotoPreview()}</div>${Kit.btn(`${coupon ? "影優惠券／上載截圖" : "加相片"}（最多 ${NOTE_PHOTO_MAX} 張）`, { icon: "camera", cls: "btn-block", attrs: { "data-tg": "notePhoto" } })}<input type="file" accept="image/*" id="notePhotoInput" multiple hidden><p class="note" id="noteFillInfo">${coupon ? "加入優惠券相片或連結後，AI 會讀出店名、優惠、優惠碼及有效期，填入空白欄位。" : "加入相片或連結後，AI 會讀出重點，填入筆記。"}</p></div>`,
-        about = `<div class="tg-row"><label>日子<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><label>地點<select name="placeId"><option value="">（不指定）</option>${[...T().places]
+        about = `<div class="tg-row"><label>日子<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><label>地點<input name="placeQ" list="notePlaceList" maxlength="120" autocomplete="off" placeholder="不指定，或打字搜尋"></label><datalist id="notePlaceList">${[...T().places]
           .sort((a, b) => a.v[1].localeCompare(b.v[1]))
-          .map((p) => `<option value="${esc(p.id)}">${esc(p.v[1])}</option>`)
-          .join("")}</select></label></div>`;
+          .map((p) => `<option value="${esc(placeLabel(p))}">`)
+          .join("")}</datalist></div>`;
       return coupon
         ? `<form class="tg-form" data-tg-form="note" data-kind="coupon">${kinds}<label>店舖／優惠名稱<input name="title" maxlength="80" required placeholder="例如：Bic Camera 免稅 10% + 5%"></label><label>優惠內容<textarea name="text" rows="2" maxlength="1000" placeholder="例如：滿 ¥5,000 用，需出示護照"></textarea></label><div class="tg-row"><label>優惠碼（可留空）<input name="code" maxlength="60" autocapitalize="characters" spellcheck="false"></label><label>有效期至<input name="until" type="date"></label></div><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></label>${photos}${about}${Kit.btn("加入優惠券", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`
         : `<form class="tg-form" data-tg-form="note">${kinds}<label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾；網址會變成連結"></textarea></label><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></label>${photos}${about}${Kit.btn("加入筆記", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
@@ -1679,7 +1679,7 @@ window.Together = (() => {
             put("until", r.until);
           } else put("text", [r.title, r.text].filter(Boolean).join("\n"));
           const p = r.place && placeFor(r.place);
-          if (p && el.placeId && !el.placeId.value) el.placeId.value = p.id;
+          if (p && el.placeQ && !el.placeQ.value) el.placeQ.value = placeLabel(p);
           noteFillStatus(
             r.kind === "coupon" && f.dataset.kind !== "coupon" ? "AI 已填入內容；看來是優惠券，可以按上面「🎟 優惠券」改為優惠券。" : "AI 已填入空白欄位，請檢查。",
             false,
@@ -1774,7 +1774,8 @@ window.Together = (() => {
   // name, AI adds each photographed item to the list) and AI 填寫 (by link, name, or the form's photo). The other
   // fields sit under 更多資料 until the AI has filled them or the item is edited.
   const isLink = (t) => /^https?:\/\/\S+$/i.test(String(t).trim());
-  // 探索地點: typed with suggestions ("名稱 · 區域"); empty = matched by the 購買地點 names, NO_PLACE = none ("-").
+  // 探索地點 (shopping) and 地點 (notes): typed with suggestions ("名稱 · 區域"); for shopping, empty = matched by the
+  // 購買地點 names and NO_PLACE = none ("-").
   const NO_PLACE = "不連結探索地點";
   const placeLabel = (p) => (p ? `${p.v[1]}${p.v[0] ? ` · ${p.v[0]}` : ""}` : "");
   function placeIdOf(text) {
@@ -2389,7 +2390,7 @@ window.Together = (() => {
       day = Number(v.get("day")) || null;
     if (f.dataset.tgForm === "note") {
       // From a place's detail (data-place-id) or the 共用 page (optional day and place).
-      const placeId = f.dataset.placeId || str("placeId") || null,
+      const placeId = f.dataset.placeId || placeIdOf(str("placeQ")).replace(/^-$/, "") || null,
         place = placeId && T().places.find((p) => p.id === placeId),
         coupon = f.dataset.kind === "coupon",
         url = str("url");

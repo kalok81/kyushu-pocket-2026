@@ -86,7 +86,7 @@
       day = Number(v.get("day")) || null;
     if (f.dataset.tgForm === "note") {
       // From a place's detail (data-place-id) or the 共用 page (optional day and place).
-      const placeId = f.dataset.placeId || str("placeId") || null,
+      const placeId = f.dataset.placeId || placeIdOf(str("placeQ")).replace(/^-$/, "") || null,
         place = placeId && T().places.find((p) => p.id === placeId),
         coupon = f.dataset.kind === "coupon",
         url = str("url");

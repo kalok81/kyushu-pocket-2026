@@ -192,7 +192,7 @@
             put("until", r.until);
           } else put("text", [r.title, r.text].filter(Boolean).join("\n"));
           const p = r.place && placeFor(r.place);
-          if (p && el.placeId && !el.placeId.value) el.placeId.value = p.id;
+          if (p && el.placeQ && !el.placeQ.value) el.placeQ.value = placeLabel(p);
           noteFillStatus(
             r.kind === "coupon" && f.dataset.kind !== "coupon" ? "AI 已填入內容；看來是優惠券，可以按上面「🎟 優惠券」改為優惠券。" : "AI 已填入空白欄位，請檢查。",
             false,
@@ -287,7 +287,8 @@
   // name, AI adds each photographed item to the list) and AI 填寫 (by link, name, or the form's photo). The other
   // fields sit under 更多資料 until the AI has filled them or the item is edited.
   const isLink = (t) => /^https?:\/\/\S+$/i.test(String(t).trim());
-  // 探索地點: typed with suggestions ("名稱 · 區域"); empty = matched by the 購買地點 names, NO_PLACE = none ("-").
+  // 探索地點 (shopping) and 地點 (notes): typed with suggestions ("名稱 · 區域"); for shopping, empty = matched by the
+  // 購買地點 names and NO_PLACE = none ("-").
   const NO_PLACE = "不連結探索地點";
   const placeLabel = (p) => (p ? `${p.v[1]}${p.v[0] ? ` · ${p.v[0]}` : ""}` : "");
   function placeIdOf(text) {

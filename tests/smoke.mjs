@@ -197,7 +197,7 @@ try {
   assert.equal(await page.locator('#detail[open]').count(), 0, 'the sheet closes after adding');
   await page.click('[data-tg=newEntry]'); await page.click('[data-note-kind=coupon]'); await page.waitForSelector('[data-tg-form=note][data-kind=coupon]');
   await page.fill('[data-tg-form=note] [name=title]', 'Bic Camera 免稅 10%'); await page.fill('[data-tg-form=note] [name=code]', 'BIC2030');
-  await page.fill('[data-tg-form=note] [name=until]', '2099-12-31'); await page.selectOption('[data-tg-form=note] [name=placeId]', { label: '淺草寺（雷門）' });
+  await page.fill('[data-tg-form=note] [name=until]', '2099-12-31'); await page.fill('[data-tg-form=note] [name=placeQ]', '淺草寺（雷門）');
   await page.locator('#notePhotoInput').setInputFiles({ name: 'qr.png', mimeType: 'image/png', buffer: png }); await page.waitForSelector('#notePhotoPreview img');
   await page.click('[data-tg-form=note] button[type=submit]');
   await page.waitForSelector('.tg-item.coupon'); const c = page.locator('.tg-item.coupon');
@@ -253,7 +253,7 @@ try {
   await page.waitForFunction(() => !document.querySelector('[data-tg-form=note] .ai-progress'));
   assert.equal(await page.inputValue('[data-tg-form=note] [name=title]'), 'Bic Camera 免稅 10% + 5%');
   assert.equal(await page.inputValue('[data-tg-form=note] [name=until]'), '2099-01-31');
-  assert.equal(await page.locator('[data-tg-form=note] [name=placeId] option:checked').innerText(), '淺草寺（雷門）');
+  assert.equal(await page.inputValue('[data-tg-form=note] [name=placeQ]'), '淺草寺（雷門） · 淺草');
   await page.click('[data-note-kind=note]'); await page.waitForSelector('[data-tg-form=note]:not([data-kind])');
   await page.fill('[data-tg-form=note] [name=url]', 'https://example.com/ramen'); await page.locator('[data-tg-form=note] [name=url]').blur();
   await page.waitForFunction(() => /AI 正在讀取網頁/.test(document.querySelector('#noteFillInfo').textContent));
