@@ -135,7 +135,7 @@ try {
  });
  await step('shopping list shows on explore and plan', async () => {
   await page.goto(base + '/#explore'); await page.click('[data-place-new]');
-  await page.fill('#placeForm [name=f0]', '淺草'); await page.fill('#placeForm [name=f1]', '仲見世通り'); await page.locator('#placeForm [name=cats]').first().check(); await page.check('#placeForm [name=fav]'); await page.click('#placeForm button[type=submit]');
+  await page.fill('#placeForm [name=f0]', '淺草'); await page.fill('#placeForm [name=f1]', '仲見世通り'); await page.locator('#placeForm [name=cats]').first().check(); await page.click('#detail [data-place-fav]'); await page.click('#placeForm button[type=submit]');
   await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('.save.saved').waitFor({ timeout: 5000 }); // the form's ★ saved it to 收藏
   // the same name again: asked first; 取消 keeps the form open
   await page.click('[data-place-new]'); await page.fill('#placeForm [name=f0]', '淺草'); await page.fill('#placeForm [name=f1]', '仲見世 通り'); await page.locator('#placeForm [name=cats]').first().check(); await page.click('#placeForm button[type=submit]');

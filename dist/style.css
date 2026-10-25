@@ -700,6 +700,7 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .save{color:var(--muted-foreground)}
 .save.saved{color:#d99a2b}
 .save.saved .icon{fill:currentColor}
+.detailtitle .form-fav{vertical-align:middle;margin-left:4px}
 .buy-here .icon,.shop-place .icon{width:15px;height:15px;color:var(--muted-foreground);vertical-align:-.15em;margin-right:2px}
 @media(min-width:761px){
 .place .feature{-webkit-line-clamp:3}
