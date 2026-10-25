@@ -127,7 +127,7 @@ try {
   await page.fill('#routeManual textarea', '🚇 銀座線 上野 → 淺草｜約 14 分'); await page.click('#routeManual button[type=submit]');
   await page.waitForSelector('.route-dot.has-route'); assert.match(await page.locator('[data-route-link]').nth(1).innerText(), /銀座線 上野 → 淺草/);
   // a second choice at 10:00: the link asks which destination
-  await page.locator('[data-stop-more]').nth(1).click(); await page.click('[data-stop-alt]:visible'); await page.click('[data-pp-cat=住宿]'); await page.click('[data-pp-hotel]'); await closeSheet();
+  assert.equal(await page.locator('[data-stop-alt]:not(.alt-add)').count(), 0, 'not in the ⋯ menu'); await page.locator('.time [data-stop-alt]').nth(1).click(); await page.click('[data-pp-cat=住宿]'); await page.click('[data-pp-hotel]'); await closeSheet();
   await page.waitForSelector('.stop-group'); await page.locator('[data-route-link]').nth(1).click(); await page.waitForSelector('#routeTo');
   assert.deepEqual(await page.locator('#routeTo option').allInnerTexts(), ['淺草寺', '上野酒店']);
   await page.selectOption('#routeTo', { label: '上野酒店' }); assert.equal(await page.inputValue('#routeManual textarea'), '');
@@ -446,6 +446,16 @@ try {
   await page.waitForTimeout(500); await page.locator('[data-stop-more]').first().click(); await page.click('[data-stop-edit]:visible');
   await page.fill('#stopForm [name=note]', '僅收現金'); await page.click('#stopForm button[type=submit]');
   await page.waitForSelector('.timeline .stop-note'); assert.match(await page.locator('.timeline .stop-note').first().innerText(), /僅收現金/);
+ });
+ await step('plan picker: every category shows; a 交通 place can be added twice', async () => {
+  await page.goto(base + '/#explore'); await page.click('[data-place-new]');
+  await page.fill('#placeForm [name=f0]', '上野'); await page.fill('#placeForm [name=f1]', '京成上野駅'); await page.locator('#placeForm [name=cats]').nth(3).check(); await page.click('#placeForm button[type=submit]');
+  await page.goto(base + '/#plan?day=5'); await page.waitForSelector('.journey-day'); await page.click('[data-plan-pick]');
+  await page.click('[data-pp-cat=交通]');
+  const row = page.locator('#ppList .pp-row', { hasText: '京成上野駅' });
+  await row.locator('[data-pp-add]').click(); await row.locator('[data-pp-add]').click();
+  assert.match(await row.innerText(), /已在這天行程，可再加入/);
+  await closeSheet(); await page.waitForFunction(() => [...document.querySelectorAll('.timeline h3')].filter((h) => h.textContent.includes('京成上野駅')).length === 2);
  });
  await step('AI 推薦新地點: from 探索 and from a day of the plan', async () => {
   await page.goto(base + '/#explore'); await page.click('[data-discover]'); await page.fill('#discoverForm [name=area]', '上野');

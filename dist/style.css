@@ -833,6 +833,8 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 @media(max-width:760px){
 .time{display:flex;align-items:center;gap:8px;min-height:30px}
 .time .stop-grip{margin:0 0 0 auto;width:32px;height:30px}
+.time .alt-add{margin:0 0 0 auto}
+.time .alt-add+.stop-grip{margin-left:0}
 }
 .tg-form[hidden]{display:none}
 /* 購物 form: one box, two buttons, the rest under 更多資料 */
@@ -863,6 +865,9 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .discover-credit{display:block;margin-top:4px;font-size:11px;color:var(--muted-foreground)}
 #discoverForm{grid-template-columns:minmax(0,1fr)}
 #discoverForm .chips{flex-wrap:wrap;overflow:visible}
+.plan-pick .chips{flex-wrap:wrap;overflow:visible}
+.time .alt-add{display:flex;color:var(--muted-foreground);margin:2px 0 0 auto}
+.alt-add .icon{width:16px;height:16px}
 #detail #discoverForm>.btn-block[type=submit]{position:static;box-shadow:none}
 /* 行程 links: the whole way, one line per step */
 .route-dot .route-line+.route-line{margin-top:6px;padding-top:6px;border-top:1px solid var(--border)}

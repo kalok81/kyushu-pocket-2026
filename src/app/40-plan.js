@@ -205,6 +205,11 @@
       return d;
     };
   }
+  // 交通 places (stations, airports…) can be in a day more than once: going out and coming back
+  const pickState = (inPlan) => ({
+    planned: (p) => inPlan.has(p.id) && !p.cats.includes("交通"),
+    againNote: (p) => (inPlan.has(p.id) && p.cats.includes("交通") ? '<small class="pp-reason">已在這天行程，可再加入</small>' : ""),
+  });
   const kmText = (d) => (Number.isFinite(d) ? (d < 1000 ? ` · ${Math.round(d / 10) * 10} 米` : ` · ${(d / 1000).toFixed(1)} 公里`) : "");
   // ✨ AI 推薦: up to 6 explore places that fit the day (planDay suggest), with the reason.
   let ppAi = null;
@@ -243,13 +248,14 @@
       const day = Number(box.dataset.day);
       if (!ppAi || ppAi.day !== day) return ppSuggest(box, day);
       const inPlan = new Set(stopsFor(day).map((s) => s.placeId)),
+        { planned, againNote } = pickState(inPlan),
         dist = dayDistance(day);
       box.innerHTML = ppAi.error
         ? `<p class="note">${esc(ppAi.error)}</p>`
         : `${ppAi.advice ? `<p class="note">${icon("sparkles")} ${esc(ppAi.advice)}</p>` : ""}${ppAi.picks
             .map(({ k, reason }) => {
               const p = places.find((x) => x.id === k);
-              return `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(dist(p))}</small>${reason ? `<small class="pp-reason">${esc(reason)}</small>` : ""}</div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`;
+              return `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(dist(p))}</small>${reason ? `<small class="pp-reason">${esc(reason)}</small>` : ""}${againNote(p)}</div>${planned(p) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`;
             })
             .join("") || '<p class="note">AI 沒有合適的推薦。</p>'}`;
       box.insertAdjacentHTML("beforeend", Kit.btn("再推薦一次", { size: "sm", icon: "redo", attrs: { "data-pp-ai-again": true } }));
@@ -261,7 +267,8 @@
         stopsFor(day)
           .map((s) => s.placeId)
           .filter(Boolean),
-      );
+      ),
+      { planned, againNote } = pickState(inPlan);
     const hs =
         (ppCat === "全部" && !q ? false : ["全部", "住宿"].includes(ppCat))
           ? [...lists().hotels]
@@ -307,7 +314,7 @@
         .slice(0, 40)
         .map(
           (p) =>
-            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(far.get(p.id))}${p.v[2] ? ` · ${esc(p.v[2])}` : ""}</small></div>${inPlan.has(p.id) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
+            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(far.get(p.id))}${p.v[2] ? ` · ${esc(p.v[2])}` : ""}</small>${againNote(p)}</div>${planned(p) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
         )
         .join("")}${ps.length > 40 ? `<p class="note">還有 ${ps.length - 40} 個，請輸入更多字縮窄搜尋。</p>` : ""}`,
     );
@@ -385,7 +392,6 @@
     return `<div class="stopcontent"><div class="stop-top"><span class="eyebrow">${label} / ${esc(s.area)}</span>${Kit.menu(
       [
         { label: "修改", icon: "edit", attrs: { "data-stop-edit": i } },
-        { label: "加入同一時間的選擇", icon: "plus", attrs: { "data-stop-alt": i } },
         { label: "移去其他日子", icon: "calendar", attrs: { "data-stop-to-day": i } },
         { label: "上移", icon: "up", disabled: !i, attrs: { "data-stop-move": `${i}:-1` } },
         { label: "下移", icon: "down", disabled: i >= last, attrs: { "data-stop-move": `${i}:1` } },
@@ -415,7 +421,7 @@
       stopGroups(stops)
         .map(
           (g, n, all) =>
-            `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}" data-group="${n}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}${all.length > 1 ? `<button type="button" class="stop-grip" aria-label="拖動調整「${esc(g[0].s.title)}」的次序">${icon("grip")}</button>` : ""}</div><div class="stop-alts">${g
+            `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}" data-group="${n}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}${Kit.btn(`在 ${esc(g[0].s.time || "這個時段")} 加入另一個選擇`, { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "alt-add", attrs: { "data-stop-alt": g[g.length - 1].i } })}${all.length > 1 ? `<button type="button" class="stop-grip" aria-label="拖動調整「${esc(g[0].s.title)}」的次序">${icon("grip")}</button>` : ""}</div><div class="stop-alts">${g
               .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last))
               .join("")}</div></article>`,
         )
