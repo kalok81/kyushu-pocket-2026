@@ -1842,7 +1842,9 @@ window.Together = (() => {
   }
   function shopItem(x) {
     const price = x.price != null ? `<b class="shop-price">${esc(S.format(S.toMinor(x.price, x.currency), x.currency))}</b>` : "";
-    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${x.photo ? `<button type="button" class="shop-thumb" data-shop-open="${esc(x.id)}" aria-label="放大 ${esc(x.name)} 的相片"><img src="${photoSrc(x.photo)}" alt=""></button>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}${zhLine(zhName(x, x.name))}</h3>${price}</div>${x.forWhom ? `<p class="shop-place shop-for">${icon("users")}<span>給：${esc(x.forWhom)}</span></p>` : ""}${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${x.reviews ? `<details class="shop-reviews"><summary>使用評價</summary><p class="tg-text">${esc(x.reviews)}</p></details>` : ""}${matchPlaces(x).length ? `<p class="shop-place">${icon("compass")}探索：${matchPlaces(x).map((p) => `<button type="button" class="buy-item" data-place="${esc(p.id)}">${esc(p.v[1])}</button>`).join("、")}</p>` : ""}${placesOf(x).map((t) => `<p class="shop-place">${icon("pin")}<span>${esc(t)}</span>${Kit.btn(`${esc(t)} 地圖`, { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t)}`, external: true, icon: "map", iconOnly: true, variant: "ghost", size: "sm" })}</p>`).join("")}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}<div class="links">${Kit.btn(x.bought ? "改回未買" : "已買", { size: "sm", variant: x.bought ? "outline" : "secondary", icon: x.bought ? "undo" : "check", attrs: { "data-shop-toggle": x.id } })}${x.url ? Kit.btn("產品網頁", { size: "sm", external: true, href: x.url }) : ""}</div></div></article>`;
+    // a round tick box on the left: empty until bought (like a to-do list); tapping it again sets it back
+    const tick = `<button type="button" class="shop-check${x.bought ? " on" : ""}" data-shop-toggle="${esc(x.id)}" role="checkbox" aria-checked="${x.bought}" aria-label="${x.bought ? `${esc(x.name)} 已買，按一下改回未買` : `標記 ${esc(x.name)} 為已買`}">${x.bought ? icon("check") : ""}</button>`;
+    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${tick}${x.photo ? `<button type="button" class="shop-thumb" data-shop-open="${esc(x.id)}" aria-label="放大 ${esc(x.name)} 的相片"><img src="${photoSrc(x.photo)}" alt=""></button>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}${zhLine(zhName(x, x.name))}</h3>${price}</div>${x.forWhom ? `<p class="shop-place shop-for">${icon("users")}<span>給：${esc(x.forWhom)}</span></p>` : ""}${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${x.reviews ? `<details class="shop-reviews"><summary>使用評價</summary><p class="tg-text">${esc(x.reviews)}</p></details>` : ""}${matchPlaces(x).length ? `<p class="shop-place">${icon("compass")}探索：${matchPlaces(x).map((p) => `<button type="button" class="buy-item" data-place="${esc(p.id)}">${esc(p.v[1])}</button>`).join("、")}</p>` : ""}${placesOf(x).map((t) => `<p class="shop-place">${icon("pin")}<span>${esc(t)}</span>${Kit.btn(`${esc(t)} 地圖`, { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t)}`, external: true, icon: "map", iconOnly: true, variant: "ghost", size: "sm" })}</p>`).join("")}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}${x.url ? `<div class="links">${Kit.btn("產品網頁", { size: "sm", external: true, href: x.url })}</div>` : ""}</div></article>`;
   }
   // Photo grid: one tile per item; tapping opens the item with a large photo in the detail dialog.
   function shopTile(x) {
@@ -2720,14 +2722,12 @@ window.Together = (() => {
     }
     if (d.shopToggle) {
       const x = state.shopping.find((i) => i.id === d.shopToggle);
-      if (x)
-        update(
-          "shopping",
-          x.id,
-          x.bought
-            ? { bought: false, boughtBy: null, boughtAt: null }
-            : { bought: true, boughtBy: me().name, boughtAt: Date.now() },
-        );
+      if (x) {
+        const before = { bought: !!x.bought, boughtBy: x.boughtBy || null, boughtAt: x.boughtAt || null };
+        update("shopping", x.id, x.bought ? { bought: false, boughtBy: null, boughtAt: null } : { bought: true, boughtBy: me().name, boughtAt: Date.now() });
+        // tapped by mistake: 復原 puts it back
+        Kit.snack(`${before.bought ? "已改回未買" : "已買"}「${String(x.name).slice(0, 20)}」`, { action: "復原" }).then((undo) => undo && update("shopping", x.id, before));
+      }
     }
     if (
       (d.shopToggle || d.tgDel?.startsWith("shopping:")) &&

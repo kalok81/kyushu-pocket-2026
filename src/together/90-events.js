@@ -379,14 +379,12 @@
     }
     if (d.shopToggle) {
       const x = state.shopping.find((i) => i.id === d.shopToggle);
-      if (x)
-        update(
-          "shopping",
-          x.id,
-          x.bought
-            ? { bought: false, boughtBy: null, boughtAt: null }
-            : { bought: true, boughtBy: me().name, boughtAt: Date.now() },
-        );
+      if (x) {
+        const before = { bought: !!x.bought, boughtBy: x.boughtBy || null, boughtAt: x.boughtAt || null };
+        update("shopping", x.id, x.bought ? { bought: false, boughtBy: null, boughtAt: null } : { bought: true, boughtBy: me().name, boughtAt: Date.now() });
+        // tapped by mistake: 復原 puts it back
+        Kit.snack(`${before.bought ? "已改回未買" : "已買"}「${String(x.name).slice(0, 20)}」`, { action: "復原" }).then((undo) => undo && update("shopping", x.id, before));
+      }
     }
     if (
       (d.shopToggle || d.tgDel?.startsWith("shopping:")) &&

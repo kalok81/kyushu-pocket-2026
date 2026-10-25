@@ -230,6 +230,11 @@ try {
   await page.click('.ui-pop button:has-text("取消")').catch(() => page.keyboard.press('Escape')); await page.waitForSelector('.swal2-container', { state: 'detached' });
   assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'the form stays open'); await closeSheet();
   assert.equal(await page.locator('.shop-item h3', { hasText: '化妝水' }).count(), 1);
+  // the tick box marks it bought; 復原 sets it back
+  const tick = page.locator('.shop-item', { hasText: '化妝水' }).locator('.shop-check');
+  await tick.click(); await page.waitForFunction(() => [...document.querySelectorAll('.shop-item')].some((a) => /化妝水/.test(a.textContent) && a.querySelector('.shop-check.on')) || ![...document.querySelectorAll('.shop-item')].some((a) => /化妝水/.test(a.textContent)));
+  await page.click('.snack-action'); await page.click('[data-shop-filter=all]');
+  await page.waitForFunction(() => [...document.querySelectorAll('.shop-item')].some((a) => /化妝水/.test(a.textContent) && a.querySelector('.shop-check:not(.on)')));
  });
  await step('shopping: product link and pasted picture go to the AI', async () => {
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');
