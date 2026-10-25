@@ -908,13 +908,13 @@ export const discoverPlaces = onCall({ region: 'asia-northeast1', enforceAppChec
  await useQuota(req.auth.uid, 'ai');
  const [zhKind, jaKind, zhWord] = DISCOVER_KINDS[kind];
  const jaPrefs = prefs.map(p => DISCOVER_PREFS[p][1]).join(' '), zhPrefs = prefs.map(p => DISCOVER_PREFS[p][0]).join('、');
- const queries = [`${where} ${jaKind} ${jaPrefs}`, `${where} ${zhWord} ${zhPrefs.replace(/（.*?）/g, '')} 推介`, `${where} ${jaKind} ランキング`];
- const searches = await Promise.all(queries.map(q => deepseekTool('search', { query: q.trim().slice(0, 128), count: 8 })));
- const results = searches.flatMap(r => r?.results || []).filter((r, i, all) => all.findIndex(x => x.url === r.url) === i).slice(0, 18)
+ const queries = [`${where} ${jaKind} ${jaPrefs}`, `${where} ${zhWord} ${zhPrefs.replace(/（.*?）/g, '')} 推介`, `${where} ${jaKind} ランキング`, ...(d.more ? [`${where} ${jaKind} 穴場 地元`, `${where} ${zhWord} 小眾 必去`] : [])];
+ const searches = await Promise.all(queries.map(q => deepseekTool('search', { query: q.trim().slice(0, 128), count: 10 })));
+ const results = searches.flatMap(r => r?.results || []).filter((r, i, all) => all.findIndex(x => x.url === r.url) === i).slice(0, 28)
   .map(r => ({ title: String(r.title || '').slice(0, 120), summary: String(r.summary || r.snippet || '').slice(0, 600) }));
  if (!results.length) throw new HttpsError('not-found', '網上找不到推介。');
  const prompt = `Hong Kong travellers on a trip to ${tripInfo(trip).place} want new ideas${zhKind ? ` (${zhKind})` : ''} in or near ${where}${zhPrefs ? `, preferring: ${zhPrefs}` : ''}${weekday ? `, for a ${weekday}` : ''}${extra ? `. They say: ${extra}` : ''}.
-From the web search results below, pick up to 8 specific places (one shop, restaurant, sight or facility each; not areas, lists or chains in general) that are well liked and fit.
+From the web search results below, pick up to 15 specific places (one shop, restaurant, sight or facility each; not areas, lists or chains in general) that are well liked and fit.
 Leave out anything already on their list: ${JSON.stringify(have.slice(0, 300))}.
 Reply with JSON only: {"places": [{"name": string, "reason": string, "type": string}]}
 - name: as written on local signs (Japanese in Japan, Korean in Korea), with the branch or area if it helps to find it on Google Maps.
@@ -924,7 +924,7 @@ Reply with JSON only: {"places": [{"name": string, "reason": string, "type": str
 Search results: ${JSON.stringify(results)}`;
  let r;
  try { r = await askDeepSeek(prompt, [], { think: false }); } catch (e) { console.error('discover', e?.message); throw new HttpsError('unavailable', 'AI 暫時未能推薦，請稍後再試。'); }
- const named = (Array.isArray(r?.places) ? r.places : []).slice(0, 8).map(p => ({ name: text(p?.name, 100), reason: text(p?.reason, 60), type: text(p?.type, 20) })).filter(p => p.name);
+ const named = (Array.isArray(r?.places) ? r.places : []).slice(0, 15).map(p => ({ name: text(p?.name, 100), reason: text(p?.reason, 60), type: text(p?.type, 20) })).filter(p => p.name);
  const n = x => String(x).toLowerCase().normalize('NFKC').replace(/[\s（）()【】「」・･,，、.。:：\-－−&＆’'!！?？]/g, '');
  const known = have.map(n);
  const centre = near || (Number.isFinite(trip?.center?.lat) ? trip.center : null);
@@ -950,7 +950,7 @@ Search results: ${JSON.stringify(results)}`;
   } catch (e) { console.error('discover photo', e?.message); }
   return { id: g.id, name: g.displayName.text.slice(0, 100), reason: p.reason, type: p.type || text(g.primaryTypeDisplayName?.text, 20), address: String(g.formattedAddress || '').slice(0, 200), lat: g.location?.latitude ?? null, lng: g.location?.longitude ?? null, mapsUrl: String(g.googleMapsUri || '').slice(0, 300), website: String(g.websiteUri || '').slice(0, 300), rating: typeof g.rating === 'number' ? g.rating : null, ratings: g.userRatingCount || 0, hours: (g.regularOpeningHours?.weekdayDescriptions || []).slice(0, 7), photo: photo && photo.length < 120000 ? photo : null, photoBy };
  }));
- const places = found.filter((p, i) => p && found.findIndex(q => q?.id === p.id) === i).slice(0, 6).map(({ id, ...p }) => ({ ...p, placeId: id }));
+ const places = found.filter((p, i) => p && found.findIndex(q => q?.id === p.id) === i).slice(0, 12).map(({ id, ...p }) => ({ ...p, placeId: id }));
  return { places, dropped: named.length - found.filter(Boolean).length };
 });
 

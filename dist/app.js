@@ -836,14 +836,18 @@ window.startTrip = (meta = {}) => {
         const open = d ? hoursOn(p.hours, d.weekday) : "";
         return `<article class="discover-card">${p.photo ? `<img src="data:image/jpeg;base64,${p.photo}" alt="" loading="lazy">` : `<span class="discover-ph">${icon("pin")}</span>`}<div><h3>${esc(p.name)}</h3><p class="discover-meta">${[p.type, stars(p)].filter(Boolean).map(esc).join(" · ")}</p>${p.reason ? `<p class="discover-reason">${esc(p.reason)}</p>` : ""}${open ? `<p class="discover-meta">${icon("clock")} ${esc(d.weekday)}：${esc(open)}</p>` : ""}<p class="discover-meta">${esc(p.address.replace(/^〒\d{3}-\d{4}\s*/, "").replace(/^日本、?/, ""))}</p><div class="links">${have.has(p.name) ? Kit.badge("✓ 已加入探索") : Kit.btn(d ? `加入 D${discover.day}` : "加入探索", { size: "sm", variant: "secondary", icon: "plus", attrs: { "data-discover-add": k } })}${Kit.btn(`${esc(p.name)} 地圖`, { href: p.mapsUrl, external: true, size: "sm", icon: "map", iconOnly: true })}</div>${p.photo ? `<small class="discover-credit">相片：${esc(p.photoBy || "Google 地圖")}</small>` : ""}</div></article>`;
       })
-      .join("")}</div>${r.dropped ? `<p class="note">另有 ${r.dropped} 個在 Google 地圖找不到或已在清單，已略去。</p>` : ""}`;
+      .join("")}</div>${r.dropped ? `<p class="note">另有 ${r.dropped} 個在 Google 地圖找不到或已在清單，已略去。</p>` : ""}${Kit.btn("再推薦更多", { variant: "secondary", icon: "sparkles", cls: "btn-block", attrs: { "data-discover-more": true } })}`;
   }
-  async function runDiscover(f) {
+  // more: the same search again for places not shown yet, added below the ones already there
+  async function runDiscover(f, more = false) {
     const out = $("#discoverOut"),
-      d = discover.day && days[discover.day - 1];
-    discover.area = d ? d.region : String(f.elements.area?.value || "").trim();
+      d = discover.day && days[discover.day - 1],
+      shown = more ? discover.results?.places || [] : [];
+    if (!more) discover.area = d ? d.region : String(f.elements.area?.value || "").trim();
     if (!discover.area && !d) return toast("請輸入區域。");
-    out.innerHTML = Kit.progress({ text: "AI 正在上網搜尋，並用 Google 地圖核實…", seconds: 35 });
+    const busy = Kit.progress({ text: "AI 正在上網搜尋，並用 Google 地圖核實…", seconds: 40 });
+    if (more) $("[data-discover-more]")?.replaceWith(Object.assign(document.createElement("div"), { innerHTML: busy, id: "discoverMore" }));
+    else out.innerHTML = busy;
     f.querySelector("[type=submit]").disabled = true;
     try {
       const r = await window.Together.discoverPlaces({
@@ -851,13 +855,16 @@ window.startTrip = (meta = {}) => {
         kind: discover.kind,
         prefs: [...discover.prefs],
         note: String(f.elements.note.value || "").trim(),
-        have: places.flatMap((p) => [p.v[1], p.zh].filter(Boolean)).slice(0, 300),
+        have: [...shown.map((p) => p.name), ...places.flatMap((p) => [p.v[1], p.zh].filter(Boolean))].slice(0, 300),
+        ...(more ? { more: true } : {}),
         ...(d ? { near: dayPoint(discover.day), weekday: d.weekday } : {}),
       });
-      discover.results = r;
+      discover.results = more ? { places: [...shown, ...r.places], dropped: 0 } : r;
+      if (more && !r.places.length) toast("找不到更多新地點，可以換個類型或喜好再試。");
     } catch (e) {
       console.error(e);
-      discover.results = { places: [], error: fnError(e, "AI 未能推薦，請稍後再試。") };
+      if (more) toast(fnError(e, "AI 未能推薦，請稍後再試。"));
+      else discover.results = { places: [], error: fnError(e, "AI 未能推薦，請稍後再試。") };
     }
     f.querySelector("[type=submit]").disabled = false;
     if ($("#discoverOut")) $("#discoverOut").innerHTML = discoverResults();
@@ -891,6 +898,7 @@ window.startTrip = (meta = {}) => {
       el.classList.toggle("active", discover.prefs.has(k));
     }
     if (el.dataset.discoverAdd) addDiscovered(Number(el.dataset.discoverAdd));
+    if (el.dataset.discoverMore !== undefined && $("#discoverForm")) runDiscover($("#discoverForm"), true);
   });
   document.addEventListener("submit", (e) => {
     if (e.target.id !== "discoverForm") return;

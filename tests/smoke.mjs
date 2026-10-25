@@ -451,6 +451,9 @@ try {
   await page.goto(base + '/#explore'); await page.click('[data-discover]'); await page.fill('#discoverForm [name=area]', '上野');
   await page.click('[data-discover-kind=sight]'); await page.click('[data-discover-pref=kids]'); await page.click('#discoverForm [type=submit]');
   await page.waitForSelector('.discover-card'); assert.equal(await page.locator('.discover-card').count(), 2);
+  // 再推薦更多: places not shown yet, added below; the ones shown go to the AI as already seen
+  await page.click('[data-discover-more]'); await page.waitForFunction(() => document.querySelectorAll('.discover-card').length === 3);
+  const moreReq = await page.evaluate(() => window.discoverRequest); assert.equal(moreReq.more, true); assert.ok(moreReq.have.includes('上野東照宮'));
   const req = await page.evaluate(() => window.discoverRequest); assert.equal(req.area, '上野'); assert.equal(req.kind, 'sight'); assert.deepEqual(req.prefs, ['kids']); assert.ok(req.have.length > 0);
   await page.locator('[data-discover-add]').first().click(); await page.waitForSelector('#placeForm');
   assert.match(await page.inputValue('#placeForm [name=mapsUrl]'), /maps\/search\/\?api=1&query=.*&query_place_id=ChIJtoshogu$/); assert.equal(await page.inputValue('#placeForm [name=f1]'), '上野東照宮');
