@@ -629,7 +629,9 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
  const AREA = /^(political|locality|sublocality.*|administrative_area.*|neighborhood|route|postal_code|country)$/;
  if (place && query && exact && ((place.types || []).every(t => AREA.test(t)) || metersApart(place.location, at) > 300)) {
   const d = 0.001; // about 100 m: the name searched again only right around the pin
-  const pinned = await search('searchText', { textQuery: query, locationRestriction: { rectangle: { low: { latitude: at.lat - d, longitude: at.lng - d }, high: { latitude: at.lat + d, longitude: at.lng + d } } } }, country).catch(() => null);
+  // Google ranks these differently from one call to the next, so the one closest to the pin wins
+  const near = (await placesApi('places:searchText', SEARCH_FIELDS, { textQuery: query, languageCode: langFor(country), maxResultCount: 10, ...(country ? { regionCode: country } : {}), locationRestriction: { rectangle: { low: { latitude: at.lat - d, longitude: at.lng - d }, high: { latitude: at.lat + d, longitude: at.lng + d } } } }).catch(() => null))?.places || [];
+  const pinned = near.sort((a, b) => metersApart(a.location, at) - metersApart(b.location, at))[0];
   if (pinned) place = pinned;
  }
  if (!place) throw new HttpsError('not-found', '找不到這個地點，請手動輸入。');
