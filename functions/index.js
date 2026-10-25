@@ -148,19 +148,20 @@ const localNamePrompt = (t, item, results) => `Travellers photographed this prod
 From the web search results below, give the name this same product is sold under in ${LOCAL_NAMES[t.country][1]}, in ${LOCAL_NAMES[t.country][0]} exactly as written in the results (brand first, same variant).
 Reply with JSON only: {"name": string}. Empty name if the results do not show this product's ${LOCAL_NAMES[t.country][0]} name; never translate it yourself.
 Search results: ${JSON.stringify(results)}`;
-// 備註 (detail) and 數量／規格 (qty) are for the travellers: Traditional Chinese (and numbers) only. Kana or hangul left
-// in either, or Japanese counters (枚入) and English words in the spec, are translated.
-const NOT_ZH = { detail: /[\u3040-\u30ff\uac00-\ud7af]/, qty: /[\u3040-\u30ff\uac00-\ud7af]|[A-Za-z]{3,}|[枚入]/ };
+// 備註 (detail), 數量／規格 (qty) and 評價 (reviews) are for the travellers: Chinese only, apart from names. Kana,
+// hangul or English words left in them, or Japanese counters (枚入) in the spec, are translated.
+const NOT_ZH = { detail: /[\u3040-\u30ff\uac00-\ud7af]|[A-Za-z]{4,}/, qty: /[\u3040-\u30ff\uac00-\ud7af]|[A-Za-z]{3,}|[枚入]/, reviews: /[\u3040-\u30ff\uac00-\ud7af]{2,}|\b[a-z]{4,}\b(?![.])/ };
 async function zhDetail(item, t) {
  const bad = Object.keys(NOT_ZH).filter(k => NOT_ZH[k].test(item[k] || ''));
  if (!bad.length) return item;
- const r = await askDeepSeek(`Rewrite these fields of a shopping list item in Traditional Chinese as used in Hong Kong; keep brand and product names as written, and numbers and units (g, ml).
+ const r = await askDeepSeek(`Rewrite these fields of a shopping list item in Traditional Chinese as used in Hong Kong; keep brand, product, shop and site names as written, and numbers and units (g, ml).
 - detail: a product note, at most 60 characters.
 - qty: size, quantity or variant, numbers and Chinese only, at most 30 characters (30枚入 → 30 片裝, 12個入 → 12 個裝, mint → 薄荷味, refill → 補充裝).
+- reviews: a summary of user reviews; translate every Japanese, English or other word into Chinese, keeping product, brand and site names (and the last line 來源：…) as written; keep the length and line breaks.
 Reply with JSON only: {${bad.map(k => `"${k}": string`).join(', ')}}
 Fields: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, item[k]])))}`, [], { think: false }).catch(() => null);
  const out = { ...item };
- for (const k of bad) if (typeof r?.[k] === 'string' && r[k].trim()) out[k] = r[k].trim().slice(0, k === 'qty' ? 30 : 500);
+ for (const k of bad) if (typeof r?.[k] === 'string' && r[k].trim()) out[k] = r[k].trim().slice(0, { qty: 30, detail: 500, reviews: 1000 }[k]);
  return out;
 }
 // 評價: what users say about the product (reviews in Chinese, English or Japanese on the web), summed up in Traditional
@@ -168,7 +169,7 @@ Fields: ${JSON.stringify(Object.fromEntries(bad.map(k => [k, item[k]])))}`, [], 
 const reviewPrompt = (item, results) => `Travellers are thinking of buying this product: ${JSON.stringify({ name: item.name, spec: item.qty, detail: item.detail })}.
 From the web search results below (reviews in any language), sum up what users say about this same product, in Traditional Chinese as used in Hong Kong.
 Reply with JSON only: {"reviews": string, "sites": [number, ...]}
-- reviews: at most 220 Chinese characters. First the rating if the results show a real score, with the number of reviews when shown (e.g. "@cosme 5.4/7（1,203 篇）", "Amazon 4.3/5"); leave out a score of 0 or a site with no score. Then 優點：… and 缺點：… in short points, then who it suits (適合…). Only what the results say about this product (not another product or variant). Empty if the results have no user reviews of it.
+- reviews: at most 220 Chinese characters. First the rating if the results show a real score, with the number of reviews when shown (e.g. "@cosme 5.4/7（1,203 篇）", "Amazon 4.3/5"); leave out a score of 0 or a site with no score. Then 優點：… and 缺點：… in short points, then who it suits (適合…). Only what the results say about this product (not another product or variant). Write it all in Chinese: translate Japanese, English and other words, keeping only product, brand and site names as written. If the results have no user reviews of this product, reply with an empty string (do not write that none were found).
 - sites: the numbers of the results the summary comes from.
 Search results: ${JSON.stringify(results.map((r, i) => ({ n: i + 1, title: r.title, text: r.summary })))}`;
 async function productReviews(item, t) {
@@ -181,7 +182,8 @@ async function productReviews(item, t) {
  if (!results.length) return '';
  const r = await askDeepSeek(reviewPrompt(item, results), [], { think: false }).catch(() => null);
  const text = typeof r?.reviews === 'string' ? r.reviews.trim().slice(0, 600) : '';
- if (!text) return '';
+ // "no reviews found" written out instead of left empty
+ if (!text || (/沒有找到|未見|找不到|無法總結|未有.*評/.test(text) && !/優點/.test(text))) return '';
  const sites = [...new Set((Array.isArray(r.sites) ? r.sites : []).map(n => results[Number(n) - 1]?.url).filter(Boolean).map(u => new URL(u).hostname.replace(/^www\./, '')))].slice(0, 3);
  return `${text}${sites.length ? `\n來源：${sites.join('、')}` : ''}`.slice(0, 1000);
 }
@@ -189,7 +191,7 @@ async function productReviews(item, t) {
 async function finishProduct(item, t) {
  const done = await withLocalName(item, t);
  const reviews = await productReviews(done, t).catch(() => '');
- return reviews ? { ...done, reviews } : done;
+ return reviews ? zhDetail({ ...done, reviews }, t) : done;
 }
 async function withLocalName(item, t) {
  item = await zhDetail(item, t);
@@ -1180,5 +1182,5 @@ export const findBuyPlaces = onCall({ region: 'asia-northeast1', enforceAppCheck
  const named = (Array.isArray(r?.places) ? r.places : []).slice(0, 6).map(p => ({ name: text(p?.name, 100), why: text(p?.why, 40) })).filter(p => p.name);
  const checked = await Promise.all(named.map(p => checkOnMaps(p, trip)));
  const places = checked.filter((p, i) => p && checked.findIndex(q => q?.id === p.id) === i).slice(0, 4).map(({ id: _id, ...p }) => p);
- return { places, dropped: named.length - checked.filter(Boolean).length, note: text(r?.note, 120), product, reviews, photo: photo && photo.length <= 400000 ? photo : null, sources: [...new Set([...results, ...about].slice(0, 3).map(x => new URL(x.url).hostname))] };
+ return { places, dropped: named.length - checked.filter(Boolean).length, note: text(r?.note, 120), product, reviews: reviews ? (await zhDetail({ reviews }, trip)).reviews : '', photo: photo && photo.length <= 400000 ? photo : null, sources: [...new Set([...results, ...about].slice(0, 3).map(x => new URL(x.url).hostname))] };
 });
