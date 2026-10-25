@@ -56,6 +56,16 @@
     if (current === "nearby") nearbyResults();
     if (current === "home") render();
   }
+  // One star on or off: this device, the companion's synced list, and every list showing it
+  function markSaved(id, on) {
+    on ? saved.add(id) : saved.delete(id);
+    const ok = storage.set("kyushu-saved-v1", [...saved]);
+    window.Together?.saveFavorites([...saved]);
+    if ($("#results")) renderResults();
+    if ($("#notebookResults")) notebookResults();
+    if (current === "nearby") nearbyResults();
+    if (!ok) toast("瀏覽器未允許儲存；收藏只保留至本次離開。");
+  }
   let current = "home",
     selectedDay = 1,
     category = "全部",

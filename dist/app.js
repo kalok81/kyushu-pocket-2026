@@ -60,6 +60,16 @@ window.startTrip = (meta = {}) => {
     if (current === "nearby") nearbyResults();
     if (current === "home") render();
   }
+  // One star on or off: this device, the companion's synced list, and every list showing it
+  function markSaved(id, on) {
+    on ? saved.add(id) : saved.delete(id);
+    const ok = storage.set("kyushu-saved-v1", [...saved]);
+    window.Together?.saveFavorites([...saved]);
+    if ($("#results")) renderResults();
+    if ($("#notebookResults")) notebookResults();
+    if (current === "nearby") nearbyResults();
+    if (!ok) toast("瀏覽器未允許儲存；收藏只保留至本次離開。");
+  }
   let current = "home",
     selectedDay = 1,
     category = "全部",
@@ -505,7 +515,7 @@ window.startTrip = (meta = {}) => {
       pin = pins[0],
       alt = plan && plan.slot != null ? stopsFor(plan.day)[plan.slot] : null;
     openDialog(
-      `${Kit.sheetHead(plan ? (alt ? "加入同一時間的選擇" : "新增站點") : p ? "修改地點" : "新增地點", plan ? `D${plan.day}` : "")}${plan ? `<p class="note">${alt ? `與「${esc(alt.title)}」同在 ${esc(alt.time || "這個時段")}。` : `${esc(days[plan.day - 1].date)} · ${esc(days[plan.day - 1].region)}。`}地點會同時加入「探索」。</p>` : ""}<form class="tg-form" id="placeForm" data-id="${p ? esc(p.id) : ""}"${plan ? ` data-day="${plan.day}" data-slot="${plan.slot ?? ""}"` : ""}><div id="placePhotoBox">${placePhotoHtml(p?.photo, p?.photoBy)}</div>${plan && !alt ? '<label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label>' : ""}<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結" value="${esc(p?.mapsUrl || "")}">${Kit.btn("自動填寫", { variant: "secondary", icon: "sparkles", attrs: { id: "placeLookup" } })}</span></label><p class="note" id="placeLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位；類型、「必吃・必買・特色」及「參考價格與營業時間」由 AI 按 Google 資料及評論整理。</p><label>名稱<input name="f1" required maxlength="80" value="${v(1)}"></label><fieldset><legend>分類</legend>${categories.map((c) => `<label class="tg-check"><input type="checkbox" name="cats" value="${c}"${p?.cats.includes(c) ? " checked" : ""}> ${c}</label>`).join("")}</fieldset><label>區域<input name="f0" list="placeRegions" maxlength="60" required value="${v(0)}"><datalist id="placeRegions">${[...new Set(places.map((x) => x.v[0]).filter(Boolean))].map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label>${placeFields.map(([i, label, max]) => `<label>${label}${max > 200 ? `<textarea name="f${i}" rows="3" maxlength="${max}">${v(i)}</textarea>` : `<input name="f${i}" maxlength="${max}" value="${v(i)}">`}</label>`).join("")}<input type="hidden" name="photo" value="${esc(p?.photo || "")}"><input type="hidden" name="photoBy" value="${esc(p?.photoBy || "")}"><input type="hidden" name="lat" value="${pin ? pin.lat : ""}"><input type="hidden" name="lng" value="${pin ? pin.lng : ""}"><input type="hidden" name="mainLabel" value="${esc(pin?.label || "")}"><fieldset class="branches"><legend>其他分店／地址</legend><div id="branchRows">${pins.slice(1).map(branchRow).join("")}</div>${Kit.btn("加入分店／地址", { size: "sm", icon: "plus", attrs: { "data-branch-add": true } })}<p class="note">每個分店貼上 Google 地圖連結後按「定位」。附近頁會用最近的分店計算距離。</p></fieldset>${Kit.btn(plan ? "加入行程及探索" : p ? "儲存修改" : "加入地點", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
+      `${Kit.sheetHead(plan ? (alt ? "加入同一時間的選擇" : "新增站點") : p ? "修改地點" : "新增地點", plan ? `D${plan.day}` : "")}${plan ? `<p class="note">${alt ? `與「${esc(alt.title)}」同在 ${esc(alt.time || "這個時段")}。` : `${esc(days[plan.day - 1].date)} · ${esc(days[plan.day - 1].region)}。`}地點會同時加入「探索」。</p>` : ""}<form class="tg-form" id="placeForm" data-id="${p ? esc(p.id) : ""}"${plan ? ` data-day="${plan.day}" data-slot="${plan.slot ?? ""}"` : ""}><div id="placePhotoBox">${placePhotoHtml(p?.photo, p?.photoBy)}</div>${plan && !alt ? '<label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label>' : ""}<label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上 Google 地圖分享連結" value="${esc(p?.mapsUrl || "")}">${Kit.btn("自動填寫", { variant: "secondary", icon: "sparkles", attrs: { id: "placeLookup" } })}</span></label><p class="note" id="placeLookupInfo">在 Google 地圖按「分享」→ 複製連結，貼上後按「自動填寫」。只會填入空白欄位；類型、「必吃・必買・特色」及「參考價格與營業時間」由 AI 按 Google 資料及評論整理。</p><label>名稱<input name="f1" required maxlength="80" value="${v(1)}"></label><fieldset><legend>分類</legend>${categories.map((c) => `<label class="tg-check"><input type="checkbox" name="cats" value="${c}"${p?.cats.includes(c) ? " checked" : ""}> ${c}</label>`).join("")}</fieldset><label>區域<input name="f0" list="placeRegions" maxlength="60" required value="${v(0)}"><datalist id="placeRegions">${[...new Set(places.map((x) => x.v[0]).filter(Boolean))].map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label>${placeFields.map(([i, label, max]) => `<label>${label}${max > 200 ? `<textarea name="f${i}" rows="3" maxlength="${max}">${v(i)}</textarea>` : `<input name="f${i}" maxlength="${max}" value="${v(i)}">`}</label>`).join("")}<input type="hidden" name="photo" value="${esc(p?.photo || "")}"><input type="hidden" name="photoBy" value="${esc(p?.photoBy || "")}"><input type="hidden" name="lat" value="${pin ? pin.lat : ""}"><input type="hidden" name="lng" value="${pin ? pin.lng : ""}"><input type="hidden" name="mainLabel" value="${esc(pin?.label || "")}"><fieldset class="branches"><legend>其他分店／地址</legend><div id="branchRows">${pins.slice(1).map(branchRow).join("")}</div>${Kit.btn("加入分店／地址", { size: "sm", icon: "plus", attrs: { "data-branch-add": true } })}<p class="note">每個分店貼上 Google 地圖連結後按「定位」。附近頁會用最近的分店計算距離。</p></fieldset><label class="tg-check"><input type="checkbox" name="fav"${p && saved.has(p.id) ? " checked" : ""}> ★ 加入我的收藏</label>${Kit.btn(plan ? "加入行程及探索" : p ? "儲存修改" : "加入地點", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
   async function findBranch(row) {
@@ -586,10 +596,41 @@ window.startTrip = (meta = {}) => {
       btn.disabled = false;
     }
   }
+  // Already in 探索: the same Google place, the same or a similar name (without spaces, brackets or punctuation), or a
+  // pin within 20 m
+  function placeDuplicate(name, mapsUrl, lat, lng, except) {
+    const bare = (t) =>
+        String(t || "")
+          .toLowerCase()
+          .replace(/[（(][^）)]*[)）]/g, "")
+          .replace(/[\s【】「」『』・･,，、.。:：\-－−&＆’']/g, ""),
+      gid = (u) => String(u || "").match(/(?:query_place_id=|place_id[:=]|!1s)([\w:-]{10,})/)?.[1] || "",
+      n = bare(name),
+      id = gid(mapsUrl),
+      pt = Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : null;
+    return places.find((x) => {
+      if (x.id === except) return false;
+      const m = bare(x.v[1]),
+        z = bare(x.zh);
+      if (id && id === gid(x.mapsUrl)) return true;
+      if (n.length >= 2 && (m === n || z === n || (Math.min(n.length, m.length) >= 4 && (m.includes(n) || n.includes(m))))) return true;
+      return pt && window.Nearby && (window.TRIP_GEO.places[x.id] || []).some((g) => window.Nearby.distance(pt, g) <= 20);
+    });
+  }
   function savePlaceForm(f) {
     const v = new FormData(f),
       cats = v.getAll("cats").map(String);
     if (!cats.length) return toast("請最少選一個分類。");
+    const dup = !f.dataset.dupOk && placeDuplicate(v.get("f1"), v.get("mapsUrl"), parseFloat(v.get("lat")), parseFloat(v.get("lng")), f.dataset.id);
+    if (dup)
+      return UI.confirm("探索已有相似地點", {
+        text: `「${dup.v[1]}」${dup.v[0] ? ` · ${dup.v[0]}` : ""}，仍然${f.dataset.id ? "儲存" : "加入"}？`,
+        ok: f.dataset.id ? "仍然儲存" : "仍然加入",
+      }).then((ok) => {
+        if (!ok) return;
+        f.dataset.dupOk = "1";
+        savePlaceForm(f);
+      });
     const p = places.find((x) => x.id === f.dataset.id),
       fields = Array.from({ length: 12 }, (_, i) => String(p?.v[i] ?? ""));
     for (const i of [0, 1, ...placeFields.map(([i]) => i)]) fields[i] = String(v.get("f" + i) || "").trim();
@@ -622,6 +663,8 @@ window.startTrip = (meta = {}) => {
       photo: String(v.get("photo") || "") || null,
       photoBy: String(v.get("photoBy") || "").slice(0, 60),
     });
+    const id = newId || p?.id;
+    if (id && v.has("fav") !== saved.has(id)) markSaved(id, v.has("fav"));
     if (f.dataset.linkShop && newId) window.Together.linkShopping(f.dataset.linkShop.split(","), newId);
     if (f.dataset.day && newId) {
       // Also a plan stop for that place (as an alternative of a time slot, or at the time entered).
@@ -2490,12 +2533,7 @@ window.startTrip = (meta = {}) => {
     }
     if (el.dataset.save) {
       const id = el.dataset.save;
-      saved.has(id) ? saved.delete(id) : saved.add(id);
-      const ok = storage.set("kyushu-saved-v1", [...saved]);
-      window.Together?.saveFavorites([...saved]);
-      if ($("#results")) renderResults();
-      if ($("#notebookResults")) notebookResults();
-      if (current === "nearby") nearbyResults();
+      markSaved(id, !saved.has(id));
       // the star in an open place sheet follows too
       $("#detailBody")
         .querySelectorAll(`[data-save="${id}"]`)
@@ -2503,7 +2541,6 @@ window.startTrip = (meta = {}) => {
           b.classList.toggle("saved", saved.has(id));
           b.setAttribute("aria-pressed", saved.has(id));
         });
-      if (!ok) toast("瀏覽器未允許儲存；收藏只保留至本次離開。");
     }
     if (el.dataset.cat) {
       category = el.dataset.cat;

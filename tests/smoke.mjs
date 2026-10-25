@@ -135,7 +135,16 @@ try {
  });
  await step('shopping list shows on explore and plan', async () => {
   await page.goto(base + '/#explore'); await page.click('[data-place-new]');
-  await page.fill('#placeForm [name=f0]', '淺草'); await page.fill('#placeForm [name=f1]', '仲見世通り'); await page.locator('#placeForm [name=cats]').first().check(); await page.click('#placeForm button[type=submit]');
+  await page.fill('#placeForm [name=f0]', '淺草'); await page.fill('#placeForm [name=f1]', '仲見世通り'); await page.locator('#placeForm [name=cats]').first().check(); await page.check('#placeForm [name=fav]'); await page.click('#placeForm button[type=submit]');
+  await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('.save.saved').waitFor({ timeout: 5000 }); // the form's ★ saved it to 收藏
+  // the same name again: asked first; 取消 keeps the form open
+  await page.click('[data-place-new]'); await page.fill('#placeForm [name=f0]', '淺草'); await page.fill('#placeForm [name=f1]', '仲見世 通り'); await page.locator('#placeForm [name=cats]').first().check(); await page.click('#placeForm button[type=submit]');
+  await page.waitForSelector('.ui-pop'); assert.match(await page.locator('.ui-pop').innerText(), /探索已有相似地點[\s\S]*仲見世通り/);
+  await page.click('.ui-pop button:has-text("取消")').catch(() => page.keyboard.press('Escape')); await page.waitForSelector('.swal2-container', { state: 'detached' });
+  assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'cancel keeps the form'); await closeSheet();
+  if (await page.isVisible('.ui-pop')) await page.click('.ui-pop button:has-text("放棄")');
+  await page.waitForFunction(() => !document.querySelector('#detail').open);
+  assert.equal(await page.locator('#results .card.place', { hasText: '仲見世' }).count(), 1);
   await page.goto(base + '/#shopping'); await addShop('人形燒', '仲見世通り 淺草'); await addShop('御守', '淺草寺 本堂');
   await page.waitForTimeout(300);
   await page.goto(base + '/#explore'); await page.waitForSelector('#results .buy-here');

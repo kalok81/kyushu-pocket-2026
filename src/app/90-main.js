@@ -222,12 +222,7 @@
     }
     if (el.dataset.save) {
       const id = el.dataset.save;
-      saved.has(id) ? saved.delete(id) : saved.add(id);
-      const ok = storage.set("kyushu-saved-v1", [...saved]);
-      window.Together?.saveFavorites([...saved]);
-      if ($("#results")) renderResults();
-      if ($("#notebookResults")) notebookResults();
-      if (current === "nearby") nearbyResults();
+      markSaved(id, !saved.has(id));
       // the star in an open place sheet follows too
       $("#detailBody")
         .querySelectorAll(`[data-save="${id}"]`)
@@ -235,7 +230,6 @@
           b.classList.toggle("saved", saved.has(id));
           b.setAttribute("aria-pressed", saved.has(id));
         });
-      if (!ok) toast("瀏覽器未允許儲存；收藏只保留至本次離開。");
     }
     if (el.dataset.cat) {
       category = el.dataset.cat;
