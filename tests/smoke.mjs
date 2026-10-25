@@ -70,6 +70,11 @@ try {
   await page.waitForSelector('.tg-total'); await page.waitForFunction(() => document.querySelector('.tg-total b')?.textContent === 'HK$200.00');
   assert.equal(await page.locator('.tg-conv').innerText(), '≈ HK$200.00');
   assert.match(await page.locator('.tg-stats').innerText(), /🍜 餐飲/);
+  // search: by title or category; nothing found
+  await page.fill('#expSearch', '晚餐'); await page.waitForSelector('.exp-found'); assert.match(await page.locator('.exp-found').innerText(), /找到 1 筆 · 合計約 HK\$200\.00/);
+  await page.fill('#expSearch', '餐飲'); await page.waitForFunction(() => /找到 1 筆/.test(document.querySelector('.exp-found')?.textContent));
+  await page.fill('#expSearch', '拉麵'); await page.waitForFunction(() => /找不到「拉麵」/.test(document.querySelector('[data-tg-live=list]').textContent));
+  await page.fill('#expSearch', ''); await page.waitForFunction(() => !document.querySelector('.exp-found') && document.querySelectorAll('[data-tg-live=list] .tg-item').length === 1);
  });
  await step('checklist: suggestions and ticks', async () => {
   await page.goto(base + '/#together?tab=checklist'); await page.click('.tg-list [data-tg=checkSuggest]');
@@ -219,6 +224,12 @@ try {
   assert.deepEqual(await page.locator('.shop-item h3').allInnerTexts(), ['化妝水']);
   assert.match(await page.locator('.shop-item', { hasText: '化妝水' }).innerText(), /給：媽媽[\s\S]*敏感肌用/);
   await page.click('[data-shop-cat=all]');
+  // adding the same item again asks first
+  await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]'); await page.fill('[data-tg-form=shop] [name=name]', '化妝水'); await page.click('[data-tg-form=shop] button[type=submit]');
+  await page.waitForSelector('.ui-pop'); assert.match(await page.locator('.ui-pop').innerText(), /清單已有相似物品[\s\S]*化妝水/);
+  await page.click('.ui-pop button:has-text("取消")').catch(() => page.keyboard.press('Escape')); await page.waitForSelector('.swal2-container', { state: 'detached' });
+  assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'the form stays open'); await closeSheet();
+  assert.equal(await page.locator('.shop-item h3', { hasText: '化妝水' }).count(), 1);
  });
  await step('shopping: product link and pasted picture go to the AI', async () => {
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.waitForSelector('[data-tg-form=shop]');

@@ -30,6 +30,7 @@
     shopFilter: "todo",
     shopCat: "all",
     shopSearch: "",
+    expSearch: "",
     shopView: "list",
     shopEdit: null,
     fx: null,

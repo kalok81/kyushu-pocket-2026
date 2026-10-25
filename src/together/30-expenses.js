@@ -111,6 +111,23 @@
     const itemsZh = e.zhFor === [e.title, ...(e.items || []).map((i) => i.name)].join("\n") ? e.itemsZh || [] : [];
     return `<article class="tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}${zhLine(zhName(e, e.title))}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i, k) => `<li><span>${esc(i.name)}${zhLine(itemsZh[k])}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
   }
+  // 搜尋開支: title (and its Chinese), receipt lines, who paid, who shares, category, day and amount.
+  function expenseMatches() {
+    const words = state.expSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return state.expenses;
+    return state.expenses.filter((e) => {
+      const text = [e.title, e.zh, ...(e.items || []).map((i) => i.name), ...(e.itemsZh || []), nameOf(e.paidBy), ...(e.split || []).map(nameOf), CATS[e.category], dayLabel(e.day), e.amount, e.currency]
+        .filter((t) => t != null)
+        .join(" ")
+        .toLowerCase();
+      return words.every((w) => text.includes(w));
+    });
+  }
+  // The matches' total in the home currency (those with a rate)
+  function foundTotal(list) {
+    const sum = list.reduce((t, e) => t + (toHome(e) || 0), 0);
+    return sum ? ` · 合計約 ${fmtHome(sum)}` : "";
+  }
   // Spending overview in the home currency: total, per companion, per day and per category, and the rates used.
   function stats() {
     const list = state.expenses.filter((e) => S.currencies[e.currency]);

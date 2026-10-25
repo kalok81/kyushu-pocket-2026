@@ -411,6 +411,21 @@
       },
     };
   }
+  // An item already on the list: the same name or Chinese name, or one name inside the other (4+ characters), compared
+  // without brackets, spaces and punctuation.
+  function shopDuplicate(name, except) {
+    const bare = (t) => norm(String(t || "").replace(/[（(][^）)]*[)）]/g, "")),
+      n = bare(name),
+      whole = norm(name);
+    if (n.length < 2) return null;
+    return state.shopping.find((x) => {
+      if (x.id === except) return false;
+      const m = bare(x.name),
+        all = norm(x.name),
+        z = bare(x.zh);
+      return m === n || z === n || whole === all || (Math.min(n.length, m.length) >= 4 && (all.includes(n) || whole.includes(m)));
+    });
+  }
   // Match a 購買地點 to an explore shop: the whole name, or one distinctive word of it (島本, 唐十), compared without
   // spaces/brackets/punctuation and with 雞/鶏 treated alike; generic words (博多, 本店…) never match on their own.
   const norm = (t) =>

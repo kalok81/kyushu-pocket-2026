@@ -181,14 +181,20 @@
       // every 購買地點 already placed (Google Maps check, or unchanged lines): save the pins now
       const pins = knownPins(item.place);
       if (pins) Object.assign(item, { pins, lat: pins[0].lat, lng: pins[0].lng, geoFor: item.place });
-      if (state.shopEdit) {
-        update("shopping", state.shopEdit, { ...item, ai: false });
-        toast("已儲存");
-      } else add("shopping", { ...item, bought: false, boughtBy: null, boughtAt: null });
-      state.shopEdit = null;
-      shopPhoto = null;
-      Kit.close();
-      refresh();
+      const go = () => {
+        if (state.shopEdit) {
+          update("shopping", state.shopEdit, { ...item, ai: false });
+          toast("已儲存");
+        } else add("shopping", { ...item, bought: false, boughtBy: null, boughtAt: null });
+        state.shopEdit = null;
+        shopPhoto = null;
+        Kit.close();
+        refresh();
+      };
+      // already on the list (same or similar name): ask first
+      const dup = shopDuplicate(item.name, state.shopEdit);
+      if (dup) UI.confirm("清單已有相似物品", { text: `「${dup.name}」${dup.qty ? ` · ${dup.qty}` : ""}${dup.bought ? "（已買）" : ""}，仍然加入？`, ok: state.shopEdit ? "仍然儲存" : "仍然加入" }).then((ok) => ok && go());
+      else go();
       return;
     }
     f.reset();
@@ -443,6 +449,10 @@
     if (e.target.dataset?.tripSwitch !== undefined) switchTrip(e.target.value);
   });
   document.addEventListener("input", (e) => {
+    if (e.target.id === "expSearch") {
+      state.expSearch = e.target.value;
+      refresh();
+    }
     if (e.target.id === "shopSearch") {
       state.shopSearch = e.target.value;
       const sp = $("#shopPage");

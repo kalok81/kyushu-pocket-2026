@@ -76,14 +76,18 @@
       );
     }
     if (state.tab === "checklist") return checklist();
-    if (state.tab === "expenses")
+    if (state.tab === "expenses") {
+      const found = expenseMatches();
       return (
         stats() +
         summary() +
-        (state.expenses.length
-          ? state.expenses.map(expenseItem).join("")
-          : Kit.empty("還沒有開支", "按右下角「記一筆」，或影收據讓 AI 讀出金額。"))
+        (!state.expenses.length
+          ? Kit.empty("還沒有開支", "按右下角「記一筆」，或影收據讓 AI 讀出金額。")
+          : state.expSearch.trim() && !found.length
+            ? Kit.empty(`找不到「${esc(state.expSearch.trim())}」`, "試試其他字，或清除搜尋。")
+            : (state.expSearch.trim() ? `<p class="note exp-found">找到 ${found.length} 筆${foundTotal(found)}</p>` : "") + found.map(expenseItem).join(""))
       );
+    }
   }
   // Shared checklist: everyone sees the same items and ticks them off for themselves (doneBy holds their uids).
   function checklist() {
@@ -201,7 +205,7 @@
       shell: `<div data-tg-live="status"></div>${Kit.chips(
         Object.entries(tabs).map(([k, v]) => ({ label: v, icon: TAB_ICONS[k], active: k === state.tab, attrs: { "data-tg-tab": k } })),
         { cls: "tabs", label: "共用分頁" },
-      )}${state.tab === "expenses" ? '<div id="tgDrafts" class="tg-drafts"></div>' : ""}${state.tab === "checklist" ? forms() : ""}<div class="tg-list" data-tg-live="list"></div>${
+      )}${state.tab === "expenses" ? `<div id="tgDrafts" class="tg-drafts"></div><div class="searchrow"><input id="expSearch" class="search" type="search" placeholder="搜尋項目、物品、付款人、分類、日子…" aria-label="搜尋開支" value="${esc(state.expSearch)}"></div>` : ""}${state.tab === "checklist" ? forms() : ""}<div class="tg-list" data-tg-live="list"></div>${
         state.tab === "notes"
           ? Kit.fab("新增", { "data-tg": "newEntry" })
           : state.tab === "expenses"

@@ -35,6 +35,7 @@ window.Together = (() => {
     shopFilter: "todo",
     shopCat: "all",
     shopSearch: "",
+    expSearch: "",
     shopView: "list",
     shopEdit: null,
     fx: null,
@@ -977,6 +978,23 @@ window.Together = (() => {
     const itemsZh = e.zhFor === [e.title, ...(e.items || []).map((i) => i.name)].join("\n") ? e.itemsZh || [] : [];
     return `<article class="tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}${zhLine(zhName(e, e.title))}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i, k) => `<li><span>${esc(i.name)}${zhLine(itemsZh[k])}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
   }
+  // 搜尋開支: title (and its Chinese), receipt lines, who paid, who shares, category, day and amount.
+  function expenseMatches() {
+    const words = state.expSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (!words.length) return state.expenses;
+    return state.expenses.filter((e) => {
+      const text = [e.title, e.zh, ...(e.items || []).map((i) => i.name), ...(e.itemsZh || []), nameOf(e.paidBy), ...(e.split || []).map(nameOf), CATS[e.category], dayLabel(e.day), e.amount, e.currency]
+        .filter((t) => t != null)
+        .join(" ")
+        .toLowerCase();
+      return words.every((w) => text.includes(w));
+    });
+  }
+  // The matches' total in the home currency (those with a rate)
+  function foundTotal(list) {
+    const sum = list.reduce((t, e) => t + (toHome(e) || 0), 0);
+    return sum ? ` · 合計約 ${fmtHome(sum)}` : "";
+  }
   // Spending overview in the home currency: total, per companion, per day and per category, and the rates used.
   function stats() {
     const list = state.expenses.filter((e) => S.currencies[e.currency]);
@@ -1131,14 +1149,18 @@ window.Together = (() => {
       );
     }
     if (state.tab === "checklist") return checklist();
-    if (state.tab === "expenses")
+    if (state.tab === "expenses") {
+      const found = expenseMatches();
       return (
         stats() +
         summary() +
-        (state.expenses.length
-          ? state.expenses.map(expenseItem).join("")
-          : Kit.empty("還沒有開支", "按右下角「記一筆」，或影收據讓 AI 讀出金額。"))
+        (!state.expenses.length
+          ? Kit.empty("還沒有開支", "按右下角「記一筆」，或影收據讓 AI 讀出金額。")
+          : state.expSearch.trim() && !found.length
+            ? Kit.empty(`找不到「${esc(state.expSearch.trim())}」`, "試試其他字，或清除搜尋。")
+            : (state.expSearch.trim() ? `<p class="note exp-found">找到 ${found.length} 筆${foundTotal(found)}</p>` : "") + found.map(expenseItem).join(""))
       );
+    }
   }
   // Shared checklist: everyone sees the same items and ticks them off for themselves (doneBy holds their uids).
   function checklist() {
@@ -1256,7 +1278,7 @@ window.Together = (() => {
       shell: `<div data-tg-live="status"></div>${Kit.chips(
         Object.entries(tabs).map(([k, v]) => ({ label: v, icon: TAB_ICONS[k], active: k === state.tab, attrs: { "data-tg-tab": k } })),
         { cls: "tabs", label: "共用分頁" },
-      )}${state.tab === "expenses" ? '<div id="tgDrafts" class="tg-drafts"></div>' : ""}${state.tab === "checklist" ? forms() : ""}<div class="tg-list" data-tg-live="list"></div>${
+      )}${state.tab === "expenses" ? `<div id="tgDrafts" class="tg-drafts"></div><div class="searchrow"><input id="expSearch" class="search" type="search" placeholder="搜尋項目、物品、付款人、分類、日子…" aria-label="搜尋開支" value="${esc(state.expSearch)}"></div>` : ""}${state.tab === "checklist" ? forms() : ""}<div class="tg-list" data-tg-live="list"></div>${
         state.tab === "notes"
           ? Kit.fab("新增", { "data-tg": "newEntry" })
           : state.tab === "expenses"
@@ -1898,6 +1920,21 @@ window.Together = (() => {
       },
     };
   }
+  // An item already on the list: the same name or Chinese name, or one name inside the other (4+ characters), compared
+  // without brackets, spaces and punctuation.
+  function shopDuplicate(name, except) {
+    const bare = (t) => norm(String(t || "").replace(/[（(][^）)]*[)）]/g, "")),
+      n = bare(name),
+      whole = norm(name);
+    if (n.length < 2) return null;
+    return state.shopping.find((x) => {
+      if (x.id === except) return false;
+      const m = bare(x.name),
+        all = norm(x.name),
+        z = bare(x.zh);
+      return m === n || z === n || whole === all || (Math.min(n.length, m.length) >= 4 && (all.includes(n) || whole.includes(m)));
+    });
+  }
   // Match a 購買地點 to an explore shop: the whole name, or one distinctive word of it (島本, 唐十), compared without
   // spaces/brackets/punctuation and with 雞/鶏 treated alike; generic words (博多, 本店…) never match on their own.
   const norm = (t) =>
@@ -2485,14 +2522,20 @@ window.Together = (() => {
       // every 購買地點 already placed (Google Maps check, or unchanged lines): save the pins now
       const pins = knownPins(item.place);
       if (pins) Object.assign(item, { pins, lat: pins[0].lat, lng: pins[0].lng, geoFor: item.place });
-      if (state.shopEdit) {
-        update("shopping", state.shopEdit, { ...item, ai: false });
-        toast("已儲存");
-      } else add("shopping", { ...item, bought: false, boughtBy: null, boughtAt: null });
-      state.shopEdit = null;
-      shopPhoto = null;
-      Kit.close();
-      refresh();
+      const go = () => {
+        if (state.shopEdit) {
+          update("shopping", state.shopEdit, { ...item, ai: false });
+          toast("已儲存");
+        } else add("shopping", { ...item, bought: false, boughtBy: null, boughtAt: null });
+        state.shopEdit = null;
+        shopPhoto = null;
+        Kit.close();
+        refresh();
+      };
+      // already on the list (same or similar name): ask first
+      const dup = shopDuplicate(item.name, state.shopEdit);
+      if (dup) UI.confirm("清單已有相似物品", { text: `「${dup.name}」${dup.qty ? ` · ${dup.qty}` : ""}${dup.bought ? "（已買）" : ""}，仍然加入？`, ok: state.shopEdit ? "仍然儲存" : "仍然加入" }).then((ok) => ok && go());
+      else go();
       return;
     }
     f.reset();
@@ -2747,6 +2790,10 @@ window.Together = (() => {
     if (e.target.dataset?.tripSwitch !== undefined) switchTrip(e.target.value);
   });
   document.addEventListener("input", (e) => {
+    if (e.target.id === "expSearch") {
+      state.expSearch = e.target.value;
+      refresh();
+    }
     if (e.target.id === "shopSearch") {
       state.shopSearch = e.target.value;
       const sp = $("#shopPage");

@@ -871,3 +871,4 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .shop-reviews{margin:6px 0;font-size:14px}
 .shop-reviews summary{cursor:pointer;color:var(--primary);font-weight:500}
 .shop-reviews .tg-text{margin:6px 0 0;color:var(--muted-foreground)}
+.exp-found{margin:4px 0 8px}
