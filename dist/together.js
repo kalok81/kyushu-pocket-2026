@@ -1126,6 +1126,17 @@ window.Together = (() => {
     if (!FORM_TITLES[state.tab]) return;
     Kit.open(Kit.sheetHead(FORM_TITLES[state.tab]()) + forms());
   }
+  // 寫筆記 from the plan: the note form with that day chosen
+  function dayNote(day) {
+    state.noteEdit = null;
+    state.noteKind = "note";
+    const tab = state.tab;
+    state.tab = "notes";
+    openForm();
+    state.tab = tab;
+    const sel = $('#detail [data-tg-form="note"] [name=day]');
+    if (sel) sel.value = String(day);
+  }
   function editNote(id) {
     const n = state.notes.find((x) => x.id === id);
     if (!n) return;
@@ -1311,7 +1322,7 @@ window.Together = (() => {
       sig: "ready",
       shell: '<div data-tg-live="list"></div>',
       live: {
-        list: `${Kit.sectionHead("旅伴筆記", Kit.btn("寫筆記", { href: "#together?tab=notes", size: "sm", icon: "plus" }))}${ns.length ? ns.map(noteItem).join("") : '<p class="note">這天還沒有旅伴筆記。</p>'}`,
+        list: `${Kit.sectionHead("旅伴筆記", Kit.btn("寫筆記", { size: "sm", icon: "plus", attrs: { "data-tg": "dayNote", "data-note-day": n } }))}${ns.length ? ns.map(noteItem).join("") : '<p class="note">這天還沒有旅伴筆記。</p>'}`,
       },
     };
   }
@@ -2749,6 +2760,7 @@ window.Together = (() => {
       openForm();
     }
     if (d.noteEdit) editNote(d.noteEdit);
+    if (d.tg === "dayNote") dayNote(Number(d.noteDay));
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
       refresh();

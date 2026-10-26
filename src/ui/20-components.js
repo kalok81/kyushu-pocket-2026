@@ -41,8 +41,8 @@
       .join("")}</div></details>`;
   }
   // The page's main "add" action, floating above the bottom navigation.
-  const fab = (label, a = {}, ic = "plus") =>
-    `<button type="button" class="fab"${attrs(a)}>${icon(ic)}<span>${esc(label)}</span></button>`;
+  const fab = (label, { class: cls, ...a } = {}, ic = "plus") =>
+    `<button type="button" class="fab${cls ? " " + cls : ""}"${attrs(a)}>${icon(ic)}<span>${esc(label)}</span></button>`;
   // Heading of a sheet (the #detail dialog).
   const sheetHead = (title, eyebrow = "") =>
     `${eyebrow ? `<div class="eyebrow">${eyebrow}</div>` : ""}<h2 class="detailtitle">${title}</h2>`;

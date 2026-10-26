@@ -1416,7 +1416,7 @@ window.startTrip = (meta = {}) => {
               .join("")}</div></article>`,
         )
         .join("") || Kit.empty("這天還沒有行程", "按右下角「加入地點」，從探索、住宿或購物清單選擇，或新增地點。")
-    }</div><section class="tg-slot" data-tg-day="${day}"></section>${Kit.fab("加入地點", { "data-plan-pick": true })}`;
+    }</div><section class="tg-slot" data-tg-day="${day}"></section><div class="fab-row">${Kit.fab("加入地點", { "data-plan-pick": true })}${Kit.fab("寫筆記", { "data-tg": "dayNote", "data-note-day": day, class: "fab-alt" }, "note")}</div>`;
   }
   function renderPlan() {
     const tab = (d) => {

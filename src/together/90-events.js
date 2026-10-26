@@ -382,6 +382,7 @@
       openForm();
     }
     if (d.noteEdit) editNote(d.noteEdit);
+    if (d.tg === "dayNote") dayNote(Number(d.noteDay));
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
       refresh();

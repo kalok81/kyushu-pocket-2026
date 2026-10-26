@@ -500,6 +500,18 @@ try {
   await page.click('.ui-pop button:has-text("刪除")'); await page.waitForFunction(() => !document.querySelector('.plan-variants'));
   assert.deepEqual(await titles(), main);
  });
+ await step('plan: ＋寫筆記 beside ＋加入地點 opens a note for that day', async () => {
+  await page.goto(base + '/#plan?day=2'); await page.waitForSelector('.fab-row');
+  assert.deepEqual(await page.locator('.fab-row .fab').allInnerTexts(), ['加入地點', '寫筆記']);
+  const [a, b] = await page.locator('.fab-row .fab').evaluateAll((bs) => bs.map((x) => x.getBoundingClientRect()));
+  assert.ok(b.left > a.right && Math.abs(a.top - b.top) < 2, '寫筆記 is to the right of 加入地點');
+  await page.click('.fab-row [data-tg=dayNote]'); await page.waitForSelector('#detail [data-tg-form=note]', { state: 'visible' });
+  assert.equal(await page.inputValue('#detail [data-tg-form=note] [name=day]'), '2');
+  await page.fill('#detail [data-tg-form=note] [name=text]', '記得買明太子'); await page.click('#detail [data-tg-form=note] button[type=submit]');
+  await page.waitForFunction(() => !document.querySelector('#detail').open);
+  const n = await page.evaluate(() => Object.values(globalThis.__fakeStore.notes).find((x) => x.text === '記得買明太子'));
+  assert.equal(n.day, 2);
+ });
  await step('plan picker: every category shows; a 交通 place can be added twice', async () => {
   await page.goto(base + '/#explore'); await page.click('[data-place-new]');
   await page.fill('#placeForm [name=f0]', '上野'); await page.fill('#placeForm [name=f1]', '京成上野駅'); await page.locator('#placeForm [name=cats]').nth(3).check(); await page.click('#placeForm button[type=submit]');

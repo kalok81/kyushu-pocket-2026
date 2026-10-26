@@ -540,7 +540,7 @@ h1,h2,h3{letter-spacing:0}
 .brand small{display:block;font-size:16px;font-weight:650;color:var(--foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:0}
 .topactions{display:flex;gap:2px;flex:none}
 .topactions .active{background:var(--secondary)}
-.locked .bottomnav,.locked .topactions,.locked .skip-link,.locked .fab{display:none}
+.locked .bottomnav,.locked .topactions,.locked .skip-link,.locked .fab,.locked .fab-row{display:none}
 @media(min-width:900px){
 .brand{max-width:calc(50% - 250px)}
 }
@@ -569,9 +569,14 @@ main{padding-bottom:110px}
 /* Floating add button (Kit.fab) above the bottom navigation */
 .fab{position:fixed;z-index:35;right:max(16px,calc((100vw - 1144px)/2 + 16px));bottom:calc(86px + env(safe-area-inset-bottom));display:inline-flex;align-items:center;gap:8px;height:52px;padding:0 20px 0 16px;border:0;border-radius:999px;background:var(--primary);color:var(--primary-foreground);font-size:16px;font-weight:600;box-shadow:var(--shadow-lg)}
 .fab .icon{width:22px;height:22px}
+/* two floating buttons side by side (plan: 加入地點 + 寫筆記) */
+.fab-row{position:fixed;z-index:35;right:max(16px,calc((100vw - 1144px)/2 + 16px));bottom:calc(86px + env(safe-area-inset-bottom));display:flex;gap:8px}
+.fab-row .fab{position:static}
+.fab.fab-alt{background:var(--card);color:var(--primary);border:1px solid var(--border)}
+.fab.fab-alt:hover{background:var(--muted-bg)}
 .fab:hover{background:var(--primary-hover)}
 @media(min-width:900px){
-.fab{bottom:28px}
+.fab,.fab-row{bottom:28px}
 }
 /* "⋯" menus (Kit.menu): placed by kit.js next to their button */
 details.more{position:relative;flex:none}
