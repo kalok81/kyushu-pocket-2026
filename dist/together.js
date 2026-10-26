@@ -38,6 +38,7 @@ window.Together = (() => {
     expSearch: "",
     shopView: "list",
     shopEdit: null,
+    noteEdit: null,
     fx: null,
     liveFx: null,
     settleMode: null,
@@ -1097,12 +1098,13 @@ window.Together = (() => {
       ? Kit.badge(`已過期（${esc(c.until)}）`, "coupon-expired")
       : Kit.badge(`${days ? `還有 ${days} 天` : "今天到期"} · ${esc(c.until)}`, days <= 3 ? "coupon-soon" : "");
   }
+  const noteEditItem = (n) => ({ label: "修改", icon: "edit", attrs: { "data-note-edit": n.id } });
   function noteItem(n) {
     const place = n.placeName ? Kit.badge(esc(n.placeName)) : "",
       day = n.day ? Kit.badge(esc(dayLabel(n.day))) : "";
     if (n.kind === "coupon")
-      return `<article class="tg-item coupon${n.used ? " used" : ""}">${itemTop(n, `${Kit.badge(`${icon("ticket")}優惠券`, "coupon-tag")}${day}${place}`, [del("notes", n)])}<h3>${esc(n.title)}</h3>${n.text ? `<p class="tg-text">${linkify(n.text)}</p>` : ""}${n.code ? `<div class="coupon-code"><span>優惠碼</span><b>${esc(n.code)}</b>${Kit.btn("複製", { size: "sm", icon: "copy", attrs: { "data-copy-code": n.code } })}</div>` : ""}<div class="coupon-due">${couponDue(n)}</div>${notePhotos(n)}<div class="links">${Kit.btn(n.used ? "改回未使用" : "已使用", { size: "sm", variant: n.used ? "outline" : "secondary", icon: n.used ? "undo" : "check", attrs: { "data-coupon-used": n.id } })}${noteLink(n)}</div></article>`;
-    return `<article class="tg-item">${itemTop(n, day + place, [del("notes", n)])}<p class="tg-text">${linkify(n.text)}</p>${notePhotos(n)}${n.url ? `<div class="links">${noteLink(n)}</div>` : ""}</article>`;
+      return `<article class="tg-item coupon${n.used ? " used" : ""}">${itemTop(n, `${Kit.badge(`${icon("ticket")}優惠券`, "coupon-tag")}${day}${place}`, [noteEditItem(n), del("notes", n)])}<h3>${esc(n.title)}</h3>${n.text ? `<p class="tg-text">${linkify(n.text)}</p>` : ""}${n.code ? `<div class="coupon-code"><span>優惠碼</span><b>${esc(n.code)}</b>${Kit.btn("複製", { size: "sm", icon: "copy", attrs: { "data-copy-code": n.code } })}</div>` : ""}<div class="coupon-due">${couponDue(n)}</div>${notePhotos(n)}<div class="links">${Kit.btn(n.used ? "改回未使用" : "已使用", { size: "sm", variant: n.used ? "outline" : "secondary", icon: n.used ? "undo" : "check", attrs: { "data-coupon-used": n.id } })}${noteLink(n)}</div></article>`;
+    return `<article class="tg-item">${itemTop(n, day + place, [noteEditItem(n), del("notes", n)])}<p class="tg-text">${linkify(n.text)}</p>${notePhotos(n)}${n.url ? `<div class="links">${noteLink(n)}</div>` : ""}</article>`;
   }
   function syncText() {
     const pending = ["notes", "expenses", "shopping", "checklist"].reduce((t, k) => t + state[k].filter((x) => x.pending).length, 0);
@@ -1119,10 +1121,18 @@ window.Together = (() => {
     return `<section class="menu-account"><div><small>已登入</small><b>${esc(me().name)}</b><small>${esc(syncText())}</small></div>${Kit.btn("登出", { size: "sm", icon: "logout", attrs: { "data-tg": "logout" } })}</section>`;
   }
   // The add forms open in a sheet from the page's ＋ button.
-  const FORM_TITLES = { notes: () => (state.noteKind === "coupon" ? "新增優惠券" : "新增筆記"), expenses: () => "記一筆開支" };
+  const FORM_TITLES = { notes: () => `${state.noteEdit ? "修改" : "新增"}${state.noteKind === "coupon" ? "優惠券" : "筆記"}`, expenses: () => "記一筆開支" };
   function openForm() {
     if (!FORM_TITLES[state.tab]) return;
     Kit.open(Kit.sheetHead(FORM_TITLES[state.tab]()) + forms());
+  }
+  function editNote(id) {
+    const n = state.notes.find((x) => x.id === id);
+    if (!n) return;
+    state.noteEdit = id;
+    state.noteKind = n.kind === "coupon" ? "coupon" : "note";
+    notePhotoDraft = [...(n.photos || [])];
+    openForm();
   }
   function lists() {
     if (state.tab === "notes") {
@@ -1215,8 +1225,14 @@ window.Together = (() => {
         .map(([k, v]) => `<option value="${k}">${v}</option>`)
         .join("")}</select>${Kit.btn("加入", { type: "submit", variant: "primary", icon: "plus" })}</form>`;
     if (state.tab === "notes") {
-      const coupon = state.noteKind === "coupon",
-        kinds = Kit.chips(
+      // Editing keeps the kind: no 筆記／優惠券 switch; the fields start with the note's values
+      const ed = state.noteEdit && state.notes.find((n) => n.id === state.noteEdit),
+        val = (k) => esc(ed?.[k] ?? ""),
+        edPlace = ed?.placeId && T().places.find((p) => p.id === ed.placeId),
+        coupon = state.noteKind === "coupon",
+        kinds = state.noteEdit
+          ? ""
+          : Kit.chips(
           [
             ["note", "筆記", "note"],
             ["coupon", "優惠券", "ticket"],
@@ -1224,13 +1240,13 @@ window.Together = (() => {
           { cls: "note-kind", label: "類型" },
         ),
         photos = `<div class="note-photo-edit"><div id="notePhotoPreview">${notePhotoPreview()}</div>${Kit.btn(`${coupon ? "影優惠券／上載截圖" : "加相片"}（最多 ${NOTE_PHOTO_MAX} 張）`, { icon: "camera", cls: "btn-block", attrs: { "data-tg": "notePhoto" } })}<input type="file" accept="image/*" id="notePhotoInput" multiple hidden><p class="note" id="noteFillInfo">${coupon ? "加入優惠券相片或連結後，AI 會讀出店名、優惠、優惠碼及有效期，填入空白欄位。" : "加入相片或連結後，AI 會讀出重點，填入筆記。"}</p></div>`,
-        about = `<div class="tg-row"><label>日子<select name="day"><option value="">整個旅程</option>${dayOptions(0)}</select></label><label>地點<input name="placeQ" list="notePlaceList" maxlength="120" autocomplete="off" placeholder="不指定，或打字搜尋"></label><datalist id="notePlaceList">${[...T().places]
+        about = `<div class="tg-row"><label>日子<select name="day"><option value="">整個旅程</option>${dayOptions(ed?.day || 0)}</select></label><label>地點<input name="placeQ" list="notePlaceList" maxlength="120" autocomplete="off" placeholder="不指定，或打字搜尋" value="${edPlace ? esc(placeLabel(edPlace)) : ""}"></label><datalist id="notePlaceList">${[...T().places]
           .sort((a, b) => a.v[1].localeCompare(b.v[1]))
           .map((p) => `<option value="${esc(placeLabel(p))}">`)
           .join("")}</datalist></div>`;
       return coupon
-        ? `<form class="tg-form" data-tg-form="note" data-kind="coupon">${kinds}<label>店舖／優惠名稱<input name="title" maxlength="80" required placeholder="例如：Bic Camera 免稅 10% + 5%"></label><label>優惠內容<textarea name="text" rows="2" maxlength="1000" placeholder="例如：滿 ¥5,000 用，需出示護照"></textarea></label><div class="tg-row"><label>優惠碼（可留空）<input name="code" maxlength="60" autocapitalize="characters" spellcheck="false"></label><label>有效期至<input name="until" type="date"></label></div><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></label>${photos}${about}${Kit.btn("加入優惠券", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`
-        : `<form class="tg-form" data-tg-form="note">${kinds}<label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾；網址會變成連結"></textarea></label><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://"></label>${photos}${about}${Kit.btn("加入筆記", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
+        ? `<form class="tg-form" data-tg-form="note" data-kind="coupon">${kinds}<label>店舖／優惠名稱<input name="title" maxlength="80" required placeholder="例如：Bic Camera 免稅 10% + 5%" value="${val("title")}"></label><label>優惠內容<textarea name="text" rows="2" maxlength="1000" placeholder="例如：滿 ¥5,000 用，需出示護照">${val("text")}</textarea></label><div class="tg-row"><label>優惠碼（可留空）<input name="code" maxlength="60" autocapitalize="characters" spellcheck="false" value="${val("code")}"></label><label>有效期至<input name="until" type="date" value="${val("until")}"></label></div><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://" value="${val("url")}"></label>${photos}${about}${Kit.btn(state.noteEdit ? "儲存修改" : "加入優惠券", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`
+        : `<form class="tg-form" data-tg-form="note">${kinds}<label>筆記<textarea name="text" rows="3" maxlength="1000" required placeholder="例如：別府那天記得帶毛巾；網址會變成連結">${val("text")}</textarea></label><label>連結（可留空）<input name="url" type="url" inputmode="url" maxlength="500" placeholder="https://" value="${val("url")}"></label>${photos}${about}${Kit.btn(state.noteEdit ? "儲存修改" : "加入筆記", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
     }
     if (state.tab === "expenses") {
       const ps = people();
@@ -2440,6 +2456,24 @@ window.Together = (() => {
         url = str("url");
       if (coupon ? !str("title") : !str("text")) return;
       if (url && !/^https?:\/\//i.test(url)) return toast("連結要以 http:// 或 https:// 開頭。");
+      const editing = !f.dataset.placeId && state.noteEdit && state.notes.find((n) => n.id === state.noteEdit);
+      if (editing) {
+        // every field the form shows, emptied ones included (an empty link or no photos)
+        update("notes", editing.id, {
+          text: str("text").slice(0, 1000),
+          day,
+          placeId,
+          placeName: place ? place.v[1] : null,
+          url: url.slice(0, 500),
+          photos: notePhotoDraft.slice(0, NOTE_PHOTO_MAX),
+          ...(coupon ? { title: str("title").slice(0, 80), code: str("code").slice(0, 60), until: str("until").slice(0, 10) } : {}),
+        });
+        toast("已儲存");
+        state.noteEdit = null;
+        notePhotoDraft = [];
+        Kit.close();
+        return;
+      }
       add("notes", {
         text: str("text").slice(0, 1000),
         day: f.dataset.placeId ? null : day,
@@ -2705,7 +2739,13 @@ window.Together = (() => {
       }
     }
     if (d.tg === "shopFindAll") shopAiFill();
-    if (d.tg === "newEntry") openForm();
+    if (d.tg === "newEntry") {
+      // after an edit, a new note starts empty
+      if (state.noteEdit) notePhotoDraft = [];
+      state.noteEdit = null;
+      openForm();
+    }
+    if (d.noteEdit) editNote(d.noteEdit);
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
       refresh();

@@ -217,6 +217,17 @@ try {
   await page.waitForSelector('.tg-item .note-photo'); const note = page.locator('.tg-item', { hasText: '集合地點' });
   assert.equal(await note.locator('.tg-text a').getAttribute('href'), 'https://example.com/meet');
   assert.equal(await page.locator('#detail[open]').count(), 0, 'the sheet closes after adding');
+  // ⋯ › 修改: the form opens with the note's text, link and photo; saving changes it (an emptied link and photo go)
+  await note.locator('.item-top details.more > summary').click(); await page.click('[data-note-edit]:visible');
+  await page.waitForSelector('[data-tg-form=note]'); assert.match(await page.locator('#detail .detailtitle').innerText(), /修改筆記/);
+  assert.equal(await page.inputValue('[data-tg-form=note] [name=text]'), '集合地點 https://example.com/meet');
+  assert.equal(await page.locator('[data-tg-form=note] [data-note-kind]').count(), 0, 'the kind stays');
+  assert.equal(await page.locator('#notePhotoPreview img').count(), 1);
+  await page.fill('[data-tg-form=note] [name=text]', '集合地點改到雷門'); await page.locator('[data-note-photo-del]').first().click();
+  await page.click('[data-tg-form=note] button[type=submit]'); await page.waitForSelector('.tg-item:has-text("集合地點改到雷門")');
+  const edited = await page.evaluate(() => Object.values(globalThis.__fakeStore.notes).find((n) => n.text === '集合地點改到雷門'));
+  assert.deepEqual([edited.photos.length, edited.byName], [0, 'Amy']);
+  await page.click('[data-tg=newEntry]'); assert.equal(await page.inputValue('[data-tg-form=note] [name=text]'), '', 'a new note starts empty'); await closeSheet();
   await page.click('[data-tg=newEntry]'); await page.click('[data-note-kind=coupon]'); await page.waitForSelector('[data-tg-form=note][data-kind=coupon]');
   await page.fill('[data-tg-form=note] [name=title]', 'Bic Camera 免稅 10%'); await page.fill('[data-tg-form=note] [name=code]', 'BIC2030');
   await page.fill('[data-tg-form=note] [name=until]', '2099-12-31'); await page.fill('[data-tg-form=note] [name=placeQ]', '淺草寺（雷門）');

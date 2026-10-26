@@ -88,16 +88,18 @@ service cloud.firestore {
           && (d.day == null || day(d.day))
           && (d.placeId == null || text(d.placeId, 40))
           && (d.placeName == null || text(d.placeName, 120))
-          && (!('url' in d) || (text(d.url, 500) && d.url.matches('^https?://.*')))
+          && (!('url' in d) || (text(d.url, 500) && (d.url == '' || d.url.matches('^https?://.*'))))
           && (!('photos' in d) || (d.photos is list && d.photos.size() <= 3));
       }
       match /notes/{id} {
         allow read, delete: if tripMember();
         allow create: if tripMember() && owned() && noteValid(request.resource.data);
-        // Only marking a coupon used / unused afterwards.
-        allow update: if tripMember() && resource.data.get('kind', 'note') == 'coupon'
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedBy', 'usedAt'])
-          && request.resource.data.used is bool;
+        // Edited by any companion (the kind, author and dates stay), or a coupon marked used / unused.
+        allow update: if tripMember() && ((noteValid(request.resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'day', 'placeId', 'placeName', 'url', 'photos', 'title', 'code', 'until']))
+          || (resource.data.get('kind', 'note') == 'coupon'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['used', 'usedBy', 'usedAt'])
+            && request.resource.data.used is bool));
       }
       match /expenses/{id} {
         allow read, delete: if tripMember();

@@ -33,6 +33,7 @@
     expSearch: "",
     shopView: "list",
     shopEdit: null,
+    noteEdit: null,
     fx: null,
     liveFx: null,
     settleMode: null,

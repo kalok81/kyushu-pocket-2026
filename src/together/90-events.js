@@ -92,6 +92,24 @@
         url = str("url");
       if (coupon ? !str("title") : !str("text")) return;
       if (url && !/^https?:\/\//i.test(url)) return toast("連結要以 http:// 或 https:// 開頭。");
+      const editing = !f.dataset.placeId && state.noteEdit && state.notes.find((n) => n.id === state.noteEdit);
+      if (editing) {
+        // every field the form shows, emptied ones included (an empty link or no photos)
+        update("notes", editing.id, {
+          text: str("text").slice(0, 1000),
+          day,
+          placeId,
+          placeName: place ? place.v[1] : null,
+          url: url.slice(0, 500),
+          photos: notePhotoDraft.slice(0, NOTE_PHOTO_MAX),
+          ...(coupon ? { title: str("title").slice(0, 80), code: str("code").slice(0, 60), until: str("until").slice(0, 10) } : {}),
+        });
+        toast("已儲存");
+        state.noteEdit = null;
+        notePhotoDraft = [];
+        Kit.close();
+        return;
+      }
       add("notes", {
         text: str("text").slice(0, 1000),
         day: f.dataset.placeId ? null : day,
@@ -357,7 +375,13 @@
       }
     }
     if (d.tg === "shopFindAll") shopAiFill();
-    if (d.tg === "newEntry") openForm();
+    if (d.tg === "newEntry") {
+      // after an edit, a new note starts empty
+      if (state.noteEdit) notePhotoDraft = [];
+      state.noteEdit = null;
+      openForm();
+    }
+    if (d.noteEdit) editNote(d.noteEdit);
     if (d.shopFilter) {
       state.shopFilter = d.shopFilter;
       refresh();
