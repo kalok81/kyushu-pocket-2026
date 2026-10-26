@@ -229,8 +229,8 @@ html{scroll-behavior:auto}
 .shop-tile.bought{opacity:.55}
 .shop-detail-photo{width:100%;max-height:60vh;object-fit:contain;border-radius:10px;background:var(--sage);margin-bottom:10px}
 #detailBody .shop-item{grid-template-columns:24px 1fr;border:0;padding:0}
-.pp-list{display:grid;gap:6px;max-height:55vh;overflow:auto}
-.pp-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--white)}
+.pp-list{display:grid;gap:6px}
+.pp-row{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--white)}
 .pp-row b{display:block;font-size:15px}
 .pp-row small{display:block;font-size:13px;color:var(--muted);margin-top:2px}
 .stop-alts{display:grid;gap:10px}
@@ -865,7 +865,16 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .discover-credit{display:block;margin-top:4px;font-size:11px;color:var(--muted-foreground)}
 #discoverForm{grid-template-columns:minmax(0,1fr)}
 #discoverForm .chips{flex-wrap:wrap;overflow:visible}
-.plan-pick .chips{flex-wrap:wrap;overflow:visible}
+.plan-pick .chips{flex-wrap:wrap;overflow:visible;gap:5px;padding:0}
+.plan-pick .chip{min-height:30px;padding:3px 10px;font-size:13px}
+#detail .plan-pick{position:sticky;top:-1px;z-index:3;margin:6px 0 8px;padding:6px 0 8px;gap:8px;background:var(--card);box-shadow:0 6px 8px -6px rgb(0 0 0/.12)}
+.pp-where{margin:2px 0 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pp-bar{display:flex;gap:6px;align-items:center}
+.pp-bar .search{flex:1;min-width:0;min-height:40px;padding:8px 10px;font-size:16px}
+.pp-bar .btn{flex:none;min-height:40px}
+@media(max-width:360px){.pp-bar .btn span{display:none}.pp-bar .btn{padding:6px 10px}}
+.tg-form .pp-time{display:flex;align-items:center;gap:8px;font-size:14px;white-space:nowrap}
+.tg-form .pp-time input{flex:1;min-width:0;min-height:38px;padding:6px 10px;font-size:15px}
 .time .alt-add{display:flex;color:var(--muted-foreground);margin:2px 0 0 auto}
 .alt-add .icon{width:16px;height:16px}
 #detail #discoverForm>.btn-block[type=submit]{position:static;box-shadow:none}

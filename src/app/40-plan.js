@@ -185,10 +185,10 @@
     const s = slot != null ? stopsFor(day)[slot] : null,
       before = at != null ? stopsFor(day)[at] : null;
     openDialog(
-      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : before ? `加在「${esc(before.title)}」之前` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p><div class="links">${s ? Kit.btn("自己輸入", { icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增地點", { icon: "plus", attrs: { "data-stop-new": true } })}${Kit.btn("發掘新地點", { variant: "secondary", icon: "sparkles", attrs: { "data-discover": day } })}</div><div class="tg-form plan-pick"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、區域、特色…" aria-label="搜尋地點">${Kit.chips(
+      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note pp-where">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : before ? `加在「${esc(before.title)}」之前` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p><div class="tg-form plan-pick"><div class="pp-bar"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、特色…" aria-label="搜尋地點">${s ? Kit.btn("自己輸入", { size: "sm", icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增", { size: "sm", icon: "plus", attrs: { "data-stop-new": true, "aria-label": "新增地點" } })}${Kit.btn("發掘", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-discover": day, "aria-label": "發掘新地點" } })}</div>${Kit.chips(
         ["全部", ...(saved.size ? ["★ 收藏"] : []), "✨ AI 推薦", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
         { label: "分類" },
-      )}${s || before ? "" : '<label>時間（可留空，留空會放在最後）<input id="ppTime" maxlength="30" placeholder="例如：12:00–13:00"></label>'}</div><p class="note pp-sort">收藏的地點排先，其餘按與這天站點的距離排列。</p><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}"></div>`,
+      )}${s || before ? "" : '<label class="pp-time">時間<input id="ppTime" maxlength="30" placeholder="可留空，例如 12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}" title="收藏的地點排先，其餘按與這天站點的距離排列"></div>`,
     );
     ppResults();
   }
