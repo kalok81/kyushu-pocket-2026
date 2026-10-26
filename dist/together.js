@@ -1852,7 +1852,7 @@ window.Together = (() => {
       .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div>${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}<p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。</p></fieldset><label>探索地點<input name="placeQ" list="shopPlaceList" maxlength="120" autocomplete="off" placeholder="留空＝按購買地點名稱自動配對；可打字搜尋" value="${esc(x?.placeId === "-" ? NO_PLACE : placeLabel(T().places.find((p) => p.id === x?.placeId)))}"></label><datalist id="shopPlaceList"><option value="${NO_PLACE}">${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
       .map((p) => `<option value="${esc(placeLabel(p))}">`)
-      .join("")}</datalist><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div></details>${Kit.btn(x ? "儲存修改" : "加入購物清單", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
+      .join("")}</datalist><div class="tg-row"><label>價錢（可留空）<input name="price" type="number" inputmode="decimal" min="0" max="10000000" step="0.01" value="${x?.price ?? ""}"></label><label>貨幣<select name="currency">${curOptions(x?.currency || tripCurrencies()[0])}</select></label></div></details>${Kit.btn(x ? "儲存修改" : "加入物品", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`;
   }
   // AI 填寫: a link goes to the AI as a product page (or an article to pick from); a name is searched on the web; with
   // only a photo, the photo is read again.
@@ -1892,7 +1892,7 @@ window.Together = (() => {
     shopPhoto = x?.photo || null;
     buyPins = new Map(x ? placesOf(x).map((t, i) => [t, pinOf(x, i)]).filter(([, p]) => p) : []);
     Kit.open(
-      `${Kit.sheetHead(x ? "修改物品" : "加入購物清單")}${
+      `${Kit.sheetHead(x ? "修改物品" : "加入物品")}${
         x
           ? ""
           : ""
@@ -1941,7 +1941,7 @@ window.Together = (() => {
           : Kit.empty("清單是空的", "按右下角「加入物品」，影相讓 AI 認物品，或自己輸入。");
     return {
       sig: ["shop", state.shopView, state.user.uid].join("|"),
-      shell: `<div data-tg-live="status"></div><div data-tg-live="jobs"></div><div class="searchrow shop-tools"><input id="shopSearch" class="search" type="search" placeholder="搜尋物品、地點、備註…" aria-label="搜尋購物清單" value="${esc(state.shopSearch)}">${Kit.chips(
+      shell: `<div data-tg-live="status"></div><div data-tg-live="jobs"></div><div class="searchrow shop-tools"><input id="shopSearch" class="search" type="search" placeholder="搜尋，或貼上產品網址" aria-label="搜尋購物" value="${esc(state.shopSearch)}">${Kit.chips(
         [
           { label: '<span class="sr-only">列表</span>', icon: "list", active: state.shopView === "list", attrs: { "data-shop-view": "list", title: "列表" } },
           { label: '<span class="sr-only">相片</span>', icon: "grid", active: state.shopView === "grid", attrs: { "data-shop-view": "grid", title: "相片" } },
@@ -2167,7 +2167,7 @@ window.Together = (() => {
     }
   }
   function renderShopping() {
-    return `${header("購物清單")}<div id="shopPage"></div>`;
+    return `${header("購物")}<div id="shopPage"></div>`;
   }
   async function pickShopPhoto(file) {
     try {
@@ -2909,11 +2909,20 @@ window.Together = (() => {
     addNotePhotos([...e.target.files]);
     e.target.value = "";
   });
-  // A picture pasted anywhere on the shopping list, the notes or the expenses page goes where photos go there.
+  // A picture pasted anywhere on the shopping list, the notes or the expenses page goes where photos go there. A link
+  // pasted on the shopping list (outside a form, or into its search box) is read like a product link.
   document.addEventListener("paste", (e) => {
     const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
-    if (!files.length || state.status !== "ready") return;
-    const view = location.hash.slice(1).split("?")[0];
+    if (state.status !== "ready") return;
+    const view = location.hash.slice(1).split("?")[0],
+      t = e.target,
+      text = (e.clipboardData?.getData("text") || "").trim();
+    if (!files.length) {
+      if (view !== "shopping" || $("#detail")?.open || !/^https?:\/\/\S+$/i.test(text)) return;
+      if (t.matches?.("input, textarea, select") && t.id !== "shopSearch") return;
+      e.preventDefault();
+      return queueProductLink(text);
+    }
     if (view === "shopping") queueProducts(files);
     else if (view === "together" && state.tab === "notes") {
       if (!$("#notePhotoPreview")) openForm();

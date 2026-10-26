@@ -41,7 +41,7 @@ try {
   await page.fill('[name=id]', 'amy'); await page.fill('[name=password]', 'wrong'); await page.click('[data-tg-form=login] button');
   await page.waitForTimeout(300); assert(await page.locator('[name=id]').isVisible(), 'wrong password must not sign in');
   await page.fill('[name=password]', 'pw12345678'); await page.click('[data-tg-form=login] button');
-  await page.waitForSelector('.hero h1'); assert.equal(await page.locator('.hero h1').innerText(), '測試旅程');
+  await page.waitForSelector('.trip-bar h1'); assert.equal(await page.locator('.trip-bar h1').innerText(), '測試旅程');
  });
  await step('every page renders', async () => {
   for (const v of ['home', 'plan', 'explore', 'nearby', 'flights', 'hotels', 'events', 'shopping', 'together', 'trips']) {
@@ -160,7 +160,7 @@ try {
   assert.match(await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('.buy-here').innerText(), /要買：人形燒/);
   assert.match(await page.locator('#results .card.place', { hasText: '淺草寺' }).locator('.buy-here').innerText(), /要買：御守/);
   await page.click('[data-cat=購物清單]'); assert.equal(await page.locator('#results .card.place').count(), 2);
-  await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('[data-place]').click(); await page.waitForSelector('#detail .detail-section >> text=購物清單（1）');
+  await page.locator('#results .card.place', { hasText: '仲見世通り' }).locator('[data-place]').click(); await page.waitForSelector('#detail .detail-section >> text=購物（1）');
   await page.click('#detail [data-shop-open]'); await page.waitForFunction(() => /人形燒/.test(document.querySelector('#detailBody').textContent)); await closeSheet();
   // a 購買地點 that is not an explore place: its own card, and 加入探索 makes it one
   await page.goto(base + '/#shopping'); await addShop('蘋果批', 'RINGO 上野店');
@@ -604,6 +604,23 @@ try {
   await page.goto(base + '/#plan?day=1'); await page.waitForFunction(() => /測試點燈/.test(document.querySelector('.timeline')?.textContent || ''));
   await page.goto(base + '/#events'); await page.click('.card.event .more summary'); await page.click('[data-event-del]:visible'); await page.click('.ui-pop .btn-danger');
   await page.waitForFunction(() => !document.querySelector('.card.event'));
+ });
+ await step('paste: a Maps link on 探索 opens 新增地點; a link on 購物清單 becomes a product job', async () => {
+  const paste = (sel, text) => page.evaluate(([sel, text]) => { const dt = new DataTransfer(); dt.setData('text/plain', text); document.querySelector(sel).dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }, [sel, text]);
+  await page.goto(base + '/#explore'); await page.waitForSelector('#search');
+  await paste('#search', 'https://maps.app.goo.gl/abc123'); await page.waitForSelector('#placeForm');
+  assert.equal(await page.inputValue('#placeForm [name=mapsUrl]'), 'https://maps.app.goo.gl/abc123');
+  await closeSheet();
+  await paste('#search', 'https://example.com/x'); await page.waitForTimeout(300); assert.equal(await page.locator('#detail[open] #placeForm').count(), 0, 'other links do not open the form');
+  await page.goto(base + '/#shopping'); await page.waitForSelector('#shopSearch');
+  await paste('#shopSearch', 'https://shop.example.jp/item/1'); await page.waitForTimeout(300);
+  assert.equal(await page.inputValue('#shopSearch'), '', 'the link is not typed into the search box');
+ });
+ await step('總覽: one-line trip bar and the 資料簿 search below', async () => {
+  await page.goto(base + '/#home'); await page.waitForSelector('.trip-bar #notebookResults .notebook-card, #notebookResults .notebook-card');
+  await page.click('[data-notebook-type=行程]'); await page.waitForSelector('[data-notebook-type=行程].active');
+  assert.ok(await page.locator('.trip-bar').count(), 'still on 總覽 after a filter');
+  await page.fill('#notebookSearch', 'zzzz-none'); await page.waitForSelector('#notebookResults .empty'); await page.click('#notebookReset');
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');

@@ -128,7 +128,11 @@
   }
   const notebookArea = (r) => r.region || "其他";
   function renderNotebook() {
-    return `${header("資料簿", "搜尋全部旅程資料，或按分類及區域篩選")}<div class="controls notebook-controls"><div class="searchrow"><input id="notebookSearch" class="search" type="search" aria-label="搜尋完整資料簿" placeholder="輸入店名、菜式、酒店、航班或日期…" value="${esc(notebookSearch)}"><select id="notebookRegion" aria-label="資料簿區域"><option>全部區域</option>${[...new Set(notebookRecords().map(notebookArea))].map((r) => `<option${r === notebookRegion ? " selected" : ""}>${esc(r)}</option>`).join("")}</select></div>${Kit.chips(
+    return `${header("資料簿", "搜尋全部旅程資料，或按分類及區域篩選")}${notebookBody()}`;
+  }
+  // Search, filters and results: the 資料簿 page, and the lower part of 總覽
+  function notebookBody() {
+    return `<div class="controls notebook-controls"><div class="searchrow"><input id="notebookSearch" class="search" type="search" aria-label="搜尋完整資料簿" placeholder="輸入店名、菜式、酒店、航班或日期…" value="${esc(notebookSearch)}"><select id="notebookRegion" aria-label="資料簿區域"><option>全部區域</option>${[...new Set(notebookRecords().map(notebookArea))].map((r) => `<option${r === notebookRegion ? " selected" : ""}>${esc(r)}</option>`).join("")}</select></div>${Kit.chips(
       ["全部", "餐廳", "景點", "商店", "行程", "酒店", "機票", "購物", "筆記"].map((t) => ({ label: t, active: t === notebookType, attrs: { "data-notebook-type": t } })),
       { label: "類別" },
     )}</div><div id="notebookResults"></div><p class="note">資料由旅伴在網站內輸入，所有旅伴即時同步。</p>`;

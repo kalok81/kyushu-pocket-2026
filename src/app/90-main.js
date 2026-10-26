@@ -42,7 +42,7 @@
     bindExplore();
   }
   function refreshNotebook() {
-    $("#app").innerHTML = renderNotebook();
+    $("#app").innerHTML = current === "home" ? renderHome() + footer() : renderNotebook();
     bindNotebook();
   }
   function navigate() {
@@ -58,7 +58,7 @@
     Kit.close();
     $("#app").innerHTML = sectionViews[view]() + (view === "home" ? footer() : "");
     if (view === "explore") bindExplore();
-    if (view === "notebook") bindNotebook();
+    if (view === "notebook" || view === "home") bindNotebook();
     if (view === "nearby") nearbyResults();
     if (view === "plan") paintWeather();
     window.Together?.refresh();

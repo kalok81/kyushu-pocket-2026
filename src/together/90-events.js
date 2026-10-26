@@ -529,11 +529,20 @@
     addNotePhotos([...e.target.files]);
     e.target.value = "";
   });
-  // A picture pasted anywhere on the shopping list, the notes or the expenses page goes where photos go there.
+  // A picture pasted anywhere on the shopping list, the notes or the expenses page goes where photos go there. A link
+  // pasted on the shopping list (outside a form, or into its search box) is read like a product link.
   document.addEventListener("paste", (e) => {
     const files = [...(e.clipboardData?.files || [])].filter((f) => f.type.startsWith("image/"));
-    if (!files.length || state.status !== "ready") return;
-    const view = location.hash.slice(1).split("?")[0];
+    if (state.status !== "ready") return;
+    const view = location.hash.slice(1).split("?")[0],
+      t = e.target,
+      text = (e.clipboardData?.getData("text") || "").trim();
+    if (!files.length) {
+      if (view !== "shopping" || $("#detail")?.open || !/^https?:\/\/\S+$/i.test(text)) return;
+      if (t.matches?.("input, textarea, select") && t.id !== "shopSearch") return;
+      e.preventDefault();
+      return queueProductLink(text);
+    }
     if (view === "shopping") queueProducts(files);
     else if (view === "together" && state.tab === "notes") {
       if (!$("#notePhotoPreview")) openForm();

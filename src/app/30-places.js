@@ -48,10 +48,10 @@
   }
   function renderExplore() {
     const chip = (c, label, ic) => ({ label, icon: ic, active: category === c, attrs: { "data-cat": c } });
-    return `${header("探索", "", `${Kit.btn("AI 推薦", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-discover": "" } })}${Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" })}`)}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋店名、美食、地址…" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
+    return `${header("探索", "", `${Kit.btn("AI 推薦", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-discover": "" } })}${Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" })}`)}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋，或貼上 Google 地圖連結" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
       [
         ...["全部", ...exploreCats].map((c) => chip(c, c)),
-        chip("購物清單", "購物清單", "bag"),
+        chip("購物清單", "購物", "bag"),
         { label: "收藏", icon: "star", active: onlySaved, attrs: { id: "savedToggle" } },
       ],
       { label: "分類" },
@@ -60,7 +60,7 @@
   // 🛍 購物清單 also lists 購買地點 that are not explore places yet, with 加入探索 to make them one.
   let buySpots = [];
   const spotCard = (s, k) =>
-    `<article class="card place shop-spot"><div class="place-top">${Kit.badge("購物清單", "shop")}</div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
+    `<article class="card place shop-spot"><div class="place-top">${Kit.badge("購物", "shop")}</div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
   function renderResults() {
     let q = search.toLocaleLowerCase();
     const ps = places.filter(
@@ -152,7 +152,7 @@
         .filter(Boolean)
         .join("")}</div>${
         buys.length
-          ? `<section class="detail-section"><h3>購物清單（${buys.length}）</h3><div class="links">${buys.map((x) => Kit.btn(esc(x.name), { size: "sm", icon: x.bought ? "check" : "bag", cls: x.bought ? "bought" : "", attrs: { "data-shop-open": x.id } })).join("")}</div></section>`
+          ? `<section class="detail-section"><h3>購物（${buys.length}）</h3><div class="links">${buys.map((x) => Kit.btn(esc(x.name), { size: "sm", icon: x.bought ? "check" : "bag", cls: x.bought ? "bought" : "", attrs: { "data-shop-open": x.id } })).join("")}</div></section>`
           : ""
       }${pins.length > 1 ? `<section class="detail-section"><h3>分店／地址（${pins.length}）</h3><div class="info-list">${pins.map((g, k) => linkRow(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]), "pin")).join("")}</div></section>` : ""}${refs.length ? `<section class="detail-section"><h3>其他連結</h3><div class="info-list">${refs.join("")}</div></section>` : ""}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>${p.v[9] || p.v[7] ? `<p class="note detail-foot">${esc([p.v[9], p.v[7]].filter(Boolean).join(" · "))}</p>` : ""}`,
     );
@@ -286,6 +286,27 @@
   }
   document.addEventListener("change", (e) => {
     if (e.target.matches("[data-place-photo-file]")) uploadPlacePhoto(e.target.files[0]);
+  });
+  // Pasted anywhere on 探索 (or into its search box): a Google Maps link opens 新增地點 and runs 自動填寫; a picture opens
+  // it with that photo. Duplicates are caught when saving (placeDuplicate).
+  const mapsLink = (t) => /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)\S*$/i.test(t);
+  document.addEventListener("paste", (e) => {
+    const t = e.target;
+    if (current !== "explore" || $("#detail").open || (t.matches?.("input, textarea, select") && t.id !== "search")) return;
+    const img = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith("image/")),
+      text = (e.clipboardData?.getData("text") || "").trim();
+    if (img) {
+      e.preventDefault();
+      placeForm(null);
+      uploadPlacePhoto(img);
+      return;
+    }
+    if (!/^https?:\/\/\S+$/i.test(text)) return;
+    e.preventDefault();
+    if (!mapsLink(text)) return toast("請貼上 Google 地圖連結。");
+    placeForm(null);
+    $("#placeForm").elements.mapsUrl.value = text;
+    lookupPlaceForm();
   });
   function setPlacePhoto(photo, by = "") {
     const f = $("#placeForm");

@@ -622,10 +622,11 @@ details.more:not([open]) .menu{display:none}
 /* ---- 總覽 ---- */
 .trip-card{padding:22px 20px 20px;border-radius:18px;background:var(--primary);color:#fffceb}
 .trip-card .eyebrow{color:#b8c9b3}
-.trip-card h1{margin:6px 0 4px;font-family:serif;font-size:clamp(24px,7vw,32px);font-weight:500;line-height:1.3;overflow-wrap:anywhere}
-.trip-dates{margin:0;font-size:14px;color:#d5dfd1;font-variant-numeric:tabular-nums}
-.trip-when{display:table;margin:12px 0 16px;padding:3px 10px;border-radius:999px;background:rgb(255 255 255/.12);font-size:14px;font-weight:600}
-.trip-dates+.btn{margin-top:16px}
+.trip-bar{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px}
+.trip-line{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;column-gap:10px;row-gap:2px}
+.trip-line h1{margin:0;font-family:serif;font-size:19px;font-weight:500;line-height:1.35;overflow-wrap:anywhere}
+.trip-line span{font-size:13px;color:#d5dfd1;font-variant-numeric:tabular-nums}
+.trip-bar .herobtn{flex:none}
 .trip-card .herobtn{background:#efe7d1;border-color:#efe7d1;color:var(--primary)}
 .trip-card .herobtn:hover{background:#e6dcc0}
 .today-list{display:grid;padding:6px 16px}

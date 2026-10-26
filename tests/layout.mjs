@@ -47,7 +47,7 @@ await Promise.all([320,390,768,1280].map(async w=>{
  await pg.route('https://open.er-api.com/**',r=>r.fulfill({json:{result:'success',time_last_update_unix:1900000000,rates:{HKD:1,JPY:19.6}},headers:{'Access-Control-Allow-Origin':'*'}}));
  await pg.route(/tile\.openstreetmap|google\.com\/recaptcha/,r=>r.abort());
  await pg.goto(base+'/#home');await shot(pg,`${w}-login`);report[`${w} login`]=await pg.evaluate(checks);
- await pg.fill('[name=id]','amy');await pg.fill('[name=password]','pw12345678');await pg.click('[data-tg-form=login] button');await pg.waitForSelector('.hero h1');
+ await pg.fill('[name=id]','amy');await pg.fill('[name=password]','pw12345678');await pg.click('[data-tg-form=login] button');await pg.waitForSelector('.trip-bar h1');
  const states=[['home','#home'],['plan1','#plan?day=1'],['plan2','#plan?day=2'],['explore','#explore'],['nearby','#nearby'],['flights','#flights'],['hotels','#hotels'],['events','#events'],['shopping','#shopping'],['notes','#together?tab=notes'],['expenses','#together?tab=expenses'],['checklist','#together?tab=checklist'],['trips','#trips'],['notebook','#notebook']];
  for(const [k,h] of states){await pg.goto(base+'/'+h);await pg.waitForTimeout(900);await shot(pg,`${w}-${k}`);report[`${w} ${k}`]=await pg.evaluate(checks)}
  await pg.goto(base+'/#shopping');await pg.waitForTimeout(600);const grid=pg.locator('[data-shop-view=grid]');if(await grid.count()){await grid.click();await pg.waitForTimeout(400);await shot(pg,`${w}-shopgrid`);report[`${w} shopgrid`]=await pg.evaluate(checks)}
