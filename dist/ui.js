@@ -7,7 +7,7 @@ window.UI=(()=>{
  const lib=()=>window.Swal?Promise.resolve(window.Swal):loading??=new Promise((ok,no)=>{const s=document.createElement('script');s.src='vendor/sweetalert2/sweetalert2.all.min.js?v=11.26.25';s.onload=()=>ok(window.Swal);s.onerror=()=>{loading=null;s.remove();no(new Error('sweetalert2'))};document.head.append(s)});
  const idle=window.requestIdleCallback||(f=>setTimeout(f,1500));addEventListener('load',()=>idle(()=>lib().catch(()=>{})));
  const target=()=>document.querySelector('#detail')?.open?'#detail':'body';
- const base=()=>({target:target(),heightAuto:false,buttonsStyling:false,reverseButtons:true,focusCancel:false,customClass:{popup:'ui-pop',confirmButton:'btn btn-primary',cancelButton:'btn btn-outline',input:'search',actions:'ui-actions'}});
+ const base=()=>({target:target(),heightAuto:false,allowOutsideClick:false,buttonsStyling:false,reverseButtons:true,focusCancel:false,customClass:{popup:'ui-pop',confirmButton:'btn btn-primary',cancelButton:'btn btn-outline',input:'search',actions:'ui-actions'}});
  const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  // SweetAlert2 finishes closing (and gives the page its scrolling back) at the end of its hide animation. A popup shown
  // inside the detail sheet never gets there when the sheet closes at the same moment (a hidden element plays no

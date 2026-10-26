@@ -12,9 +12,7 @@
     sheetStart = sheetState();
     if (!$("#detail").open) $("#detail").showModal();
   }
-  // Tapping outside a sheet with anything to fill in or choose (a form, a search box, a select: add / edit, 加入地點,
-  // AI 推薦, 交通) does nothing: only its ✕ (or saving) closes it. Tapping outside other sheets (details), Esc or the
-  // back gesture: never while an AI or map lookup is running (its progress bar),
+  // Tapping outside a sheet does nothing at all (no closing, no question): its ✕ closes it. Esc or the back gesture: never while an AI or map lookup is running (its progress bar),
   // and only after asking when the form has unsaved changes. The ✕ always closes.
   const sheetBusy = () => !!$("#detailBody .ai-progress:not(.done)");
   async function closeSoftly() {
@@ -24,7 +22,6 @@
   }
   addEventListener("DOMContentLoaded", () => {
     const d = $("#detail");
-    d.addEventListener("click", (e) => e.target === d && !$("#detailBody").querySelector("form, input, select, textarea") && closeSoftly());
     d.addEventListener("cancel", (e) => {
       e.preventDefault();
       closeSoftly();

@@ -547,6 +547,14 @@ try {
   await page.goto(base + '/#shopping'); await page.evaluate(() => document.querySelector('[data-shop-edit]').click()); await page.waitForSelector('[data-tg-form=shop]'); await page.waitForTimeout(500);
   await page.mouse.click(10, 10); await page.waitForTimeout(400); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'edit sheet kept open');
   await closeSheet(); await page.waitForFunction(() => !document.querySelector('#detail').open);
+  // tapping outside never closes or asks: a sheet with unsaved typing, and a confirm popup
+  await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.fill('[data-tg-form=shop] [name=name]', '抹茶'); await page.waitForTimeout(500);
+  await page.mouse.click(10, 10); await page.waitForTimeout(400);
+  assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'kept open'); assert.equal(await page.locator('.ui-pop').count(), 0, 'no question');
+  await closeSheet(); await page.waitForFunction(() => !document.querySelector('#detail').open);
+  await page.goto(base + '/#hotels'); await page.locator('.card.hotel .more summary').first().click(); await page.locator('[data-hotel-del]').first().click(); await page.waitForSelector('.ui-pop');
+  await page.mouse.click(5, 5); await page.waitForTimeout(400); assert.ok(await page.locator('.ui-pop').isVisible(), 'popup kept');
+  await page.click('.ui-pop button:has-text("取消")'); await page.waitForSelector('.ui-pop', { state: 'detached' });
   // 加入地點 (a search box, no form) stays open too
   await page.goto(base + '/#plan?day=1'); await page.click('[data-plan-pick]'); await page.waitForSelector('#ppSearch'); await page.waitForTimeout(500);
   await page.mouse.click(10, 10); await page.waitForTimeout(400); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'picker kept open');
