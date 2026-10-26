@@ -887,7 +887,7 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .pp-bar .btn{flex:none;min-height:40px}
 @media(max-width:360px){.pp-bar .btn span{display:none}.pp-bar .btn{padding:6px 10px}}
 .tg-form .pp-time{display:flex;align-items:center;gap:8px;font-size:14px;white-space:nowrap}
-.tg-form .pp-time input{flex:1;min-width:0;min-height:38px;padding:6px 10px;font-size:15px}
+.tg-form .pp-time input,.tg-form .pp-time select{flex:1;min-width:0;min-height:38px;padding:6px 10px;font-size:15px}
 .time .alt-add{display:flex;color:var(--muted-foreground);margin:2px 0 0 auto}
 .alt-add .icon{width:16px;height:16px}
 #detail #discoverForm>.btn-block[type=submit]{position:static;box-shadow:none}

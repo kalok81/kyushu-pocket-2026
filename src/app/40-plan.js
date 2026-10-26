@@ -225,7 +225,8 @@
     );
   }
   // In-page picker: search explore places and add them to the selected day without leaving the plan.
-  let ppCat = "全部";
+  let ppCat = "全部",
+    ppArea = "";
   // A hotel entered on 住宿 as a plan stop (navigation by its name and address).
   const hotelStop = (h, time) => ({
     time,
@@ -251,6 +252,7 @@
   // at: insert before this stop index (the ＋ between two stops); later picks follow the previous one.
   function pickPlaceForPlan(day, slot = null, at = null) {
     ppCat = "全部";
+    ppArea = "";
     ppAi = null;
     const s = slot != null ? stopsFor(day)[slot] : null,
       before = at != null ? stopsFor(day)[at] : null;
@@ -258,7 +260,10 @@
       `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note pp-where">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : before ? `加在「${esc(before.title)}」之前` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p><div class="tg-form plan-pick"><div class="pp-bar"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、特色…" aria-label="搜尋地點">${s ? Kit.btn("自己輸入", { size: "sm", icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增", { size: "sm", icon: "plus", attrs: { "data-stop-new": true, "aria-label": "新增地點" } })}${Kit.btn("發掘", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-discover": day, "aria-label": "發掘新地點" } })}</div>${Kit.chips(
         ["全部", ...(saved.size ? ["★ 收藏"] : []), "✨ AI 推薦", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
         { label: "分類" },
-      )}${s || before ? "" : '<label class="pp-time">時間<input id="ppTime" maxlength="30" placeholder="可留空，例如 12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}" title="收藏的地點排先，其餘按與這天站點的距離排列"></div>`,
+      )}<label class="pp-time">區域<select id="ppArea"><option value="">全部區域</option>${[...new Set(places.map((p) => p.v[0]).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, "zh-Hant"))
+        .map((r) => `<option value="${esc(r)}">${esc(r)}</option>`)
+        .join("")}</select></label>${s || before ? "" : '<label class="pp-time">時間<input id="ppTime" maxlength="30" placeholder="可留空，例如 12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}" title="收藏的地點排先，其餘按與這天站點的距離排列"></div>`,
     );
     ppResults();
   }
@@ -354,6 +359,7 @@
           .filter(
             (p) =>
               (ppCat === "全部" || (ppCat === "★ 收藏" && saved.has(p.id)) || p.cats.includes(ppCat) || (ppCat === "商店" && giftShop(p))) &&
+              (!ppArea || p.v[0] === ppArea) &&
               (!q || [p.v[1], p.v[0], areaOf(p), p.v[4], p.v[2], p.zh].join(" ").toLocaleLowerCase().includes(q)),
           )
           .sort((a, b) => saved.has(b.id) - saved.has(a.id) || far.get(a.id) - far.get(b.id));
@@ -428,6 +434,10 @@
   };
   document.addEventListener("input", (e) => {
     if (e.target.id === "ppSearch") ppResults();
+    if (e.target.id === "ppArea") {
+      ppArea = e.target.value;
+      ppResults();
+    }
   });
   function savePlaceToPlan(f) {
     const p = places.find((x) => x.id === f.dataset.place);

@@ -32,11 +32,7 @@
     if (discover.day !== day) discover = { kind: "any", prefs: new Set(), day, results: null, area: d ? d.region : "" };
     const regions = [...new Set([...(d ? [d.region] : []), ...areas.map((a) => a.name), ...places.map((p) => p.v[0])].filter(Boolean))];
     openDialog(
-      `${Kit.sheetHead("AI 推薦新地點", d ? `D${day} · ${esc(d.date)} ${esc(d.weekday)}` : "")}<p class="note">AI 上網搜尋${d ? "這天站點附近" : ""}你清單未有的好去處，每個都用 Google 地圖核實，附評分、營業時間及相片。</p><form class="tg-form" id="discoverForm">${
-        d
-          ? ""
-          : `<label>區域<input name="area" list="discoverAreas" maxlength="60" placeholder="例如：由布院、天神" value="${esc(discover.area)}"><datalist id="discoverAreas">${regions.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label>`
-      }<div><span class="field-label">類型</span>${Kit.chips(
+      `${Kit.sheetHead("AI 推薦新地點", d ? `D${day} · ${esc(d.date)} ${esc(d.weekday)}` : "")}<p class="note">AI 上網搜尋${d ? "這天站點附近" : ""}你清單未有的好去處，每個都用 Google 地圖核實，附評分、營業時間及相片。</p><form class="tg-form" id="discoverForm"><label>區域${d ? "（預設這天的區域，可以改）" : ""}<input name="area" list="discoverAreas" maxlength="60" placeholder="例如：由布院、天神" value="${esc(discover.area)}"><datalist id="discoverAreas">${regions.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label><div><span class="field-label">類型</span>${Kit.chips(
         DISCOVER_KIND.map(([k, t]) => ({ label: t, active: discover.kind === k, attrs: { "data-discover-kind": k } })),
         { label: "類型" },
       )}</div><div><span class="field-label">喜好（可多選）</span>${Kit.chips(
@@ -78,8 +74,10 @@
     const out = $("#discoverOut"),
       d = discover.day && days[discover.day - 1],
       shown = more ? discover.results?.places || [] : [];
-    if (!more) discover.area = d ? d.region : String(f.elements.area?.value || "").trim();
-    if (!discover.area && !d) return toast("請輸入區域。");
+    if (!more) discover.area = String(f.elements.area?.value || "").trim() || (d ? d.region : "");
+    if (!discover.area) return toast("請輸入區域。");
+    // near this day's stops only while the area is still the day's own
+    const nearDay = d && discover.area === d.region;
     const busy = Kit.progress({ text: "AI 正在上網搜尋，並用 Google 地圖核實…", seconds: 40 });
     if (more) $("[data-discover-more]")?.replaceWith(Object.assign(document.createElement("div"), { innerHTML: busy, id: "discoverMore" }));
     else out.innerHTML = busy;
@@ -92,7 +90,8 @@
         note: String(f.elements.note.value || "").trim(),
         have: [...shown.map((p) => p.name), ...places.flatMap((p) => [p.v[1], p.zh].filter(Boolean))].slice(0, 300),
         ...(more ? { more: true } : {}),
-        ...(d ? { near: dayPoint(discover.day), weekday: d.weekday } : {}),
+        ...(d ? { weekday: d.weekday } : {}),
+        ...(nearDay ? { near: dayPoint(discover.day) } : {}),
       });
       discover.results = more ? { places: [...shown, ...r.places], dropped: 0 } : r;
       if (more && !r.places.length) toast("找不到更多新地點，可以換個類型或喜好再試。");

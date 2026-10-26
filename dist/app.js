@@ -797,11 +797,7 @@ window.startTrip = (meta = {}) => {
     if (discover.day !== day) discover = { kind: "any", prefs: new Set(), day, results: null, area: d ? d.region : "" };
     const regions = [...new Set([...(d ? [d.region] : []), ...areas.map((a) => a.name), ...places.map((p) => p.v[0])].filter(Boolean))];
     openDialog(
-      `${Kit.sheetHead("AI 推薦新地點", d ? `D${day} · ${esc(d.date)} ${esc(d.weekday)}` : "")}<p class="note">AI 上網搜尋${d ? "這天站點附近" : ""}你清單未有的好去處，每個都用 Google 地圖核實，附評分、營業時間及相片。</p><form class="tg-form" id="discoverForm">${
-        d
-          ? ""
-          : `<label>區域<input name="area" list="discoverAreas" maxlength="60" placeholder="例如：由布院、天神" value="${esc(discover.area)}"><datalist id="discoverAreas">${regions.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label>`
-      }<div><span class="field-label">類型</span>${Kit.chips(
+      `${Kit.sheetHead("AI 推薦新地點", d ? `D${day} · ${esc(d.date)} ${esc(d.weekday)}` : "")}<p class="note">AI 上網搜尋${d ? "這天站點附近" : ""}你清單未有的好去處，每個都用 Google 地圖核實，附評分、營業時間及相片。</p><form class="tg-form" id="discoverForm"><label>區域${d ? "（預設這天的區域，可以改）" : ""}<input name="area" list="discoverAreas" maxlength="60" placeholder="例如：由布院、天神" value="${esc(discover.area)}"><datalist id="discoverAreas">${regions.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label><div><span class="field-label">類型</span>${Kit.chips(
         DISCOVER_KIND.map(([k, t]) => ({ label: t, active: discover.kind === k, attrs: { "data-discover-kind": k } })),
         { label: "類型" },
       )}</div><div><span class="field-label">喜好（可多選）</span>${Kit.chips(
@@ -843,8 +839,10 @@ window.startTrip = (meta = {}) => {
     const out = $("#discoverOut"),
       d = discover.day && days[discover.day - 1],
       shown = more ? discover.results?.places || [] : [];
-    if (!more) discover.area = d ? d.region : String(f.elements.area?.value || "").trim();
-    if (!discover.area && !d) return toast("請輸入區域。");
+    if (!more) discover.area = String(f.elements.area?.value || "").trim() || (d ? d.region : "");
+    if (!discover.area) return toast("請輸入區域。");
+    // near this day's stops only while the area is still the day's own
+    const nearDay = d && discover.area === d.region;
     const busy = Kit.progress({ text: "AI 正在上網搜尋，並用 Google 地圖核實…", seconds: 40 });
     if (more) $("[data-discover-more]")?.replaceWith(Object.assign(document.createElement("div"), { innerHTML: busy, id: "discoverMore" }));
     else out.innerHTML = busy;
@@ -857,7 +855,8 @@ window.startTrip = (meta = {}) => {
         note: String(f.elements.note.value || "").trim(),
         have: [...shown.map((p) => p.name), ...places.flatMap((p) => [p.v[1], p.zh].filter(Boolean))].slice(0, 300),
         ...(more ? { more: true } : {}),
-        ...(d ? { near: dayPoint(discover.day), weekday: d.weekday } : {}),
+        ...(d ? { weekday: d.weekday } : {}),
+        ...(nearDay ? { near: dayPoint(discover.day) } : {}),
       });
       discover.results = more ? { places: [...shown, ...r.places], dropped: 0 } : r;
       if (more && !r.places.length) toast("找不到更多新地點，可以換個類型或喜好再試。");
@@ -1132,7 +1131,8 @@ window.startTrip = (meta = {}) => {
     );
   }
   // In-page picker: search explore places and add them to the selected day without leaving the plan.
-  let ppCat = "全部";
+  let ppCat = "全部",
+    ppArea = "";
   // A hotel entered on 住宿 as a plan stop (navigation by its name and address).
   const hotelStop = (h, time) => ({
     time,
@@ -1158,6 +1158,7 @@ window.startTrip = (meta = {}) => {
   // at: insert before this stop index (the ＋ between two stops); later picks follow the previous one.
   function pickPlaceForPlan(day, slot = null, at = null) {
     ppCat = "全部";
+    ppArea = "";
     ppAi = null;
     const s = slot != null ? stopsFor(day)[slot] : null,
       before = at != null ? stopsFor(day)[at] : null;
@@ -1165,7 +1166,10 @@ window.startTrip = (meta = {}) => {
       `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note pp-where">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : before ? `加在「${esc(before.title)}」之前` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p><div class="tg-form plan-pick"><div class="pp-bar"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、特色…" aria-label="搜尋地點">${s ? Kit.btn("自己輸入", { size: "sm", icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增", { size: "sm", icon: "plus", attrs: { "data-stop-new": true, "aria-label": "新增地點" } })}${Kit.btn("發掘", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-discover": day, "aria-label": "發掘新地點" } })}</div>${Kit.chips(
         ["全部", ...(saved.size ? ["★ 收藏"] : []), "✨ AI 推薦", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
         { label: "分類" },
-      )}${s || before ? "" : '<label class="pp-time">時間<input id="ppTime" maxlength="30" placeholder="可留空，例如 12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}" title="收藏的地點排先，其餘按與這天站點的距離排列"></div>`,
+      )}<label class="pp-time">區域<select id="ppArea"><option value="">全部區域</option>${[...new Set(places.map((p) => p.v[0]).filter(Boolean))]
+        .sort((a, b) => a.localeCompare(b, "zh-Hant"))
+        .map((r) => `<option value="${esc(r)}">${esc(r)}</option>`)
+        .join("")}</select></label>${s || before ? "" : '<label class="pp-time">時間<input id="ppTime" maxlength="30" placeholder="可留空，例如 12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}" title="收藏的地點排先，其餘按與這天站點的距離排列"></div>`,
     );
     ppResults();
   }
@@ -1261,6 +1265,7 @@ window.startTrip = (meta = {}) => {
           .filter(
             (p) =>
               (ppCat === "全部" || (ppCat === "★ 收藏" && saved.has(p.id)) || p.cats.includes(ppCat) || (ppCat === "商店" && giftShop(p))) &&
+              (!ppArea || p.v[0] === ppArea) &&
               (!q || [p.v[1], p.v[0], areaOf(p), p.v[4], p.v[2], p.zh].join(" ").toLocaleLowerCase().includes(q)),
           )
           .sort((a, b) => saved.has(b.id) - saved.has(a.id) || far.get(a.id) - far.get(b.id));
@@ -1335,6 +1340,10 @@ window.startTrip = (meta = {}) => {
   };
   document.addEventListener("input", (e) => {
     if (e.target.id === "ppSearch") ppResults();
+    if (e.target.id === "ppArea") {
+      ppArea = e.target.value;
+      ppResults();
+    }
   });
   function savePlaceToPlan(f) {
     const p = places.find((x) => x.id === f.dataset.place);

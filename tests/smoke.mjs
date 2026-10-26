@@ -504,6 +504,10 @@ try {
   await page.goto(base + '/#explore'); await page.click('[data-place-new]');
   await page.fill('#placeForm [name=f0]', '上野'); await page.fill('#placeForm [name=f1]', '京成上野駅'); await page.locator('#placeForm [name=cats]').nth(3).check(); await page.click('#placeForm button[type=submit]');
   await page.goto(base + '/#plan?day=5'); await page.waitForSelector('.journey-day'); await page.click('[data-plan-pick]');
+  // 區域: only that area's places
+  await page.selectOption('#ppArea', '淺草'); await page.waitForTimeout(200);
+  assert.ok((await page.locator('#ppList .pp-row small').allInnerTexts()).every((t) => t.startsWith('淺草')), 'only 淺草 places');
+  await page.selectOption('#ppArea', '');
   await page.click('[data-pp-cat=交通]');
   const row = page.locator('#ppList .pp-row', { hasText: '京成上野駅' });
   await row.locator('[data-pp-add]').click(); await row.locator('[data-pp-add]').click();
@@ -525,6 +529,9 @@ try {
   await page.goto(base + '/#plan?day=1'); await page.click('[data-plan-pick]'); await page.click('#detail [data-discover]');
   await page.click('#discoverForm [type=submit]'); await page.waitForSelector('.discover-card');
   const r2 = await page.evaluate(() => window.discoverRequest); assert.ok(Number.isFinite(r2.near?.lat)); assert.ok(r2.weekday);
+  // from a day the area can be changed; another area searches there, not near the day's stops
+  await page.fill('#discoverForm [name=area]', '銀座'); await page.click('#discoverForm [type=submit]'); await page.waitForSelector('.discover-card');
+  const r3 = await page.evaluate(() => window.discoverRequest); assert.equal(r3.area, '銀座'); assert.equal(r3.near, undefined);
   assert.match(await page.locator('.discover-card').first().innerText(), /9時00分～17時30分/, "the day's opening hours");
   assert.match(await page.locator('[data-discover-add]').first().innerText(), /加入 D1/);
   await closeSheet();
