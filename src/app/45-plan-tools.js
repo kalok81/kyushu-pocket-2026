@@ -78,7 +78,8 @@
         const w = all?.[isoDash(d)];
         if (!w || w.max == null) return;
         const { icon, text } = window.Weather.describe(w.code);
-        if (el.dataset.weatherTab) el.textContent = `${icon} ${Math.round(w.max)}°`;
+        // day tab: icon, then lowest–highest (the two wrap onto two lines when the tabs are narrow)
+        if (el.dataset.weatherTab) el.innerHTML = `<span>${icon}</span><span>${Math.round(w.min)}–${Math.round(w.max)}°</span>`;
         else {
           el.textContent = `${icon} ${text} · ${Math.round(w.min)}–${Math.round(w.max)}°C${w.rain != null ? ` · 降雨機會 ${w.rain}%` : ""}`;
           el.hidden = false;

@@ -7,7 +7,7 @@
 .daytab span,.daytab .weather-tab{font-size:clamp(10px,2.9vw,13px);color:var(--muted-foreground);white-space:nowrap}
 .daytab.active{border-color:var(--primary);background:var(--primary);color:var(--primary-foreground)}
 .daytab.active span,.daytab.active .weather-tab{color:var(--on-primary-muted)}
-.weather-tab{display:block;min-height:14px;line-height:1.4}
+.weather-tab{display:flex;flex-wrap:wrap;justify-content:center;column-gap:3px;min-height:14px;line-height:1.4}
 .dayintro{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin:16px 0 14px}
 .dayintro>div:first-child{min-width:0}
 .dayintro h2{margin:2px 0 0;font-size:var(--fs-xl);font-weight:650;line-height:1.35}
