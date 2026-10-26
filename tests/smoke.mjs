@@ -547,6 +547,10 @@ try {
   await page.goto(base + '/#shopping'); await page.evaluate(() => document.querySelector('[data-shop-edit]').click()); await page.waitForSelector('[data-tg-form=shop]'); await page.waitForTimeout(500);
   await page.mouse.click(10, 10); await page.waitForTimeout(400); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'edit sheet kept open');
   await closeSheet(); await page.waitForFunction(() => !document.querySelector('#detail').open);
+  // 加入地點 (a search box, no form) stays open too
+  await page.goto(base + '/#plan?day=1'); await page.click('[data-plan-pick]'); await page.waitForSelector('#ppSearch'); await page.waitForTimeout(500);
+  await page.mouse.click(10, 10); await page.waitForTimeout(400); assert.ok(await page.evaluate(() => document.querySelector('#detail').open), 'picker kept open');
+  await closeSheet(); await page.waitForFunction(() => !document.querySelector('#detail').open);
   // unsaved typing: Esc (or the back gesture) asks first
   await page.goto(base + '/#shopping'); await page.click('[data-tg=shopAdd]'); await page.fill('[data-tg-form=shop] [name=name]', '草莓大福'); await page.waitForTimeout(300);
   // Esc once the sheet has finished opening (again if the first one came during its animation)
