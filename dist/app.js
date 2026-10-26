@@ -1558,12 +1558,13 @@ window.startTrip = (meta = {}) => {
   }
   // 查實際班次: NAVITIME's times are estimates without train numbers, so each train in a saved way ("🚆 ソニック 博多 →
   // 別府（約 08:14–10:27）") links to Yahoo!乗換案内 for that station pair, day and time: real trains, numbers, platforms.
+  // Rail legs only: Yahoo resolves bus stop names to the wrong place (二見ヶ浦 → 三重県の二見浦).
   function trainChecks(text, day) {
     const d = days[day - 1];
     if (meta.country !== "JP" || !d) return "";
     const [y, m, dd] = isoDash(d).split("-"),
       seen = new Set();
-    const links = [...String(text).matchAll(/(?:^|→ )\p{Extended_Pictographic}\uFE0F? ([^→]+?) (\S+) → (\S+)（(?:\d+ 站，)?(?:約 )?(\d{1,2}):(\d{2})/gu)]
+    const links = [...String(text).matchAll(/(?:^|→ )[🚆🚄🚇🚃🚅🚈🚝🚞]\uFE0F? ([^→]+?) (\S+) → (\S+)（(?:\d+ 站，)?(?:約 )?(\d{1,2}):(\d{2})/gu)]
       .filter(([, , from, to]) => !seen.has(from + to) && seen.add(from + to))
       .map(([, line, from, to, hh, mi]) =>
         Kit.btn(`查班次：${from} → ${to}`, {
@@ -2156,6 +2157,8 @@ window.startTrip = (meta = {}) => {
     });
   }
   function moveStopToDay(from, i, to) {
+    // into the other day's main 方案, whichever of its 方案 was last on screen
+    planView = { ...planView, [to]: null };
     const A = stopsFor(from),
       B = stopsFor(to),
       s = A[i];

@@ -129,9 +129,10 @@ try {
   await page.waitForFunction(() => /最快：.*銀座線 上野 → 淺草.*（AI 估算）/.test(document.querySelector('#routeManual textarea').value));
   await page.selectOption('#routeMode', 'WALK'); await page.click('#routeGo'); await page.waitForSelector('[data-route-pick]');
   await page.click('[data-route-pick]'); await page.waitForFunction(() => document.querySelector('#routeManual textarea').value.includes('步行約 12 分'));
-  await page.fill('#routeManual textarea', '🚶 3 分 → 🚇 銀座線 上野 → 淺草（約 10:02–10:07）｜約 14 分'); await page.click('#routeManual button[type=submit]');
+  await page.fill('#routeManual textarea', '🚶 3 分 → 🚇 銀座線 上野 → 淺草（約 10:02–10:07） → 🚌 都バス 淺草 → 雷門一丁目（10:10–10:14）｜約 14 分'); await page.click('#routeManual button[type=submit]');
   await page.waitForSelector('.route-dot.has-route'); assert.match(await page.locator('[data-route-link]').nth(1).innerText(), /銀座線 上野 → 淺草/);
   // a train with a time: 查班次 opens Yahoo!乗換案内 for that station pair, day and time
+  assert.equal(await page.locator('.route-checks a').count(), 1, 'trains only: the bus leg gets no 查班次 link');
   const check = new URL(await page.locator('.route-checks a').first().getAttribute('href'));
   assert.deepEqual([check.hostname, check.searchParams.get('from'), check.searchParams.get('to'), check.searchParams.get('hh'), check.searchParams.get('m1') + check.searchParams.get('m2')], ['transit.yahoo.co.jp', '上野', '淺草', '10', '02']);
   // a second choice at 10:00: the link asks which destination

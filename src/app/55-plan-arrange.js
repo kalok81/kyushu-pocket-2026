@@ -357,6 +357,8 @@
     });
   }
   function moveStopToDay(from, i, to) {
+    // into the other day's main 方案, whichever of its 方案 was last on screen
+    planView = { ...planView, [to]: null };
     const A = stopsFor(from),
       B = stopsFor(to),
       s = A[i];
