@@ -101,7 +101,7 @@ test('checklist ticks, exchange rates, day plans', async () => {
  await assertFails(setDoc(doc(db(amy), `${T}/planDays/61`), { stops: [], by: 'amy', byName: 'Amy', at: 1 }));
  const variant = (n) => ({ id: 'v' + n, name: `方案 ${n}`, stops: [{ title: '海地獄' }] });
  await assertSucceeds(setDoc(doc(db(amy), `${T}/planDays/5`), { stops: [], mainName: '方案 1', variants: [variant(2), variant(3)], by: 'amy', byName: 'Amy', at: 1 }));
- await assertFails(setDoc(doc(db(amy), `${T}/planDays/6`), { stops: [], variants: [2, 3, 4, 5, 6].map(variant), by: 'amy', byName: 'Amy', at: 1 }));
+ await assertFails(setDoc(doc(db(amy), `${T}/planDays/6`), { stops: [], variants: [2, 3, 4, 5, 6, 7, 8, 9, 10].map(variant), by: 'amy', byName: 'Amy', at: 1 }));
  await assertFails(setDoc(doc(db(amy), `${T}/planDays/6`), { stops: [], mainName: 'x'.repeat(31), by: 'amy', byName: 'Amy', at: 1 }));
  await assertFails(setDoc(doc(db(eve), `${T}/planDays/4`), { stops: [], by: 'eve', byName: 'Eve', at: 1 }));
 });

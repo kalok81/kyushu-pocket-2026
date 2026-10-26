@@ -987,7 +987,7 @@ window.startTrip = (meta = {}) => {
   }
   async function newVariant(day) {
     const vs = variantsOf(day);
-    if (vs.length >= 4) return toast("每天最多 5 個方案。");
+    if (vs.length >= 8) return toast("每天最多 9 個方案。");
     const name = await UI.prompt("新方案的名稱", `方案 ${vs.length + 2}`, "例如：早一班火車");
     if (name == null || !name.trim()) return;
     // a copy of the 方案 on screen, to change without touching it
@@ -1460,8 +1460,10 @@ window.startTrip = (meta = {}) => {
  ${hs.length ? `<h2>住宿</h2><table><tbody>${hs.map((h) => `<tr><td>${h.checkIn ? `${esc(h.checkIn)} → ${esc(h.checkOut)}` : "日期未定"}</td><td><b>${esc(h.name)}</b></td><td>${esc(h.address)}</td></tr>`).join("")}</tbody></table>` : ""}
  ${days
    .map((d) => {
-     const stops = stopsFor(d.n);
-     return `<section class="print-day"><h2>DAY ${d.n} · ${esc(d.date)} ${esc(d.weekday)} · ${esc(d.region)}</h2>${d.hotel ? `<p class="print-sub">住宿：${esc(d.hotel)}</p>` : ""}${stops.length ? `<table><tbody>${stops.map((s) => `<tr><td class="print-time">${esc(s.time)}</td><td><b>${esc(s.title)}</b>${s.note ? `<div>📝 ${esc(s.note)}</div>` : ""}${s.detail ? `<div>${esc(s.detail)}</div>` : ""}${s.transport ? `<div class="print-sub">↳ ${esc(s.transport)}</div>` : ""}</td></tr>`).join("")}</tbody></table>` : '<p class="print-sub">未安排</p>'}</section>`;
+     // the 方案 on screen for that day (named when the day has more than one)
+     const stops = stopsFor(d.n),
+       plan = variantsOf(d.n).length ? viewedVariant(d.n)?.name || mainName(d.n) : "";
+     return `<section class="print-day"><h2>DAY ${d.n} · ${esc(d.date)} ${esc(d.weekday)} · ${esc(d.region)}${plan ? ` · ${esc(plan)}` : ""}</h2>${d.hotel ? `<p class="print-sub">住宿：${esc(d.hotel)}</p>` : ""}${stops.length ? `<table><tbody>${stops.map((s) => `<tr><td class="print-time">${esc(s.time)}</td><td><b>${esc(s.title)}</b>${s.note ? `<div>📝 ${esc(s.note)}</div>` : ""}${s.detail ? `<div>${esc(s.detail)}</div>` : ""}${s.transport ? `<div class="print-sub">↳ ${esc(s.transport)}</div>` : ""}</td></tr>`).join("")}</tbody></table>` : '<p class="print-sub">未安排</p>'}</section>`;
    })
    .join("")}
  <p class="print-sub">列印自口袋旅伴 · ${new Date().toLocaleDateString("zh-HK")}</p>`;

@@ -482,6 +482,12 @@ try {
   await page.click('[data-plan-variant="main"]'); assert.deepEqual(await titles(), main, 'the main 方案 is unchanged');
   const doc = await page.evaluate(() => globalThis.__fakeStore.planDays['1']);
   assert.deepEqual([doc.stops.length, doc.variants.length, doc.variants[0].stops.length, doc.mainName], [main.length, 1, main.length - 1, '方案 1']);
+  // printing names the 方案 being printed for that day
+  await page.locator('.plan-variants .chip', { hasText: '早一班火車' }).click();
+  await page.evaluate(() => { window.print = () => {}; }); await page.click('.day-more summary'); await page.click('[data-plan-print]:visible');
+  assert.match(await page.locator('#printArea .print-day').first().innerText(), /DAY 1 .*· 早一班火車/);
+  await page.evaluate(() => { document.body.classList.remove('printing'); dispatchEvent(new Event('afterprint')); });
+  await page.click('[data-plan-variant="main"]');
   // 設為主要: the copy becomes the main one (the overview uses it), the old main one becomes a 方案
   await page.locator('.plan-variants .chip', { hasText: '早一班火車' }).click();
   await page.click('.day-more summary'); await page.click('[data-plan-variant-main]:visible');

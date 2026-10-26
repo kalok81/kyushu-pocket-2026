@@ -80,7 +80,7 @@
   }
   async function newVariant(day) {
     const vs = variantsOf(day);
-    if (vs.length >= 4) return toast("每天最多 5 個方案。");
+    if (vs.length >= 8) return toast("每天最多 9 個方案。");
     const name = await UI.prompt("新方案的名稱", `方案 ${vs.length + 2}`, "例如：早一班火車");
     if (name == null || !name.trim()) return;
     // a copy of the 方案 on screen, to change without touching it

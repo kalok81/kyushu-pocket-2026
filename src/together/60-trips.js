@@ -64,11 +64,13 @@
     if (what.includes("planDays"))
       for (const d of state.planDays)
         if (Number(d.id) <= days) {
-          const { stops, label } = d;
+          const { stops, label, variants, mainName } = d;
           jobs.push(
             fs.setDoc(ref("planDays", d.id), {
               stops: stops || [],
               ...(label ? { label } : {}),
+              // the day's other 方案 come along
+              ...(variants?.length ? { variants, mainName: mainName || "方案 1" } : {}),
               by: u.uid,
               byName: me().name,
               at: Date.now(),
