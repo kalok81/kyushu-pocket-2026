@@ -165,7 +165,7 @@ window.startTrip = (meta = {}) => {
       : "";
     const tile = (href, ic, title, sub) => `<a class="quick" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span></a>`;
     const info = [meta.destination, first && `${first.iso.slice(5).replace("/", ".")}–${last.iso.slice(5).replace("/", ".")}`, first && `${days.length} 天`, when].filter(Boolean);
-    return `<section class="trip-card trip-bar"><div class="trip-line"><h1>${esc(meta.name || "我們的旅程")}</h1><span>${info.map(esc).join(" · ")}</span></div>${Kit.btn(now ? "今天" : "行程", { href: `#plan?day=${now ? now.n : 1}`, size: "sm", icon: "calendar", cls: "herobtn" })}</section>${today}<div class="quicklinks">${tile("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${tile("#hotels", "bed", "住宿", `${hs.length} 間`)}${tile("#events", "ticket", "活動", `${lists().events?.length || 0} 個`)}${tile("#nearby", "locate", "附近", "定位找地點")}</div>${Kit.sectionHead("資料簿")}${notebookBody()}`;
+    return `<section class="trip-card trip-bar"><div class="trip-line"><h1>${esc(meta.name || "我們的旅程")}</h1><span>${info.map(esc).join(" · ")}</span></div></section>${today}<div class="quicklinks">${tile(`#plan?day=${now ? now.n : 1}`, "calendar", "行程", now ? `今天 D${now.n}` : `${days.length} 天`)}${tile("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${tile("#hotels", "bed", "住宿", `${hs.length} 間`)}${tile("#events", "ticket", "活動", `${lists().events?.length || 0} 個`)}${tile("#nearby", "locate", "附近", "定位找地點")}</div>${Kit.sectionHead("資料簿")}${notebookBody()}`;
   }
   // ---- 附近 (nearby places and shops within 100/200/500 m) ----
   let nearbyRequest = 0;
