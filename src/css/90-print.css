@@ -1,0 +1,15 @@
+/* ---- Printed itinerary (列印／另存 PDF): only #printArea is printed ---- */
+#printArea{display:none}
+@media print{
+  body.printing>*:not(#printArea){display:none!important}
+  body.printing{padding:0;background:#fff;color:#000}
+  #printArea{display:block;font-size:11pt;line-height:1.45}
+  #printArea h1{margin:0 0 4px;font-size:20pt}
+  #printArea h2{margin:16px 0 6px;padding-bottom:3px;border-bottom:1px solid #999;font-size:13pt}
+  #printArea table{width:100%;border-collapse:collapse}
+  #printArea td{padding:4px 6px;border-bottom:1px solid #ddd;vertical-align:top}
+  #printArea .print-time{width:1%;white-space:nowrap;font-variant-numeric:tabular-nums}
+  #printArea .print-sub{margin:2px 0;font-size:9.5pt;color:#555}
+  #printArea .print-day{break-inside:avoid-page}
+  @page{margin:14mm}
+}

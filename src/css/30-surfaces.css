@@ -1,0 +1,95 @@
+/* ---- Surfaces: card, panel, list, fold, badge, empty state ---- */
+/* Card (Kit.card and every card-like item: places, stops, notes, tickets…) */
+.card,.panel{min-width:0;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);box-shadow:var(--shadow-sm)}
+.card{position:relative;padding:var(--card-pad)}
+.panel{padding:16px}
+.card:is(.place,.shop-tile):hover{border-color:var(--input);box-shadow:var(--shadow)}
+/* the small line above a card's title: date or badges on the left, buttons and ⋯ on the right */
+.card-top{display:flex;align-items:center;gap:6px;min-height:36px;margin:-6px -8px 2px 0}
+.card-top>:is(.card-date,.card-meta,.region,.tg-meta,.eyebrow){flex:1;min-width:0}
+.card-date{font-size:var(--fs-sm);font-weight:600;color:var(--orange);font-variant-numeric:tabular-nums}
+.card-meta,.card-top .region{font-size:var(--fs-sm);color:var(--muted-foreground);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* one title size for every card */
+.card :is(h2,h3){margin:2px 0 6px;font-size:var(--fs-title);font-weight:650;line-height:1.45;overflow-wrap:anywhere}
+.card p{margin:4px 0 8px;font-size:var(--fs-lg)}
+.card .links{margin-top:10px}
+.card-badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.card-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:6px}
+.card-foot small{font-size:var(--fs-xs);color:var(--muted-foreground)}
+.card-title{all:unset;cursor:pointer;overflow-wrap:anywhere}
+.card-title:hover{background:none}
+.card-title:focus-visible{outline:2px solid var(--ring);outline-offset:2px;border-radius:4px}
+.panel :is(h2,h3){margin-top:0}
+.links{display:flex;flex-wrap:wrap;gap:8px}
+.actions{display:flex;gap:8px;margin-top:auto}
+.actions>*{flex:1}
+/* label / value pairs */
+.kv{display:grid;grid-template-columns:100px 1fr;gap:5px 12px;margin:0;font-size:var(--fs-md);line-height:1.8}
+.kv dt{color:var(--muted-foreground)}
+.kv dd{margin:0;overflow-wrap:anywhere}
+@media(max-width:760px){.kv{grid-template-columns:87px 1fr;font-size:var(--fs-sm)}}
+/* grids of cards */
+.cardgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.twocol{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@media(min-width:761px){.twocol{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}}
+@media(max-width:760px){.cardgrid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.cardgrid{grid-template-columns:1fr}}
+
+/* List (Kit.row inside .list): one bordered box with divided rows; .plain drops the box (☰ menu, checklist) */
+.list{display:grid;margin:0;padding:0;list-style:none;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);box-shadow:var(--shadow-sm);overflow:hidden}
+.list.plain{border:0;border-radius:0;background:none;box-shadow:none}
+.list-row{display:flex;align-items:center;gap:12px;width:100%;min-height:52px;margin:0;padding:10px 14px;border:0;border-top:1px solid var(--border);border-radius:0;background:none;box-shadow:none;color:inherit;font-weight:400;text-align:left;text-decoration:none}
+.list-row:first-child{border-top:0}
+:is(a,button).list-row:hover,.info-link:hover{background:var(--accent)}
+.list-row>.icon{flex:none;width:22px;height:22px;color:var(--muted-foreground)}
+.list-row>.icon:last-child:not(:first-child){width:18px;height:18px;margin-left:auto;opacity:.5}
+.list-main,.list-row>div:not([class]){display:grid;flex:1;min-width:0}
+.list-main b,.list-row>div:not([class])>b{font-size:var(--fs-body);font-weight:600}
+.list-main small,.list-row>div:not([class])>small{font-size:var(--fs-sm);color:var(--muted-foreground)}
+.list.plain>.list-row{padding-left:4px;padding-right:4px}
+.daynum{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:50%;background:var(--secondary);font-size:var(--fs-xs);font-weight:700;color:var(--foreground)}
+
+/* Fold (Kit.fold and every <details>): the same summary and chevron everywhere */
+.fold>summary{display:flex;align-items:center;gap:8px;min-height:44px;font-weight:600;list-style:none;cursor:pointer}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary::after{content:"";flex:none;width:7px;height:7px;margin:0 6px 0 auto;border-right:2px solid var(--muted-foreground);border-bottom:2px solid var(--muted-foreground);transform:rotate(45deg) translateY(-2px);transition:transform .15s}
+.fold[open]>summary::after{transform:rotate(-135deg) translateY(-2px)}
+.fold>summary .icon{width:18px;height:18px;color:var(--muted-foreground)}
+
+/* Badges (Kit.badge): place categories and states */
+.badge{display:inline-flex;align-items:center;max-width:100%;padding:2px 9px;border:1px solid transparent;border-radius:999px;background:var(--secondary);font-size:var(--fs-xs);font-weight:600;line-height:1.6;overflow-wrap:normal}
+.badge.food{background:var(--cat-food-bg);color:var(--cat-food)}
+.badge.sights{background:var(--cat-sights-bg);color:var(--cat-sights)}
+.badge.transit{background:var(--cat-transit-bg);color:var(--cat-transit)}
+.badge.shop{background:var(--cat-shop-bg);color:var(--cat-shop)}
+.badge.gift{background:var(--cat-gift-bg);color:var(--cat-gift)}
+.badge.night{background:var(--night);color:var(--primary-foreground)}
+
+/* Empty states (Kit.empty) */
+.empty{padding:36px 20px;border:1px dashed var(--input);border-radius:var(--r-lg);background:color-mix(in srgb,var(--card) 60%,transparent);text-align:center}
+.empty h2{margin:0 0 6px;font-size:var(--fs-title);font-weight:650}
+.empty p{max-width:34em;margin:0 auto;font-size:var(--fs-lg);color:var(--muted-foreground)}
+.empty .btn{margin-top:14px}
+.resultsbar{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:36px;margin:12px 0 8px;font-size:var(--fs-sm);color:var(--muted-foreground)}
+
+/* Page head (Kit.pageHead) and section heads (Kit.sectionHead) */
+.page-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
+.page-head>div:first-child{min-width:0}
+.page-head-aside{display:flex;flex:none;gap:8px}
+.page-head h1{margin:0;font-size:var(--fs-xl);font-weight:650;line-height:1.3}
+.page-head p{margin:2px 0 0;font-size:var(--fs-md);color:var(--muted-foreground)}
+.sectionhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 10px}
+.sectionhead h2{min-width:0;margin:0;font-size:var(--fs-title);font-weight:650}
+/* sticky filter bar under the top bar (探索, 資料簿) */
+.controls{position:sticky;top:var(--topbar-h);z-index:10;margin:0 calc(-1 * var(--gutter));padding:8px var(--gutter) 6px;background:color-mix(in srgb,var(--background) 94%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+
+/* AI progress (Kit.progress / Kit.busy): time-based bar, 100% when done */
+.ai-progress{display:grid;gap:4px;margin:6px 0}
+.ai-progress-bar{height:6px;border-radius:999px;background:var(--muted-bg);overflow:hidden}
+.ai-progress-bar i{display:block;width:var(--from,0%);height:100%;border-radius:999px;background:var(--primary);animation:ai-fill var(--rest,15s) cubic-bezier(.15,.7,.35,1) forwards}
+.ai-progress>span{font-size:var(--fs-sm);color:var(--muted-foreground)}
+.ai-progress.done .ai-progress-bar i{width:100%;animation:none;transition:width .3s}
+@keyframes ai-fill{to{width:92%}}
+@media(prefers-reduced-motion:reduce){.ai-progress-bar i{animation-duration:.01s}}
+.tg-progress{height:8px;border-radius:999px;background:var(--border);overflow:hidden}
+.tg-progress>div{width:0;height:100%;border-radius:999px;background:var(--foreground);transition:width .2s linear}

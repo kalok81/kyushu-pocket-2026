@@ -1,0 +1,112 @@
+/* ---- 共用: notes and coupons, expenses (drafts, receipts, statistics), checklist, sign-in ---- */
+.tg-list{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-bottom:24px}
+.tg-slot{margin-top:18px}
+.tg-sync{margin:0 0 10px;font-size:var(--fs-sm)}
+.tg-pending-on{color:var(--transport-fg)}
+.tg-pending-off{font-weight:700;color:var(--orange)}
+.tg-pending{padding:1px 6px;border-radius:var(--r-sm);background:var(--highlight);color:var(--foreground)}
+.tg-warn{color:var(--orange)}
+/* item cards: meta line, text, row tools */
+.card.tg-item{margin:0 0 10px}
+.tg-meta{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font-size:var(--fs-sm);color:var(--muted-foreground)}
+.tg-meta .badge{display:inline-block;max-width:100%;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.card-top.item-top{align-items:flex-start}
+.item-top .tg-meta{padding-top:6px}
+.card p.tg-text,.tg-text{margin:8px 0;font-size:var(--fs-body);white-space:pre-wrap;overflow-wrap:anywhere}
+.tg-text a{color:var(--primary);text-decoration:underline;overflow-wrap:anywhere}
+.row-tools{display:flex;gap:2px;margin:-4px -6px 0 0}
+.row-tools .btn-icon{color:var(--primary)}
+.badge.tg-cat{min-height:0;background:var(--secondary);color:var(--secondary-foreground);box-shadow:none;cursor:pointer}
+.badge.tg-cat.none{border:1px dashed var(--input);background:transparent;color:var(--muted-foreground)}
+/* notes with photos */
+.note-filter,.note-kind{margin:0 0 4px}
+.note-photos{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.note-photo{width:96px;height:96px;min-height:0;padding:0;overflow:hidden;border-radius:var(--r-md);box-shadow:none}
+.note-photo img{display:block;width:100%;height:100%;object-fit:cover}
+.note-photo-edit{display:grid;gap:8px}
+#notePhotoPreview{display:flex;flex-wrap:wrap;gap:8px}
+#notePhotoPreview:empty{display:none}
+.note-photo-thumb{position:relative;width:76px;height:76px}
+.note-photo-thumb img{width:100%;height:100%;border-radius:var(--r-sm);object-fit:cover}
+.note-photo-thumb .thumb-del{position:absolute;top:-8px;right:-8px;width:28px;min-height:28px;border-radius:50%;background:var(--card);box-shadow:var(--shadow)}
+.note-photo-thumb .thumb-del .icon{width:14px;height:14px}
+.note-photo-full{display:block;width:100%;height:auto;margin-top:12px;border-radius:var(--r-md);background:var(--card)}
+/* coupons */
+.card.coupon{border-left:4px solid var(--gold)}
+.coupon.used{opacity:.6}
+.badge.coupon-tag,.badge.coupon-soon{background:var(--warn-bg);color:var(--warn-fg)}
+.coupon-tag .icon{width:13px;height:13px;margin-right:3px}
+.badge.coupon-expired{background:var(--destructive-soft);color:var(--destructive)}
+.coupon-code{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:10px 0;padding:10px 12px;border:1px dashed var(--gold);border-radius:var(--r-md);background:var(--gold-bg)}
+.coupon-code span{font-size:var(--fs-sm);color:var(--muted-foreground)}
+.coupon-code b{font:700 var(--fs-title)/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:1px;overflow-wrap:anywhere}
+.coupon-code.big{justify-content:center}
+.coupon-code.big b{font-size:var(--fs-2xl)}
+.coupon-due{margin:4px 0}
+/* expenses */
+.tg-expense{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.tg-expense b{font-size:var(--fs-title);white-space:nowrap}
+.tg-conv{display:block;font-size:var(--fs-sm);font-weight:500;color:var(--muted-foreground);text-align:right}
+.tg-lines{margin:8px 0;padding:0;border-top:1px dashed var(--border);font-size:var(--fs-md);list-style:none}
+.tg-lines li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;border-bottom:1px dashed var(--border)}
+.tg-lines li span:last-child{white-space:nowrap}
+.tg-lines-edit{display:grid!important;gap:6px}
+.tg-lines-edit>.btn{justify-self:start}
+.tg-line-row{display:grid;grid-template-columns:1fr 110px 44px;gap:6px}
+.tg-line-row button{padding:0}
+.exp-found{margin:4px 0 8px}
+.tg-settle-mode{margin:0 0 10px}
+.tg-summary{margin-bottom:12px}
+.tg-currency p{margin:6px 0}
+.tg-fx{margin-top:16px;padding-top:4px;border-top:1px solid var(--border)}
+.tg-fx ul{display:grid;gap:8px;margin:6px 0 0;padding:0;list-style:none}
+.tg-fx li{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
+.tg-fx li .note{flex:1 1 140px;margin:0;font-size:var(--fs-sm)}
+/* statistics */
+.tg-stats h4{margin:18px 0 8px;font-size:var(--fs-md);font-weight:600;color:var(--muted-foreground)}
+.tg-total{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px}
+.tg-total b{font-size:var(--fs-2xl);letter-spacing:-.01em}
+.tg-total span{font-size:var(--fs-md);color:var(--muted-foreground)}
+.tg-people{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.tg-people li{display:grid;gap:2px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--background)}
+.tg-people .note{margin:0;font-size:var(--fs-sm)}
+.tg-bars{display:grid;gap:7px}
+.tg-bar{display:grid;grid-template-columns:minmax(90px,30%) 1fr auto;align-items:center;gap:10px;font-size:var(--fs-md)}
+.tg-bar span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.tg-bar div{height:10px;overflow:hidden;border-radius:999px;background:var(--muted-bg)}
+.tg-bar i{display:block;height:100%;border-radius:999px;background:var(--primary)}
+.tg-bar b{font-size:var(--fs-sm);font-variant-numeric:tabular-nums}
+/* AI drafts: receipts and product photos being read */
+.tg-drafts{display:grid;gap:8px;margin-top:4px}
+.tg-drafts:empty{display:none}
+.tg-drafts-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.tg-draft .tg-row{margin-top:8px}
+.tg-draft label{display:grid;gap:4px;font-size:var(--fs-sm);color:var(--muted-foreground)}
+.tg-progress-busy>div{width:40%!important;animation:tg-busy 1.2s ease-in-out infinite}
+@keyframes tg-busy{0%{transform:translateX(-100%)}100%{transform:translateX(250%)}}
+@media(prefers-reduced-motion:reduce){.tg-progress-busy>div{width:100%!important;opacity:.4;animation:none}}
+.tg-scan{display:grid;gap:4px}
+.tg-scan .note{margin:0}
+.tg-scan .tg-check{min-height:36px;font-size:var(--fs-md);color:var(--foreground)}
+.tg-merge{display:grid;gap:8px}
+.tg-merge button{justify-self:start}
+.tg-pick{display:flex;align-items:center;gap:4px;margin-left:auto;color:var(--foreground)}
+.tg-pick input{width:18px;height:18px}
+.receipt-photos{display:grid;gap:10px}
+.receipt-photos img{width:100%;border:1px solid var(--border);border-radius:var(--r-sm)}
+/* checklist */
+.check-progress{margin:0 0 12px}
+.check-progress b{display:block;margin-bottom:6px;font-size:var(--fs-lg)}
+.check-group h3{margin:0 0 8px;font-size:var(--fs-body)}
+.check-form{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:8px;margin:0 0 14px}
+.check-form select{max-width:110px}
+.list-row.check-row{min-height:0;padding:6px 0;gap:8px}
+.check-row label{display:flex;flex:1 1 60%;min-width:0;align-items:center;gap:10px;min-height:36px;font-weight:500;cursor:pointer}
+.check-row input{flex:none;width:20px;height:20px}
+.check-row.done label span{text-decoration:line-through;color:var(--muted-foreground)}
+.check-row small{flex:0 1 auto;max-width:35%;font-size:var(--fs-sm);color:var(--muted-foreground);text-align:right}
+/* sign-in */
+.panel.tg-login{max-width:520px;margin:20px auto;text-align:center}
+.tg-login .tg-form{margin:16px 0 8px;text-align:left}
+.tg-or{margin:4px 0 10px;font-size:var(--fs-md);color:var(--muted-foreground)}
+.tg-google{width:100%}

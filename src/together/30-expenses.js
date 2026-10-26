@@ -109,7 +109,7 @@
     const h = e.currency !== home() && toHome(e);
     // Receipt lines are translated with the title: only while all of them are unchanged.
     const itemsZh = e.zhFor === [e.title, ...(e.items || []).map((i) => i.name)].join("\n") ? e.itemsZh || [] : [];
-    return `<article class="tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}${zhLine(zhName(e, e.title))}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i, k) => `<li><span>${esc(i.name)}${zhLine(itemsZh[k])}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
+    return `<article class="card tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}${zhLine(zhName(e, e.title))}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i, k) => `<li><span>${esc(i.name)}${zhLine(itemsZh[k])}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
   }
   // 搜尋開支: title (and its Chinese), receipt lines, who paid, who shares, category, day and amount.
   function expenseMatches() {
@@ -140,7 +140,7 @@
       return `<li><span>1 ${c} = ${r ? +r.toPrecision(4) : "？"} ${h}</span><span class="note">${m ? `手動設定${state.fx?.byName ? `（${esc(state.fx.byName)}）` : ""}` : r ? `自動 · ${new Date(state.liveFx.date).toLocaleDateString("zh-HK", { month: "numeric", day: "numeric" })}` : "未有匯率（需要網絡）"}</span>${Kit.btn("設定", { size: "sm", attrs: { "data-fx-set": c } })}</li>`;
     };
     const rates = curs.length
-      ? `<details class="tg-fx"${state.fxOpen ? " open" : ""}><summary>匯率</summary><ul>${curs.map(rateRow).join("")}</ul><p class="note">自動匯率每日更新；可以改用你們實際兌換的匯率，所有旅伴共用。</p></details>`
+      ? `<details class="fold tg-fx"${state.fxOpen ? " open" : ""}><summary>匯率</summary><ul>${curs.map(rateRow).join("")}</ul><p class="note">自動匯率每日更新；可以改用你們實際兌換的匯率，所有旅伴共用。</p></details>`
       : "";
     const missing = [...new Set(list.map((e) => e.currency))].filter((c) => !rateOf(c));
     if (missing.length)

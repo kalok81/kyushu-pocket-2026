@@ -9,6 +9,8 @@
     appId: "1:672657048901:web:d1e2f7dd92389f78f3ea2c",
   };
   const APP_CHECK_KEY = "6Lfpt_otAAAAADBIq06Vcd_4KI5NJtGosFA4ZlTG";
+  // A trip's synced lists, empty (at start and when the trip is left)
+  const emptyTrip = () => ({ notes: [], expenses: [], checklist: [], members: [], shopping: [], places: [], planDays: [], hotels: [], flights: [], events: [], placesLoaded: false, fx: null });
   const state = {
     status: "idle",
     error: "",
@@ -17,17 +19,7 @@
     noteKind: "note",
     noteFilter: "all",
     day: 1,
-    notes: [],
-    expenses: [],
-    checklist: [],
-    members: [],
-    shopping: [],
-    places: [],
-    planDays: [],
-    hotels: [],
-    flights: [],
-    events: [],
-    placesLoaded: false,
+    ...emptyTrip(),
     shopFilter: "todo",
     shopCat: "all",
     shopSearch: "",
@@ -35,7 +27,6 @@
     shopView: "list",
     shopEdit: null,
     noteEdit: null,
-    fx: null,
     liveFx: null,
     settleMode: null,
   };
@@ -44,17 +35,8 @@
   const T = () => window.TripApp,
     S = window.Split,
     $ = (s) => document.querySelector(s);
-  const esc = (s) =>
-    String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  // Message for a failed Cloud Function call: the function's own (Chinese) message, a clear one when the App Check
-  // security check failed (the SDK then waits a day before retrying), else the fallback.
-  const fnError = (e, fallback) =>
-    e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
-      ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
-      : // the function's own (Chinese) message; a bare SDK code such as "internal" means the server could not be reached
-        String(e?.code || "").startsWith("functions/") && e.message && !/^[a-z-]+$/.test(e.message)
-        ? e.message.replace(/\s*\[\d+\]$/, "")
-        : `${fallback}（伺服器未能處理請求）`;
+  const esc = Kit.esc;
+  const fnError = Kit.fnError;
   const toast = (s) => window.UI.toast(s);
   const header = (title, sub = "", aside = "") => Kit.pageHead(title, { sub, aside });
   let fb,
@@ -79,6 +61,13 @@
         } catch {}
       },
     };
+  // An AI job (receiptJobs): a Cloud Function reads it in the background and writes the result back to it.
+  // Returns the new job's id and the write (callers show their own message when it fails).
+  function queueJob(data) {
+    const { fs } = fb,
+      ref = fs.doc(tcol("receiptJobs"));
+    return { id: ref.id, ref, sent: fs.setDoc(ref, { ...data, status: "pending", by: state.user.uid, byName: me().name, at: Date.now(), createdAt: fs.serverTimestamp() }) };
+  }
   function add(name, data) {
     const { fs, db } = fb,
       u = state.user;
@@ -150,6 +139,6 @@
   const zhName = (x, text) => (x.zh && String(x.zhFor || "").split("\n")[0] === text ? x.zh : ""),
     zhLine = (z) => (z ? `<span class="zh-name">${esc(z)}</span>` : "");
   // Top row of every list item: badges and author on the left, the item's "⋯" menu on the right.
-  const itemTop = (x, extra, items) => `<div class="item-top">${meta(x, extra)}${Kit.menu(items)}</div>`;
+  const itemTop = (x, extra, items) => `<div class="card-top item-top">${meta(x, extra)}${Kit.menu(items)}</div>`;
   // Menu entry that deletes an item (with undo).
   const del = (name, x) => ({ label: "刪除", icon: "trash", danger: true, attrs: { "data-tg-del": `${name}:${x.id}` } });

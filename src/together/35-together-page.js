@@ -21,16 +21,16 @@
     if (!c.until) return "";
     const days = Math.round((Date.parse(c.until) - Date.parse(isoToday())) / 864e5);
     return days < 0
-      ? Kit.badge(`已過期（${esc(c.until)}）`, "coupon-expired")
-      : Kit.badge(`${days ? `還有 ${days} 天` : "今天到期"} · ${esc(c.until)}`, days <= 3 ? "coupon-soon" : "");
+      ? Kit.badge(`已過期（${esc(Kit.date(c.until, { weekday: false }))}）`, "coupon-expired")
+      : Kit.badge(`${days ? `還有 ${days} 天` : "今天到期"} · ${esc(Kit.date(c.until))}`, days <= 3 ? "coupon-soon" : "");
   }
   const noteEditItem = (n) => ({ label: "修改", icon: "edit", attrs: { "data-note-edit": n.id } });
   function noteItem(n) {
     const place = n.placeName ? Kit.badge(esc(n.placeName)) : "",
       day = n.day ? Kit.badge(esc(dayLabel(n.day))) : "";
     if (n.kind === "coupon")
-      return `<article class="tg-item coupon${n.used ? " used" : ""}">${itemTop(n, `${Kit.badge(`${icon("ticket")}優惠券`, "coupon-tag")}${day}${place}`, [noteEditItem(n), del("notes", n)])}<h3>${esc(n.title)}</h3>${n.text ? `<p class="tg-text">${linkify(n.text)}</p>` : ""}${n.code ? `<div class="coupon-code"><span>優惠碼</span><b>${esc(n.code)}</b>${Kit.btn("複製", { size: "sm", icon: "copy", attrs: { "data-copy-code": n.code } })}</div>` : ""}<div class="coupon-due">${couponDue(n)}</div>${notePhotos(n)}<div class="links">${Kit.btn(n.used ? "改回未使用" : "已使用", { size: "sm", variant: n.used ? "outline" : "secondary", icon: n.used ? "undo" : "check", attrs: { "data-coupon-used": n.id } })}${noteLink(n)}</div></article>`;
-    return `<article class="tg-item">${itemTop(n, day + place, [noteEditItem(n), del("notes", n)])}<p class="tg-text">${linkify(n.text)}</p>${notePhotos(n)}${n.url ? `<div class="links">${noteLink(n)}</div>` : ""}</article>`;
+      return `<article class="card tg-item coupon${n.used ? " used" : ""}">${itemTop(n, `${Kit.badge(`${icon("ticket")}優惠券`, "coupon-tag")}${day}${place}`, [noteEditItem(n), del("notes", n)])}<h3>${esc(n.title)}</h3>${n.text ? `<p class="tg-text">${linkify(n.text)}</p>` : ""}${n.code ? `<div class="coupon-code"><span>優惠碼</span><b>${esc(n.code)}</b>${Kit.btn("複製", { size: "sm", icon: "copy", attrs: { "data-copy-code": n.code } })}</div>` : ""}<div class="coupon-due">${couponDue(n)}</div>${notePhotos(n)}<div class="links">${Kit.btn(n.used ? "改回未使用" : "已使用", { size: "sm", variant: n.used ? "outline" : "secondary", icon: n.used ? "undo" : "check", attrs: { "data-coupon-used": n.id } })}${noteLink(n)}</div></article>`;
+    return `<article class="card tg-item">${itemTop(n, day + place, [noteEditItem(n), del("notes", n)])}<p class="tg-text">${linkify(n.text)}</p>${notePhotos(n)}${n.url ? `<div class="links">${noteLink(n)}</div>` : ""}</article>`;
   }
   function syncText() {
     const pending = ["notes", "expenses", "shopping", "checklist"].reduce((t, k) => t + state[k].filter((x) => x.pending).length, 0);
@@ -91,7 +91,7 @@
         (list.length
           ? list.map(noteItem).join("")
           : f === "coupon"
-            ? Kit.empty("還沒有優惠券", "按右下角「新增」，再選「優惠券」，影低優惠券或貼上連結。")
+            ? Kit.empty("還沒有優惠券", "按右下角「＋筆記」，再選「優惠券」，影低優惠券或貼上連結。")
             : Kit.empty("還沒有筆記", "寫下提醒、想吃的東西或任何旅程點滴，可以加相片和連結。"))
       );
     }
@@ -102,7 +102,7 @@
         stats() +
         summary() +
         (!state.expenses.length
-          ? Kit.empty("還沒有開支", "按右下角「記一筆」，或影收據讓 AI 讀出金額。")
+          ? Kit.empty("還沒有開支", "按右下角「＋開支」，或影收據讓 AI 讀出金額。")
           : state.expSearch.trim() && !found.length
             ? Kit.empty(`找不到「${esc(state.expSearch.trim())}」`, "試試其他字，或清除搜尋。")
             : (state.expSearch.trim() ? `<p class="note exp-found">找到 ${found.length} 筆${foundTotal(found)}</p>` : "") + found.map(expenseItem).join(""))
@@ -120,7 +120,7 @@
     const row = (i) => {
       const done = (i.doneBy || []).includes(me),
         others = (i.doneBy || []).filter((u) => u !== me).map(nameOf);
-      return `<li class="check-row${done ? " done" : ""}"><label><input type="checkbox" data-check="${esc(i.id)}"${done ? " checked" : ""}><span>${esc(i.text)}</span></label>${ppl.length > 1 ? `<small>${others.length ? `✓ ${esc(others.join("、"))}` : ""}</small>` : ""}${Kit.btn(`刪除 ${esc(i.text)}`, { icon: "x", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-tg-del": `checklist:${i.id}` } })}</li>`;
+      return `<li class="list-row check-row${done ? " done" : ""}"><label><input type="checkbox" data-check="${esc(i.id)}"${done ? " checked" : ""}><span>${esc(i.text)}</span></label>${ppl.length > 1 ? `<small>${others.length ? `✓ ${esc(others.join("、"))}` : ""}</small>` : ""}${Kit.btn(`刪除 ${esc(i.text)}`, { icon: "x", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-tg-del": `checklist:${i.id}` } })}</li>`;
     };
     return `<div class="check-progress"><b>你已完成 ${mine}／${items.length}</b><div class="tg-progress"><div style="width:${Math.round((mine / items.length) * 100)}%"></div></div></div>${Object.entries(
       CHECK_GROUPS,
@@ -128,7 +128,7 @@
       .map(([g, label]) => {
         const list = items.filter((i) => (CHECK_GROUPS[i.group] ? i.group : "other") === g);
         return list.length
-          ? `<section class="panel check-group"><h3>${label}</h3><ul>${list.map(row).join("")}</ul></section>`
+          ? `<section class="panel check-group"><h3>${label}</h3><ul class="list plain">${list.map(row).join("")}</ul></section>`
           : "";
       })
       .join("")}${Kit.btn("加入未有的建議項目", { size: "sm", variant: "ghost", icon: "plus", attrs: { "data-tg": "checkSuggest" } })}`;
@@ -233,9 +233,9 @@
         { cls: "tabs", label: "共用分頁" },
       )}${state.tab === "expenses" ? `<div id="tgDrafts" class="tg-drafts"></div><div class="searchrow"><input id="expSearch" class="search" type="search" placeholder="搜尋項目、物品、付款人、分類、日子…" aria-label="搜尋開支" value="${esc(state.expSearch)}"></div>` : ""}${state.tab === "checklist" ? forms() : ""}<div class="tg-list" data-tg-live="list"></div>${
         state.tab === "notes"
-          ? Kit.fab("新增", { "data-tg": "newEntry" })
+          ? Kit.fab("筆記", { "data-tg": "newEntry", "aria-label": "新增筆記或優惠券" })
           : state.tab === "expenses"
-            ? Kit.fab("記一筆", { "data-tg": "newEntry" })
+            ? Kit.fab("開支", { "data-tg": "newEntry", "aria-label": "記一筆開支" })
             : ""
       }`,
       live: { status: statusBar(), list: lists() },
@@ -248,7 +248,7 @@
       sig: "ready",
       shell: '<div data-tg-live="list"></div>',
       live: {
-        list: `${Kit.sectionHead("旅伴筆記", Kit.btn("寫筆記", { size: "sm", icon: "plus", attrs: { "data-tg": "dayNote", "data-note-day": n } }))}${ns.length ? ns.map(noteItem).join("") : '<p class="note">這天還沒有旅伴筆記。</p>'}`,
+        list: `${Kit.sectionHead("旅伴筆記", Kit.btn("筆記", { size: "sm", icon: "plus", attrs: { "data-tg": "dayNote", "data-note-day": n, "aria-label": "寫筆記" } }))}${ns.length ? ns.map(noteItem).join("") : '<p class="note">這天還沒有旅伴筆記。</p>'}`,
       },
     };
   }

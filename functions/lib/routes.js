@@ -1,0 +1,135 @@
+// Routes between plan stops: Google Routes, NAVITIME and AI route advice.
+import { HttpsError, onCall } from 'firebase-functions/v2/https';
+import { DEEPSEEK_API_KEY, PLACES_API_KEY, RAPIDAPI_KEY, askDeepSeek, requireMember, useQuota } from './base.js';
+import { langFor } from './places.js';
+
+// Route suggestions between two plan stops (Routes API): public transport, walking or driving, with alternatives
+// summarised for the plan (lines, stations, times, fare). Times are the destination's local time.
+const ZONES = { JP: 'Asia/Tokyo', KR: 'Asia/Seoul', TW: 'Asia/Taipei', HK: 'Asia/Hong_Kong', MO: 'Asia/Macau', CN: 'Asia/Shanghai', TH: 'Asia/Bangkok', SG: 'Asia/Singapore', MY: 'Asia/Kuala_Lumpur', VN: 'Asia/Ho_Chi_Minh', PH: 'Asia/Manila', ID: 'Asia/Jakarta', GB: 'Europe/London', FR: 'Europe/Paris', DE: 'Europe/Berlin', IT: 'Europe/Rome', ES: 'Europe/Madrid', NL: 'Europe/Amsterdam', CH: 'Europe/Zurich', US: 'America/New_York', CA: 'America/Toronto', AU: 'Australia/Sydney', NZ: 'Pacific/Auckland' };
+// The UTC instant of a wall-clock time ('YYYY-MM-DDTHH:mm') in a time zone.
+function zonedToUtc(local, zone) {
+ const guess = Date.parse(local + ':00Z');
+ const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).formatToParts(new Date(guess)).map(x => [x.type, x.value]));
+ return new Date(guess - (Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:00Z`) - guess));
+}
+const point = v => v && Number.isFinite(v.lat) && Number.isFinite(v.lng) && Math.abs(v.lat) <= 90 && Math.abs(v.lng) <= 180
+ ? { location: { latLng: { latitude: v.lat, longitude: v.lng } } }
+ : typeof v?.address === 'string' && v.address.trim() ? { address: v.address.trim().slice(0, 200) } : null;
+export const mins = d => Math.max(0, Math.round(parseInt(d || '0', 10) / 60));
+const ROUTE_FIELDS = ['duration', 'distanceMeters', 'travelAdvisory.transitFare', 'legs.steps.travelMode', 'legs.steps.staticDuration', 'legs.steps.distanceMeters', 'legs.steps.transitDetails'].map(f => 'routes.' + f).join(',');
+
+// Japan's public transport with timetables (Google offers none for Japan): NAVITIME Route via RapidAPI (free plan,
+// 500 requests a month; each companion at most DAILY.navi a day). when: local 'YYYY-MM-DDTHH:mm'. Options in the
+// shape of suggestRoutes (steps with lines, stations and times); fare = ticket + unreserved express fee.
+// The marketplace plan has no train timetables either (NAVITIME sells those separately, not on RapidAPI): times come
+// from average running times, so each step says approx and has no train number.
+// The marketplace plan has trains only (local buses need a separate contract), so routes that are mostly walking —
+// where a bus is likely the way — are dropped and the AI (which knows the buses) is asked instead.
+const NAVI_VEHICLE = { superexpress_train: 'HIGH_SPEED_TRAIN', bus: 'BUS', highway_bus: 'INTERCITY_BUS', ferry: 'FERRY' };
+export async function naviRoutes(uid, a, b, when, limit = 3) {
+ if (![a?.lat, a?.lng, b?.lat, b?.lng].every(Number.isFinite) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when)) return null;
+ await useQuota(uid, 'navi');
+ const q = new URLSearchParams({ start: `${a.lat},${a.lng}`, goal: `${b.lat},${b.lng}`, start_time: `${when}:00`, datum: 'wgs84', coord_unit: 'degree', limit: String(limit) });
+ const res = await fetch(`https://navitime-route-totalnavi.p.rapidapi.com/route_transit?${q}`, { headers: { 'X-RapidAPI-Key': RAPIDAPI_KEY.value().trim(), 'X-RapidAPI-Host': 'navitime-route-totalnavi.p.rapidapi.com' }, signal: AbortSignal.timeout(20_000) }).catch(() => null);
+ if (!res?.ok) {
+  console.error('NAVITIME failed', res?.status, res ? (await res.text()).slice(0, 300) : '');
+  return null;
+ }
+ const station = x => String(x?.name || '').replace(/（[^）]*[都道府県]）$/, '').slice(0, 60);
+ return ((await res.json()).items || []).map(it => {
+  const secs = it.sections || [], steps = [];
+  secs.forEach((s, i) => {
+   if (s.type !== 'move') return;
+   const minutes = Number(s.time) || 0, last = steps.at(-1);
+   if (s.move === 'walk') {
+    if (last?.mode === 'WALK') { last.minutes += minutes; last.meters += Number(s.distance) || 0; } else steps.push({ mode: 'WALK', minutes, meters: Number(s.distance) || 0 });
+    return;
+   }
+   steps.push({ mode: 'TRANSIT', vehicle: NAVI_VEHICLE[s.move] || (/train/.test(s.move) ? 'HEAVY_RAIL' : ''), line: String(s.line_name || s.transport?.name || '').slice(0, 60), headsign: '', from: station(secs[i - 1]), to: station(secs[i + 1]), stops: 0, depart: String(s.from_time || '').slice(11, 16), arrive: String(s.to_time || '').slice(11, 16), minutes, approx: !(s.transport?.links || []).some(l => String(l.is_timetable) === 'true') });
+  });
+  const f = it.summary?.move?.fare || {}, amount = (Number(f.unit_48 ?? f.unit_0) || 0) + (Number(f.unit_1) || 0);
+  return { minutes: Number(it.summary?.move?.time) || 0, meters: Number(it.summary?.move?.distance) || 0, fare: amount ? { currency: 'JPY', amount } : null, steps: steps.filter(x => x.mode === 'TRANSIT' || x.minutes > 0) };
+ }).filter(o => o.steps.some(x => x.mode === 'TRANSIT') && o.steps.reduce((t, x) => t + (x.mode === 'WALK' ? x.minutes : 0), 0) <= 15);
+}
+
+export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY, RAPIDAPI_KEY], memory: '256MiB', timeoutSeconds: 40, maxInstances: 3 }, async req => {
+ await requireMember(req);
+ const d = req.data || {}, origin = point(d.origin), destination = point(d.destination);
+ if (!origin || !destination) throw new HttpsError('invalid-argument', '起點或終點沒有位置資料。');
+ const mode = ['TRANSIT', 'WALK', 'DRIVE'].includes(d.mode) ? d.mode : 'TRANSIT';
+ const country = typeof d.country === 'string' && /^[A-Z]{2}$/.test(d.country) ? d.country : '';
+ const zone = ZONES[country] || 'UTC';
+ // Japan by public transport: NAVITIME timetables (falls through to Google, which has none, if NAVITIME fails)
+ if (mode === 'TRANSIT' && country === 'JP' && d.origin?.lat != null && d.destination?.lat != null) {
+  const options = await naviRoutes(req.auth.uid, d.origin, d.destination, String(d.time || ''), 4).catch(e => (console.error('navi', e?.message), null));
+  if (options?.length) return { options, estimated: false, source: 'navitime' };
+ }
+ await useQuota(req.auth.uid, 'maps');
+ // Timetables only reach a few weeks ahead: for a past or far-off date, use the same weekday and time next week.
+ let when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.time || '') ? zonedToUtc(d.time, zone) : null, estimated = false;
+ if (when && (when < Date.now() + 10 * 60e3 || when > Date.now() + 60 * 864e5)) {
+  const days = Math.ceil((Date.now() + 864e5 - when) / (7 * 864e5)) * 7;
+  when = new Date(when.getTime() + days * 864e5); estimated = true;
+ }
+ const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': PLACES_API_KEY.value().trim(), 'X-Goog-FieldMask': ROUTE_FIELDS },
+  body: JSON.stringify({ origin, destination, travelMode: mode, computeAlternativeRoutes: mode !== 'WALK', languageCode: langFor(country), units: 'METRIC', ...(country ? { regionCode: country } : {}), ...(mode === 'TRANSIT' && when ? { departureTime: when.toISOString() } : {}) }),
+  signal: AbortSignal.timeout(20_000),
+ });
+ if (!res.ok) { console.error('Routes request failed', res.status, (await res.text()).slice(0, 500)); throw new HttpsError('unavailable', '未能查詢路線，請稍後再試。'); }
+ const routes = (await res.json()).routes || [];
+ const clock = t => t ? new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(t)) : '';
+ const options = routes.slice(0, 6).map(r => {
+  const leg = r.legs?.[0] || {}, steps = [];
+  for (const s of leg.steps || []) {
+   if (s.travelMode === 'TRANSIT' && s.transitDetails) {
+    const t = s.transitDetails, line = t.transitLine || {}, sd = t.stopDetails || {};
+    steps.push({ mode: 'TRANSIT', vehicle: line.vehicle?.type || '', line: (line.nameShort || line.name || line.vehicle?.name?.text || '').slice(0, 60), headsign: (t.headsign || '').slice(0, 60), from: (sd.departureStop?.name || '').slice(0, 60), to: (sd.arrivalStop?.name || '').slice(0, 60), stops: t.stopCount || 0, depart: clock(sd.departureTime), arrive: clock(sd.arrivalTime), minutes: mins(s.staticDuration) });
+   } else {
+    const m = mins(s.staticDuration), last = steps.at(-1);
+    if (last && last.mode === s.travelMode) { last.minutes += m; last.meters += s.distanceMeters || 0; } else steps.push({ mode: s.travelMode || mode, minutes: m, meters: s.distanceMeters || 0 });
+   }
+  }
+  const fare = r.travelAdvisory?.transitFare;
+  return { minutes: mins(r.duration), meters: r.distanceMeters || 0, fare: fare?.currencyCode ? { currency: fare.currencyCode, amount: Number(fare.units || 0) + (fare.nanos || 0) / 1e9 } : null, steps: steps.filter(s => s.mode === 'TRANSIT' || s.minutes > 0) };
+ });
+ // Alternatives that differ only in departure time are the same way to go: keep the first of each.
+ const seen = new Set(), unique = options.filter(o => { const k = o.steps.map(x => x.mode === 'TRANSIT' ? `${x.line}|${x.from}|${x.to}` : x.mode).join('>'); return !seen.has(k) && seen.add(k); });
+ return { options: unique.slice(0, 4), estimated, when: when ? when.toISOString() : null };
+});
+
+// AI route advice (DeepSeek) for a plan link, mainly where Google offers no public transport data (Japan).
+// Returns options in the same shape as suggestRoutes; times and fares are the model's estimates.
+export const placeText = p => [p?.name, p?.address, Number.isFinite(p?.lat) && Number.isFinite(p?.lng) ? `(${p.lat.toFixed(5)}, ${p.lng.toFixed(5)})` : ''].filter(Boolean).join(' ').slice(0, 300);
+export const aiRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 120, maxInstances: 3 }, async req => {
+ await requireMember(req);
+ const d = req.data || {}, from = placeText(d.origin), to = placeText(d.destination);
+ if (!from || !to) throw new HttpsError('invalid-argument', '起點或終點沒有資料。');
+ await useQuota(req.auth.uid, 'ai');
+ const where = String(d.destination?.region || d.place || '').slice(0, 80), when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.time || '') ? d.time.replace('T', ' ') : '';
+ const cur = typeof d.currency === 'string' && /^[A-Z]{3}$/.test(d.currency) ? d.currency : 'JPY';
+ const prompt = `You are a local transport expert helping Hong Kong travellers${where ? ` in ${where}` : ''}.
+Suggest the practical ways to get from A to B${when ? ` leaving around ${when} local time` : ''}.
+A: ${from}
+B: ${to}
+Reply with JSON only:
+{"options": [{"title": string, "minutes": number, "fare": number or null, "confidence": "high" | "medium" | "low", "steps": [{"mode": "WALK" | "TRANSIT" | "TAXI" | "DRIVE", "vehicle": "SUBWAY" | "HEAVY_RAIL" | "HIGH_SPEED_TRAIN" | "BUS" | "TRAM" | "MONORAIL" | "FERRY" | "" , "line": string, "from": string, "to": string, "minutes": number}], "note": string}], "advice": string}
+- Up to 4 options, best first: e.g. fastest, cheapest, fewest transfers, taxi if sensible. Only one option if there is clearly one sensible way (e.g. a short walk).
+- Use real line, station and stop names as written on local signs (Japanese in Japan, Korean in Korea); do not invent lines or stations. If unsure of a detail, say so in note.
+- minutes: door-to-door total including walking and typical waiting; steps' minutes add up roughly to it. Walking steps have empty line/from/to.
+- confidence: high only if you know these exact lines and stations run between A and B; low if the route, times or fare are guesses.
+- fare: per adult in ${cur} (IC card fare where it applies), null if unknown.
+- title, note and advice in Traditional Chinese as used in Hong Kong, short. note: what to watch out for (exit to use, transfer, last train, crowding). advice: one or two sentences comparing the options.`;
+ let r;
+ try { r = await askDeepSeek(prompt, []); } catch (e) { console.error('aiRoutes', e?.message); throw new HttpsError('unavailable', 'AI 暫時未能分析路線，請稍後再試。'); }
+ const num = (v, max) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? Math.round(v) : 0);
+ const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ const options = (Array.isArray(r?.options) ? r.options : []).slice(0, 4).map(o => ({
+  title: text(o.title, 40), minutes: num(o.minutes, 1440), note: text(o.note, 200),
+  confidence: ['high', 'medium', 'low'].includes(o.confidence) ? o.confidence : 'low',
+  fare: typeof o.fare === 'number' && o.fare > 0 && o.fare < 1e6 ? { currency: cur, amount: Math.round(o.fare * 100) / 100 } : null,
+  steps: (Array.isArray(o.steps) ? o.steps : []).slice(0, 10).map(s => ({ mode: ['WALK', 'TRANSIT', 'TAXI', 'DRIVE'].includes(s.mode) ? s.mode : 'TRANSIT', vehicle: text(s.vehicle, 30), line: text(s.line, 60), from: text(s.from, 60), to: text(s.to, 60), minutes: num(s.minutes, 1440) })),
+ })).filter(o => o.steps.length);
+ return { options, advice: text(r?.advice, 300) };
+});

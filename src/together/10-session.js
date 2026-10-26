@@ -54,20 +54,7 @@
     unsub.forEach((u) => u());
     unsub = [];
     jobs = [];
-    Object.assign(state, {
-      notes: [],
-      expenses: [],
-      checklist: [],
-      members: [],
-      shopping: [],
-      places: [],
-      planDays: [],
-      hotels: [],
-      flights: [],
-      events: [],
-      placesLoaded: false,
-      fx: null,
-    });
+    Object.assign(state, emptyTrip());
   }
   // Trips this companion belongs to (trips/{id}.members holds lower-case emails); open the last one used.
   async function chooseTrip() {

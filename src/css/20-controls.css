@@ -1,0 +1,94 @@
+/* ---- Buttons (Kit.btn): one size scale and five variants. Toolbars and card actions use outline (the default),
+   in-form helpers (AI 填寫, 自動填寫, 選用這個) secondary, the one main action of a form primary. ---- */
+button{min-height:44px;padding:9px 14px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--card);color:var(--foreground);font-weight:550;cursor:pointer;transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,opacity .15s}
+button:hover{background:var(--accent)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.icon{width:1.15em;height:1.15em;flex:none;vertical-align:-.2em}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:42px;padding:8px 16px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--card);color:var(--foreground);font-size:var(--fs-lg);font-weight:550;line-height:1.25;text-align:center;text-decoration:none;white-space:nowrap;overflow-wrap:normal;box-shadow:var(--shadow-sm);cursor:pointer}
+.btn .icon{width:18px;height:18px}
+.btn:hover{background:var(--accent)}
+.btn[aria-disabled=true]{opacity:.5;cursor:not-allowed}
+.btn-sm{min-height:36px;padding:6px 12px;font-size:var(--fs-md)}
+.btn-sm .icon{width:16px;height:16px}
+.btn-sm .icon:last-child:not(:first-child){width:13px;height:13px;opacity:.6}
+.btn-primary{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground);font-weight:600}
+.btn-primary:hover{background:var(--primary-hover);border-color:var(--primary-hover)}
+.btn-danger{background:var(--destructive);border-color:var(--destructive);color:var(--primary-foreground)}
+.btn-danger:hover{background:var(--destructive-hover);border-color:var(--destructive-hover)}
+.btn-secondary{background:var(--secondary);border-color:transparent;color:var(--secondary-foreground);box-shadow:none}
+.btn-secondary:hover{background:var(--secondary-hover)}
+.btn-ghost{border-color:transparent;background:transparent;box-shadow:none}
+.btn-ghost:hover{background:var(--accent)}
+.btn-icon{width:42px;padding:0}
+.btn-icon.btn-sm{width:36px}
+.btn-icon .icon{width:20px;height:20px}
+.btn-icon.btn-sm .icon{width:18px;height:18px}
+.btn-block{display:flex;width:100%}
+/* destructive actions (delete / discard / remove); quiet ghost ones turn red only on hover */
+:is([data-tg-del],[data-hotel-del],[data-flight-del],[data-event-del],[data-stop-delete],[data-place-delete],[data-draft-drop],[data-trip-remove],[data-branch-del],[data-tg="itemDel"]):not(.btn-ghost):not(.menu-item){color:var(--destructive);border-color:var(--destructive-border);background:var(--card)}
+:is([data-tg-del],[data-hotel-del],[data-flight-del],[data-event-del],[data-stop-delete],[data-place-delete],[data-draft-drop],[data-trip-remove],[data-branch-del],[data-tg="itemDel"]):not(.btn-ghost):not(.menu-item):hover{background:var(--destructive-soft)}
+.btn-ghost:is([data-tg-del],[data-branch-del],[data-tg="itemDel"],[data-doc-del]){color:var(--muted-foreground)}
+.btn-ghost:is([data-tg-del],[data-branch-del],[data-tg="itemDel"],[data-doc-del]):hover{color:var(--destructive);background:var(--destructive-soft)}
+/* text-like buttons: a shopping item's name in a sentence */
+.buy-item{display:inline;min-height:0;padding:0;border:0;background:none;box-shadow:none;color:inherit;font:inherit;text-decoration:underline;text-decoration-color:var(--input);text-underline-offset:3px;cursor:pointer}
+.buy-item:hover{background:none;text-decoration-color:var(--primary)}
+
+/* ---- Chips (Kit.chips): filters and toggles; .tabs makes them a segmented control ---- */
+.chips{display:flex;gap:6px;overflow-x:auto;padding:4px 0;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{display:inline-flex;align-items:center;gap:6px;flex:none;min-height:36px;padding:6px 14px;border:1px solid var(--border);border-radius:999px;background:var(--card);color:var(--foreground);font-size:var(--fs-md);font-weight:550;white-space:nowrap;box-shadow:none}
+.chip .icon{width:16px;height:16px}
+.chip:hover{background:var(--accent)}
+.chip.active{background:var(--primary);border-color:var(--primary);color:var(--primary-foreground)}
+.chips.wrap,.nearby-panel .chips,.notebook-controls .chips,#discoverForm .chips{flex-wrap:wrap;overflow:visible}
+.chips.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;margin:0 0 14px;padding:4px;border-radius:var(--r-lg);background:var(--muted-bg);overflow:visible}
+.tabs .chip{justify-content:center;border:0;background:transparent;color:var(--muted-foreground)}
+.tabs .chip.active{background:var(--card);color:var(--foreground);box-shadow:var(--shadow)}
+
+/* ---- Inputs ---- */
+input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=hidden]),select,textarea{min-height:42px;border:1px solid var(--input);border-radius:var(--r-md);background:var(--card);color:var(--foreground);box-shadow:var(--shadow-sm);transition:border-color .15s,box-shadow .15s}
+input:not([type=checkbox]):not([type=radio]):focus-visible,select:focus-visible,textarea:focus-visible{border-color:var(--ring)}
+input[type=checkbox],input[type=radio]{accent-color:var(--primary)}
+label{font-weight:500}
+fieldset{border:1px solid var(--border);border-radius:var(--r-lg)}
+legend{padding:0 6px;font-size:var(--fs-md);color:var(--muted-foreground)}
+.search{flex:1;min-width:0;padding:12px 14px}
+.searchrow{display:flex;gap:8px}
+.searchrow select{max-width:45%;padding:8px}
+.searchrow>.field,.searchrow .field{flex:1 1 auto}
+@media(max-width:760px){
+  .searchrow{flex-direction:column}
+  .searchrow select{width:100%;max-width:none;min-height:44px;font-size:var(--fs-md)}
+}
+/* × clear button inside text fields (kit.js wraps each field); hidden while the field is empty */
+.field{position:relative;display:block;min-width:0}
+.field>input,.field>textarea{width:100%;padding-right:40px}
+.field-clear{position:absolute;top:50%;right:4px;transform:translateY(-50%);display:grid;place-items:center;width:32px;height:32px;min-height:0;padding:0;border:0;border-radius:50%;background:transparent;box-shadow:none;color:var(--muted-foreground)}
+.field-area>.field-clear{top:6px;transform:none}
+.field-clear .icon{width:16px;height:16px}
+.field-clear:hover{background:var(--accent);color:var(--foreground)}
+.field:has(>:placeholder-shown)>.field-clear{display:none}
+.field>input[type=number]{-moz-appearance:textfield}
+.field>input[type=number]::-webkit-inner-spin-button{display:none}
+
+/* ---- Forms (sheets) ---- */
+.tg-form{display:grid;gap:12px;margin:14px 0}
+.tg-form[hidden]{display:none}
+.tg-form label{display:grid;gap:5px;font-size:var(--fs-md);font-weight:500;color:var(--foreground)}
+.tg-form input,.tg-form select,.tg-form textarea{width:100%;min-height:44px;padding:10px 12px;font-size:var(--fs-body)}
+.tg-form textarea{resize:vertical}
+.tg-form fieldset{display:flex;flex-wrap:wrap;gap:4px 16px;padding:8px 12px}
+.tg-form legend{padding:0 4px}
+.tg-form .note{margin:-4px 0 0}
+.tg-form .tg-check{display:flex;align-items:center;gap:6px;min-height:44px;color:var(--foreground)}
+.tg-check input{width:20px;height:20px;min-height:0}
+.tg-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:480px){.tg-row{grid-template-columns:1fr}}
+.radio-row{display:flex;flex-wrap:wrap;gap:4px 16px}
+.field-label{display:block;margin:0 0 6px;font-size:var(--fs-md);font-weight:600}
+.form-divider{display:flex;align-items:center;gap:10px;margin:18px 0 4px;font-size:var(--fs-sm);color:var(--muted-foreground)}
+.form-divider:before,.form-divider:after{content:"";flex:1;border-top:1px solid var(--border)}
+/* a form's main button stays visible at the bottom of a sheet */
+#detail form>.btn-block[type=submit]{position:sticky;bottom:0;z-index:4;box-shadow:0 -10px 14px var(--card),0 34px 0 12px var(--card)}
+#detail #discoverForm>.btn-block[type=submit]{position:static;box-shadow:none}
+#detailBody>form{clear:right}

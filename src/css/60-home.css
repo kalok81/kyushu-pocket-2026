@@ -1,0 +1,19 @@
+/* ---- 總覽: the trip in one line, today's stops, shortcuts (the 資料簿 below uses 資料簿's styles) ---- */
+.trip-bar{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--r-lg);background:var(--primary);color:var(--primary-foreground)}
+.trip-line{display:flex;flex:1;flex-wrap:wrap;align-items:baseline;gap:2px 10px;min-width:0}
+.trip-line h1{margin:0;font-family:serif;font-size:var(--fs-xl);font-weight:500;line-height:1.35;overflow-wrap:anywhere}
+.trip-line span{font-size:var(--fs-lg);color:var(--on-primary-muted);font-variant-numeric:tabular-nums}
+.today-row time{flex:none;width:96px;font-size:var(--fs-md);font-weight:600;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.today-row .list-main b{font-size:var(--fs-lg);font-weight:500}
+.list.today-list .note{margin:8px 14px}
+.quicklinks{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-top:14px}
+.quick{display:grid;justify-items:center;gap:6px;min-width:0;padding:14px 6px 12px;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);box-shadow:var(--shadow-sm);color:inherit;text-align:center;text-decoration:none}
+.quick>.icon{width:22px;height:22px;color:var(--primary)}
+.quick span{display:grid;width:100%;min-width:0}
+.quick b{font-size:var(--fs-lg);font-weight:600}
+.quick small{overflow:hidden;font-size:var(--fs-xs);color:var(--muted-foreground);white-space:nowrap;text-overflow:ellipsis}
+@media(max-width:360px){
+  .quicklinks{gap:6px}
+  .quick{padding:12px 4px 10px}
+  .quick b{font-size:var(--fs-md)}
+}

@@ -10,13 +10,13 @@
 - `src/app/*.js` → `dist/app.js`：旅程頁面（總覽、行程、探索、附近、住宿、機票、活動、資料簿）。
 - `src/together/*.js` → `dist/together.js`：登入、選擇旅程、Firestore 同步，以及共用、購物、我的旅程頁面。
 - 每組檔案按功能分開（檔名前的數字是合併次序），由 `node scripts/build.mjs` 合併成 `dist/` 的同名檔案；同一組檔案共用變數，毋須模組或打包工具。**修改 `src/` 後要執行 build**，`scripts/validate.mjs` 會檢查 `dist/` 是否最新。
-- `dist/style.css`：唯一的樣式檔：頂部的顏色、圓角及陰影變數，基本元素，`Kit` 元件（按鈕、標籤、選單、底部視窗、頁頭等），然後是各頁版面。改顏色或圓角只需改頂部的變數。
+- `src/css/*.css` → `dist/style.css`：`00-tokens`（所有顏色、8 級字體大小、4 級圓角、陰影；斷點 360／480／760／900px）、`10-base`、`20-controls`（按鈕、篩選標籤、輸入欄、表格）、`30-surfaces`（卡片、列表、展開區、標籤、空白提示、頁頭）、`40-overlays`（底部視窗、⋯ 選單、浮動鍵、提示）、`50-shell`（頂部列及導航），然後每頁一個檔案（`60-home` 至 `67-trips-notebook`、`90-print`）。顏色、字體大小及圓角只用 `00-tokens` 的變數，不要在其他檔案寫數值。
 - `dist/ui.js`：確認、輸入及提示視窗（SweetAlert2，網頁載入後才在閒置時下載，載入失敗時改用瀏覽器內置視窗）。
 - `dist/split.js`：分帳計算（各貨幣分開，或按匯率合併成自己的貨幣）。
 - `dist/weather.js`：每日天氣（Open-Meteo，免費、毋須 API key，只傳送約 1 公里精度的座標；手機快取 3 小時）。
 - `dist/map-picker.js`：附近頁的地圖選點及行程頁「🗺 當天路線」。`dist/nearby.js`：距離計算。
 - `dist/vendor/`：Firebase、heic2any、Leaflet、SweetAlert2 的瀏覽器版本。
-- `functions/`：Cloud Functions（見下）。`firestore.rules`、`storage.rules`：權限規則。
+- `functions/`：Cloud Functions（見下）；`index.js` 只匯出各函數，程式按功能放在 `functions/lib/`（`base` 配額及 DeepSeek、`jobs` 背景工作、`products` 購物、`places` 地圖、`trips`、`routes`、`discover`、`planday`、`translate`）。`firestore.rules`、`storage.rules`：權限規則。
 - `scripts/accounts.mjs`：管理旅伴帳號；`scripts/validate.mjs`：發佈前檢查；`tests/`：自動測試。
 
 ### 介面元件（`Kit`）
@@ -34,6 +34,13 @@
 | `Kit.open(html)`、`Kit.sheetHead(標題)` | 底部彈出視窗（手機）／對話框（電腦），新增及修改表格都在這裡 |
 | `Kit.snack(文字, { action: "復原" })` | 底部提示列；刪除後即時消失，按「復原」可取回，提示列關閉後才真正刪除 |
 | `Kit.empty(標題, 說明)` | 沒有資料時的提示 |
+| `Kit.card({ top, title, body, links })` | 卡片：頂行（日期或標籤，右邊「⋯」）、標題、內容、底部按鈕列；所有卡片標題同一大小 |
+| `Kit.row({ lead, title, sub, trail, href, attrs })` | 列表行，放在 `<div class="list">` 內（`list plain` 沒有外框）：☰ 選單、每晚住宿、揀日子、今天行程 |
+| `Kit.fold(標題, 內容)` | 原地展開的段落（修改旅程資料、更多資料、匯率），同一個箭咀 |
+| `Kit.date(日期)`、`Kit.dateRange(開始, 結束)` | 所有日期同一格式：`10/29（四）`；`{ year: true }` 加年份，`{ weekday: false }` 不要星期 |
+| `Kit.fnError`、`Kit.isMapsLink`、`Kit.esc` | Cloud Function 錯誤訊息、Google 地圖連結判斷、HTML 轉義 |
+
+規則：浮動鍵寫「＋名詞」（＋地點、＋筆記、＋住宿…，`aria-label` 寫完整動作）；頁頂及工具列按鈕、卡片內按鈕用 `outline`（預設），表格內的輔助按鈕（自動填寫、AI 填寫、選用這個）用 `secondary`，每個表格只有一個 `primary`。
 
 版面：頂部列（旅程名稱、搜尋資料簿、☰ 選單）、底部 5 個分頁（總覽、行程、探索、購物、共用；電腦版在頂部）。住宿、機票、活動、附近、資料簿、我的旅程、分享及登出在 ☰ 選單。
 

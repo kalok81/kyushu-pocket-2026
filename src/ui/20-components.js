@@ -23,11 +23,27 @@
       .join("")}</div>`;
   // Page title: short and functional; aside holds the page's own small actions.
   const pageHead = (title, o = {}) =>
-    `<header class="page-head"><div><h1>${title}</h1>${o.sub ? `<p>${o.sub}</p>` : ""}</div>${o.aside || ""}</header>`;
+    `<header class="page-head"><div><h1>${title}</h1>${o.sub ? `<p>${o.sub}</p>` : ""}</div>${o.aside ? `<div class="page-head-aside">${o.aside}</div>` : ""}</header>`;
   const sectionHead = (title, aside = "") => `<div class="sectionhead"><h2>${title}</h2>${aside}</div>`;
   const empty = (title, text = "", action = "") =>
     `<div class="empty"><h2>${title}</h2>${text ? `<p>${text}</p>` : ""}${action}</div>`;
   const badge = (label, cls = "") => `<span class="badge${cls ? " " + cls : ""}">${label}</span>`;
+  // Card: the one surface for list items (住宿, 活動, 資料簿…). top: the small line above the title (date, badges, ⋯ menu);
+  // title and body are HTML; links: the row of small buttons at the bottom.
+  const card = (o = {}) =>
+    `<article class="card${o.cls ? " " + o.cls : ""}"${attrs(o.attrs)}>${o.top ? `<div class="card-top">${o.top}</div>` : ""}${o.title ? `<h3>${o.title}</h3>` : ""}${o.body || ""}${o.links ? `<div class="links">${o.links}</div>` : ""}</article>`;
+  // List row (inside a .list): lead (icon or D1), title and sub line, trail (chevron, button). href makes it a link,
+  // otherwise a button when attrs are given, else a plain row.
+  function row(o = {}) {
+    const inner = `${o.lead ?? ""}<span class="list-main"><b>${o.title}</b>${o.sub ? `<small>${o.sub}</small>` : ""}</span>${o.trail ?? ""}`,
+      cls = `list-row${o.cls ? " " + o.cls : ""}`;
+    if (o.href) return `<a class="${cls}" href="${esc(o.href)}"${attrs(o.attrs)}>${inner}</a>`;
+    if (o.attrs) return `<button type="button" class="${cls}"${attrs(o.attrs)}>${inner}</button>`;
+    return `<div class="${cls}">${inner}</div>`;
+  }
+  // Fold: a section that opens in place (更多資料, 修改旅程資料…), the same chevron everywhere.
+  const fold = (summary, body, o = {}) =>
+    `<details class="fold${o.cls ? " " + o.cls : ""}"${o.open ? " open" : ""}${attrs(o.attrs)}><summary>${summary}</summary>${body}</details>`;
   // "⋯" menu for an item's less frequent actions (edit, delete…). items: {label, icon, attrs, href, danger}.
   function menu(items, o = {}) {
     const list = items.filter(Boolean);

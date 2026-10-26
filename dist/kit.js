@@ -7,6 +7,17 @@ window.Kit = (() => {
   const $ = (s) => document.querySelector(s);
   const esc = (s) =>
     String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  // Message for a failed Cloud Function call: the function's own (Chinese) message, a clear one when the App Check
+  // security check failed (the SDK then waits a day before retrying), else the fallback.
+  const fnError = (e, fallback) =>
+    e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
+      ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
+      : // the function's own (Chinese) message; a bare SDK code such as "internal" means the server could not be reached
+        String(e?.code || "").startsWith("functions/") && e.message && !/^[a-z-]+$/.test(e.message)
+        ? e.message.replace(/\s*\[\d+\]$/, "")
+        : `${fallback}（伺服器未能處理請求）`;
+  // A Google Maps link (share links and google.*/maps pages)
+  const isMapsLink = (t) => /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)\S*$/i.test(String(t ?? "").trim());
   // {"data-x": 1, hidden: true, title: null} → ' data-x="1" hidden' (null, undefined and false are left out).
   const attrs = (o = {}) =>
     Object.entries(o)
@@ -68,6 +79,20 @@ window.Kit = (() => {
   // An icon as inline SVG; decorative unless a label is given.
   const icon = (name, label = "") =>
     `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"${label ? ` role="img" aria-label="${esc(label)}"` : ' aria-hidden="true"'}>${ICONS[name] || ""}</svg>`;
+  // ---- Dates: one format on every page — 10/29（四）, with the year only when asked (year: true) ----
+  const WEEK = "日一二三四五六",
+    ymd = (s) => {
+      const m = String(s ?? "").match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+      return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+    };
+  // "2026-10-29", "2026/10/29" or "2026-10-29T08:15" → "10/29（四）"; weekday: false leaves out （四）
+  function date(s, o = {}) {
+    const p = ymd(s);
+    if (!p) return String(s ?? "");
+    const [y, m, d] = p;
+    return `${o.year ? `${y}/` : ""}${m}/${d}${o.weekday === false ? "" : `（${WEEK[new Date(Date.UTC(y, m - 1, d)).getUTCDay()]}）`}`;
+  }
+  const dateRange = (a, b, o = {}) => (!b || b === a ? date(a, o) : `${date(a, o)} – ${date(b, o)}`);
   // ---- Components. Labels are HTML: escape user text with esc() before passing it in. ----
   // Button or link. variant: primary (one main action per page or form), secondary (soft), outline (default),
   // ghost (no border), danger. size "sm" for actions inside cards. href makes a link; external opens a new tab.
@@ -93,11 +118,27 @@ window.Kit = (() => {
       .join("")}</div>`;
   // Page title: short and functional; aside holds the page's own small actions.
   const pageHead = (title, o = {}) =>
-    `<header class="page-head"><div><h1>${title}</h1>${o.sub ? `<p>${o.sub}</p>` : ""}</div>${o.aside || ""}</header>`;
+    `<header class="page-head"><div><h1>${title}</h1>${o.sub ? `<p>${o.sub}</p>` : ""}</div>${o.aside ? `<div class="page-head-aside">${o.aside}</div>` : ""}</header>`;
   const sectionHead = (title, aside = "") => `<div class="sectionhead"><h2>${title}</h2>${aside}</div>`;
   const empty = (title, text = "", action = "") =>
     `<div class="empty"><h2>${title}</h2>${text ? `<p>${text}</p>` : ""}${action}</div>`;
   const badge = (label, cls = "") => `<span class="badge${cls ? " " + cls : ""}">${label}</span>`;
+  // Card: the one surface for list items (住宿, 活動, 資料簿…). top: the small line above the title (date, badges, ⋯ menu);
+  // title and body are HTML; links: the row of small buttons at the bottom.
+  const card = (o = {}) =>
+    `<article class="card${o.cls ? " " + o.cls : ""}"${attrs(o.attrs)}>${o.top ? `<div class="card-top">${o.top}</div>` : ""}${o.title ? `<h3>${o.title}</h3>` : ""}${o.body || ""}${o.links ? `<div class="links">${o.links}</div>` : ""}</article>`;
+  // List row (inside a .list): lead (icon or D1), title and sub line, trail (chevron, button). href makes it a link,
+  // otherwise a button when attrs are given, else a plain row.
+  function row(o = {}) {
+    const inner = `${o.lead ?? ""}<span class="list-main"><b>${o.title}</b>${o.sub ? `<small>${o.sub}</small>` : ""}</span>${o.trail ?? ""}`,
+      cls = `list-row${o.cls ? " " + o.cls : ""}`;
+    if (o.href) return `<a class="${cls}" href="${esc(o.href)}"${attrs(o.attrs)}>${inner}</a>`;
+    if (o.attrs) return `<button type="button" class="${cls}"${attrs(o.attrs)}>${inner}</button>`;
+    return `<div class="${cls}">${inner}</div>`;
+  }
+  // Fold: a section that opens in place (更多資料, 修改旅程資料…), the same chevron everywhere.
+  const fold = (summary, body, o = {}) =>
+    `<details class="fold${o.cls ? " " + o.cls : ""}"${o.open ? " open" : ""}${attrs(o.attrs)}><summary>${summary}</summary>${body}</details>`;
   // "⋯" menu for an item's less frequent actions (edit, delete…). items: {label, icon, attrs, href, danger}.
   function menu(items, o = {}) {
     const list = items.filter(Boolean);
@@ -253,5 +294,5 @@ window.Kit = (() => {
       setTimeout(() => bar.remove(), 400);
     };
   }
-  return Object.freeze({ esc, attrs, icon, btn, chips, pageHead, sectionHead, empty, badge, menu, fab, sheetHead, open, close, closeMenus, snack, progress, busy });
+  return Object.freeze({ esc, attrs, fnError, isMapsLink, icon, btn, chips, pageHead, sectionHead, empty, badge, card, row, fold, date, dateRange, menu, fab, sheetHead, open, close, closeMenus, snack, progress, busy });
 })();

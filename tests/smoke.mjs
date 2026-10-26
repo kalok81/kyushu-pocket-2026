@@ -172,7 +172,7 @@ try {
   await page.click('[data-cat=全部]');
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
   assert.match(await page.locator('.stopcontent', { hasText: '淺草寺' }).first().innerText(), /要買：御守/);
-  await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=購物清單]'); await page.waitForSelector('[data-pp-spot]');
+  await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=購物]'); await page.waitForSelector('[data-pp-spot]');
   assert.match(await page.locator('#ppList').innerText(), /仲見世通り\s*要買：人形燒/);
   await page.locator('#ppList .pp-row', { hasText: '仲見世通り' }).locator('[data-pp-spot]').click(); await closeSheet();
   await page.waitForFunction(() => [...document.querySelectorAll('.timeline h3')].some(h => h.textContent === '仲見世通り'));
@@ -184,7 +184,7 @@ try {
   for (const want of ['淺草寺', '上野酒店', '蘋果批']) assert.match(text, new RegExp(want), `notebook should list ${want}`);
   assert.equal(await page.locator('#moreNotebook').count(), 0);
   assert.doesNotMatch(await page.locator('#app').innerText(), /資料快照/);
-  await page.click('[data-notebook-type=行程]'); assert.match(await page.locator('#notebookResults').innerText(), /D1 1\/4\/2030 · 10:00/);
+  await page.click('[data-notebook-type=行程]'); assert.match(await page.locator('#notebookResults').innerText(), /D1 4\/1（一） · 10:00/);
   await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detail a[href^="#plan?day="]'); await closeSheet();
   await page.click('[data-notebook-type=購物]'); await page.locator('[data-notebook-record]').first().click(); await page.waitForSelector('#detailBody .shop-item');
   await closeSheet();

@@ -33,7 +33,7 @@
           sub: `D${d.n} ${d.date}${s.time ? ` · ${s.time}` : ""}`,
           source: `第 ${d.n} 天行程`,
           fields: [
-            ["日期", `D${d.n} ${d.date} ${d.weekday}`],
+            ["日期", `D${d.n} ${d.date}`],
             ["時間", s.time],
             ["區域", s.area],
             ["內容", s.detail],
@@ -54,11 +54,11 @@
         title: h.name,
         region: "住宿",
         summary: h.address || "",
-        sub: h.checkIn ? `${h.checkIn} → ${h.checkOut || "?"}` : "日期未定",
+        sub: h.checkIn ? Kit.dateRange(h.checkIn, h.checkOut) : "日期未定",
         source: "住宿",
         fields: [
-          ["入住", h.checkIn],
-          ["退房", h.checkOut],
+          ["入住", Kit.date(h.checkIn)],
+          ["退房", Kit.date(h.checkOut)],
           ["地址", h.address],
           ["備註", h.note],
         ],
@@ -91,14 +91,14 @@
         type: "購物",
         types: ["購物"],
         title: x.name,
-        region: window.Together?.shopCats?.[x.cat] || "購物清單",
+        region: window.Together?.shopCats?.[x.cat] || "購物",
         summary: [x.qty, x.detail, x.place].filter(Boolean).join(" · "),
         sub: x.bought
           ? `✓ 已買${x.boughtBy ? `（${x.boughtBy}）` : ""}`
           : x.price != null && S.currencies[x.currency]
             ? `未買 · ${S.format(S.toMinor(x.price, x.currency), x.currency)}`
             : "未買",
-        source: "購物清單",
+        source: "購物",
         shopId: x.id,
       }),
     );
@@ -151,7 +151,7 @@
               .includes(q)),
       );
     $("#notebookResults").innerHTML =
-      `<div class="resultsbar"><span>找到 ${rs.length} 項${notebookSearch ? " ·「" + esc(notebookSearch) + "」" : ""}</span>${Kit.btn("清除篩選", { variant: "ghost", size: "sm", attrs: { id: "notebookReset" } })}</div><div class="notebook-list">${rs.map((r) => `<article class="notebook-card"><div class="notebook-meta">${Kit.badge(esc(r.type))}<span>${esc(r.region)}</span></div><h2>${esc(r.title)}</h2><p class="notebook-summary">${esc(r.summary)}</p>${r.sub ? `<p class="notebook-sub">${esc(r.sub)}</p>` : ""}<div class="notebook-bottom"><small>${esc(r.source)}</small>${Kit.btn("查看詳情", { variant: "secondary", size: "sm", attrs: { "data-notebook-record": r.id } })}</div></article>`).join("")}</div>${rs.length ? "" : Kit.empty("找不到符合的資料", "試用較短的店名、菜式或日期，或按「清除篩選」。")}`;
+      `<div class="resultsbar"><span>找到 ${rs.length} 項${notebookSearch ? " ·「" + esc(notebookSearch) + "」" : ""}</span>${Kit.btn("清除篩選", { variant: "ghost", size: "sm", attrs: { id: "notebookReset" } })}</div><div class="notebook-list">${rs.map((r) => Kit.card({ cls: "notebook-card", top: `${Kit.badge(esc(r.type))}<span class="card-meta">${esc(r.region)}</span>`, title: esc(r.title), body: `${r.summary ? `<p class="notebook-summary">${esc(r.summary)}</p>` : ""}${r.sub ? `<p class="notebook-sub">${esc(r.sub)}</p>` : ""}<div class="card-foot"><small>${esc(r.source)}</small>${Kit.btn("查看詳情", { size: "sm", attrs: { "data-notebook-record": r.id } })}</div>` })).join("")}</div>${rs.length ? "" : Kit.empty("找不到符合的資料", "試用較短的店名、菜式或日期，或按「清除篩選」。")}`;
   }
   function bindNotebook() {
     notebookResults();

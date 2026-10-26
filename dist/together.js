@@ -14,6 +14,8 @@ window.Together = (() => {
     appId: "1:672657048901:web:d1e2f7dd92389f78f3ea2c",
   };
   const APP_CHECK_KEY = "6Lfpt_otAAAAADBIq06Vcd_4KI5NJtGosFA4ZlTG";
+  // A trip's synced lists, empty (at start and when the trip is left)
+  const emptyTrip = () => ({ notes: [], expenses: [], checklist: [], members: [], shopping: [], places: [], planDays: [], hotels: [], flights: [], events: [], placesLoaded: false, fx: null });
   const state = {
     status: "idle",
     error: "",
@@ -22,17 +24,7 @@ window.Together = (() => {
     noteKind: "note",
     noteFilter: "all",
     day: 1,
-    notes: [],
-    expenses: [],
-    checklist: [],
-    members: [],
-    shopping: [],
-    places: [],
-    planDays: [],
-    hotels: [],
-    flights: [],
-    events: [],
-    placesLoaded: false,
+    ...emptyTrip(),
     shopFilter: "todo",
     shopCat: "all",
     shopSearch: "",
@@ -40,7 +32,6 @@ window.Together = (() => {
     shopView: "list",
     shopEdit: null,
     noteEdit: null,
-    fx: null,
     liveFx: null,
     settleMode: null,
   };
@@ -49,17 +40,8 @@ window.Together = (() => {
   const T = () => window.TripApp,
     S = window.Split,
     $ = (s) => document.querySelector(s);
-  const esc = (s) =>
-    String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  // Message for a failed Cloud Function call: the function's own (Chinese) message, a clear one when the App Check
-  // security check failed (the SDK then waits a day before retrying), else the fallback.
-  const fnError = (e, fallback) =>
-    e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
-      ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
-      : // the function's own (Chinese) message; a bare SDK code such as "internal" means the server could not be reached
-        String(e?.code || "").startsWith("functions/") && e.message && !/^[a-z-]+$/.test(e.message)
-        ? e.message.replace(/\s*\[\d+\]$/, "")
-        : `${fallback}（伺服器未能處理請求）`;
+  const esc = Kit.esc;
+  const fnError = Kit.fnError;
   const toast = (s) => window.UI.toast(s);
   const header = (title, sub = "", aside = "") => Kit.pageHead(title, { sub, aside });
   let fb,
@@ -84,6 +66,13 @@ window.Together = (() => {
         } catch {}
       },
     };
+  // An AI job (receiptJobs): a Cloud Function reads it in the background and writes the result back to it.
+  // Returns the new job's id and the write (callers show their own message when it fails).
+  function queueJob(data) {
+    const { fs } = fb,
+      ref = fs.doc(tcol("receiptJobs"));
+    return { id: ref.id, ref, sent: fs.setDoc(ref, { ...data, status: "pending", by: state.user.uid, byName: me().name, at: Date.now(), createdAt: fs.serverTimestamp() }) };
+  }
   function add(name, data) {
     const { fs, db } = fb,
       u = state.user;
@@ -155,7 +144,7 @@ window.Together = (() => {
   const zhName = (x, text) => (x.zh && String(x.zhFor || "").split("\n")[0] === text ? x.zh : ""),
     zhLine = (z) => (z ? `<span class="zh-name">${esc(z)}</span>` : "");
   // Top row of every list item: badges and author on the left, the item's "⋯" menu on the right.
-  const itemTop = (x, extra, items) => `<div class="item-top">${meta(x, extra)}${Kit.menu(items)}</div>`;
+  const itemTop = (x, extra, items) => `<div class="card-top item-top">${meta(x, extra)}${Kit.menu(items)}</div>`;
   // Menu entry that deletes an item (with undo).
   const del = (name, x) => ({ label: "刪除", icon: "trash", danger: true, attrs: { "data-tg-del": `${name}:${x.id}` } });
   // ---- Loading Firebase, signing in, choosing the trip and listening to its collections ----
@@ -214,20 +203,7 @@ window.Together = (() => {
     unsub.forEach((u) => u());
     unsub = [];
     jobs = [];
-    Object.assign(state, {
-      notes: [],
-      expenses: [],
-      checklist: [],
-      members: [],
-      shopping: [],
-      places: [],
-      planDays: [],
-      hotels: [],
-      flights: [],
-      events: [],
-      placesLoaded: false,
-      fx: null,
-    });
+    Object.assign(state, emptyTrip());
   }
   // Trips this companion belongs to (trips/{id}.members holds lower-case emails); open the last one used.
   async function chooseTrip() {
@@ -410,6 +386,17 @@ window.Together = (() => {
   // ---- Photos: decoding (HEIC too), shrinking, receipt strips and Firebase Storage copies ----
   // Browsers differ: try ImageBitmap (with and without EXIF rotation), then <img>; HEIC that the
   // browser cannot read is converted on the phone with the vendored heic2any (loaded only when needed).
+  // A canvas as base64 JPEG (without the data: prefix)
+  async function canvasB64(c, quality = 0.8) {
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", quality));
+    if (!blob) throw new Error("encode");
+    return new Promise((ok, fail) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(String(fr.result).split(",")[1]);
+      fr.onerror = fail;
+      fr.readAsDataURL(blob);
+    });
+  }
   const isHeic = (f) => /hei[cf]/i.test(f.type || "") || /\.hei[cf]$/i.test(f.name || "");
   const viaImg = (blob) =>
     new Promise((ok, fail) => {
@@ -456,17 +443,7 @@ window.Together = (() => {
     const img = await decodeImage(file),
       w = img.naturalWidth || img.width,
       h = img.naturalHeight || img.height,
-      parts = h / w > 3.2 ? 3 : h / w > 1.6 ? 2 : 1,
-      toB64 = (c) =>
-        new Promise((r) => c.toBlob(r, "image/jpeg", 0.8)).then((b) => {
-          if (!b) throw new Error("encode");
-          return new Promise((ok, fail) => {
-            const fr = new FileReader();
-            fr.onload = () => ok(String(fr.result).split(",")[1]);
-            fr.onerror = fail;
-            fr.readAsDataURL(b);
-          });
-        });
+      parts = h / w > 3.2 ? 3 : h / w > 1.6 ? 2 : 1;
     const strip = h / parts,
       overlap = strip * 0.08,
       out = [];
@@ -479,7 +456,7 @@ window.Together = (() => {
       c.width = Math.round(w * k);
       c.height = Math.round(sh * k);
       c.getContext("2d").drawImage(img, 0, top, w, sh, 0, 0, c.width, c.height);
-      out.push(await toB64(c));
+      out.push(await canvasB64(c));
     }
     img.close?.();
     return out;
@@ -494,15 +471,13 @@ window.Together = (() => {
     c.height = Math.round(h * k);
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
     img.close?.();
-    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", quality));
-    if (!blob) throw new Error("encode");
-    return new Promise((ok, fail) => {
-      const fr = new FileReader();
-      fr.onload = () => ok(String(fr.result).split(",")[1]);
-      fr.onerror = fail;
-      fr.readAsDataURL(blob);
-    });
+    return canvasB64(c, quality);
   }
+  // A photo that could not be read: its name and why
+  const photoError = (f, e) => {
+    toast(`${f.name || "相片"}：${scanError(e)}`);
+    console.error(e);
+  };
   const scanError = (e) =>
     /unsupported|heic|img|encode/.test(e?.message) ? "未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。" : "未能處理這張相片。";
   // Receipt photos are also kept in Firebase Storage (receipts/{uid}/{job}-{n}.jpg, members only): a 2400px copy
@@ -671,19 +646,14 @@ window.Together = (() => {
     const src = group.map((d) => jobs.find((j) => j.id === d.key) || {}),
       hashes = src.flatMap((j) => j.hashes || []).slice(0, 4),
       stored = src.flatMap((j) => j.photos || []);
-    fs.addDoc(tcol("receiptJobs"), {
+    queueJob({
       images,
       hashes,
       file: group
         .map((d) => d.file)
         .join(" + ")
         .slice(0, 120),
-      status: "pending",
-      by: state.user.uid,
-      byName: me().name,
-      at: Date.now(),
-      createdAt: fs.serverTimestamp(),
-    }).then(
+    }).sent.then(
       (ref) => {
         group.forEach((d) => {
           fs.deleteDoc(jobRef(d.key)).catch(() => {});
@@ -705,11 +675,11 @@ window.Together = (() => {
       retry = d.retry ? Kit.btn("重試", { size: "sm", icon: "redo", attrs: { "data-draft-retry": d.key } }) : "",
       drop = Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": d.key } });
     if (d.status !== "done" && d.status !== "fail")
-      return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}${Kit.progress({ seconds: 30, since: d.at })}${d.retry ? `<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>` : ""}</article>`;
+      return `<article class="card tg-item tg-draft" data-draft="${d.key}">${head}${Kit.progress({ seconds: 30, since: d.at })}${d.retry ? `<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>` : ""}</article>`;
     if (d.status === "fail")
-      return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error || "未能讀取。")}</p><div class="links">${retry}${drop}</div></article>`;
+      return `<article class="card tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error || "未能讀取。")}</p><div class="links">${retry}${drop}</div></article>`;
     const warn = draftDup(d, all) || d.warn;
-    return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links">${Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-draft-add": d.key } })}${drop}</div></article>`;
+    return `<article class="card tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links">${Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-draft-add": d.key } })}${drop}</div></article>`;
   }
   function renderDrafts() {
     const box = $("#tgDrafts");
@@ -744,7 +714,7 @@ window.Together = (() => {
     }
   }
   async function queueReceipts(files) {
-    const { fs, db } = fb;
+    const { fs } = fb;
     if (files.length > 10) {
       toast("一次最多 10 張，已取頭 10 張。");
       files = files.slice(0, 10);
@@ -773,17 +743,8 @@ window.Together = (() => {
       try {
         let images = await receiptImages(f);
         if (images.join("").length > 850000) images = [await shrink(f, 1400, 0.7)];
-        const ref = fs.doc(tcol("receiptJobs"));
-        fs.setDoc(ref, {
-          images,
-          hashes: hashes[i] ? [hashes[i]] : [],
-          file: String(f.name || "相片").slice(0, 120),
-          status: "pending",
-          by: state.user.uid,
-          byName: me().name,
-          at: Date.now(),
-          createdAt: fs.serverTimestamp(),
-        }).catch((e) => {
+        const { ref, sent } = queueJob({ images, hashes: hashes[i] ? [hashes[i]] : [], file: String(f.name || "相片").slice(0, 120) });
+        sent.catch((e) => {
           toast("未能上載收據，請確認你仍在旅伴名單。");
           console.error(e);
         });
@@ -793,8 +754,7 @@ window.Together = (() => {
           .then((photos) => fs.updateDoc(ref, { photos }))
           .catch((e) => console.warn("receipt photo upload", e));
       } catch (e) {
-        toast(`${f.name || "相片"}：${scanError(e)}`);
-        console.error(e);
+        photoError(f, e);
       }
     }
     if (n) toast(`已加入 ${n} 張收據，會在背景分析`);
@@ -979,7 +939,7 @@ window.Together = (() => {
     const h = e.currency !== home() && toHome(e);
     // Receipt lines are translated with the title: only while all of them are unchanged.
     const itemsZh = e.zhFor === [e.title, ...(e.items || []).map((i) => i.name)].join("\n") ? e.itemsZh || [] : [];
-    return `<article class="tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}${zhLine(zhName(e, e.title))}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i, k) => `<li><span>${esc(i.name)}${zhLine(itemsZh[k])}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
+    return `<article class="card tg-item">${itemTop(e, `${Kit.badge(esc(dayLabel(e.day)))}<button type="button" class="badge tg-cat${CATS[e.category] ? "" : " none"}" data-exp-cat="${esc(e.id)}" aria-label="更改分類">${CATS[e.category] || "＋ 分類"}</button>`, [del("expenses", e)])}<div class="tg-expense"><h3>${esc(e.title)}${zhLine(zhName(e, e.title))}</h3><b>${esc(S.format(S.toMinor(e.amount, e.currency), e.currency))}${h ? `<small class="tg-conv">≈ ${esc(fmtHome(h))}</small>` : ""}</b></div>${e.items?.length ? `<ul class="tg-lines">${e.items.map((i, k) => `<li><span>${esc(i.name)}${zhLine(itemsZh[k])}</span>${i.amount != null ? `<span>${esc(S.format(S.toMinor(i.amount, e.currency), e.currency))}</span>` : ""}</li>`).join("")}</ul>` : ""}<p class="note">${esc(nameOf(e.paidBy))} 付款 · 分給 ${esc((e.split || []).map(nameOf).join("、"))}</p>${e.receipts?.length ? `<div class="links">${Kit.btn(`收據（${e.receipts.length}）`, { size: "sm", icon: "image", attrs: { "data-receipts": e.id } })}</div>` : ""}</article>`;
   }
   // 搜尋開支: title (and its Chinese), receipt lines, who paid, who shares, category, day and amount.
   function expenseMatches() {
@@ -1010,7 +970,7 @@ window.Together = (() => {
       return `<li><span>1 ${c} = ${r ? +r.toPrecision(4) : "？"} ${h}</span><span class="note">${m ? `手動設定${state.fx?.byName ? `（${esc(state.fx.byName)}）` : ""}` : r ? `自動 · ${new Date(state.liveFx.date).toLocaleDateString("zh-HK", { month: "numeric", day: "numeric" })}` : "未有匯率（需要網絡）"}</span>${Kit.btn("設定", { size: "sm", attrs: { "data-fx-set": c } })}</li>`;
     };
     const rates = curs.length
-      ? `<details class="tg-fx"${state.fxOpen ? " open" : ""}><summary>匯率</summary><ul>${curs.map(rateRow).join("")}</ul><p class="note">自動匯率每日更新；可以改用你們實際兌換的匯率，所有旅伴共用。</p></details>`
+      ? `<details class="fold tg-fx"${state.fxOpen ? " open" : ""}><summary>匯率</summary><ul>${curs.map(rateRow).join("")}</ul><p class="note">自動匯率每日更新；可以改用你們實際兌換的匯率，所有旅伴共用。</p></details>`
       : "";
     const missing = [...new Set(list.map((e) => e.currency))].filter((c) => !rateOf(c));
     if (missing.length)
@@ -1097,16 +1057,16 @@ window.Together = (() => {
     if (!c.until) return "";
     const days = Math.round((Date.parse(c.until) - Date.parse(isoToday())) / 864e5);
     return days < 0
-      ? Kit.badge(`已過期（${esc(c.until)}）`, "coupon-expired")
-      : Kit.badge(`${days ? `還有 ${days} 天` : "今天到期"} · ${esc(c.until)}`, days <= 3 ? "coupon-soon" : "");
+      ? Kit.badge(`已過期（${esc(Kit.date(c.until, { weekday: false }))}）`, "coupon-expired")
+      : Kit.badge(`${days ? `還有 ${days} 天` : "今天到期"} · ${esc(Kit.date(c.until))}`, days <= 3 ? "coupon-soon" : "");
   }
   const noteEditItem = (n) => ({ label: "修改", icon: "edit", attrs: { "data-note-edit": n.id } });
   function noteItem(n) {
     const place = n.placeName ? Kit.badge(esc(n.placeName)) : "",
       day = n.day ? Kit.badge(esc(dayLabel(n.day))) : "";
     if (n.kind === "coupon")
-      return `<article class="tg-item coupon${n.used ? " used" : ""}">${itemTop(n, `${Kit.badge(`${icon("ticket")}優惠券`, "coupon-tag")}${day}${place}`, [noteEditItem(n), del("notes", n)])}<h3>${esc(n.title)}</h3>${n.text ? `<p class="tg-text">${linkify(n.text)}</p>` : ""}${n.code ? `<div class="coupon-code"><span>優惠碼</span><b>${esc(n.code)}</b>${Kit.btn("複製", { size: "sm", icon: "copy", attrs: { "data-copy-code": n.code } })}</div>` : ""}<div class="coupon-due">${couponDue(n)}</div>${notePhotos(n)}<div class="links">${Kit.btn(n.used ? "改回未使用" : "已使用", { size: "sm", variant: n.used ? "outline" : "secondary", icon: n.used ? "undo" : "check", attrs: { "data-coupon-used": n.id } })}${noteLink(n)}</div></article>`;
-    return `<article class="tg-item">${itemTop(n, day + place, [noteEditItem(n), del("notes", n)])}<p class="tg-text">${linkify(n.text)}</p>${notePhotos(n)}${n.url ? `<div class="links">${noteLink(n)}</div>` : ""}</article>`;
+      return `<article class="card tg-item coupon${n.used ? " used" : ""}">${itemTop(n, `${Kit.badge(`${icon("ticket")}優惠券`, "coupon-tag")}${day}${place}`, [noteEditItem(n), del("notes", n)])}<h3>${esc(n.title)}</h3>${n.text ? `<p class="tg-text">${linkify(n.text)}</p>` : ""}${n.code ? `<div class="coupon-code"><span>優惠碼</span><b>${esc(n.code)}</b>${Kit.btn("複製", { size: "sm", icon: "copy", attrs: { "data-copy-code": n.code } })}</div>` : ""}<div class="coupon-due">${couponDue(n)}</div>${notePhotos(n)}<div class="links">${Kit.btn(n.used ? "改回未使用" : "已使用", { size: "sm", variant: n.used ? "outline" : "secondary", icon: n.used ? "undo" : "check", attrs: { "data-coupon-used": n.id } })}${noteLink(n)}</div></article>`;
+    return `<article class="card tg-item">${itemTop(n, day + place, [noteEditItem(n), del("notes", n)])}<p class="tg-text">${linkify(n.text)}</p>${notePhotos(n)}${n.url ? `<div class="links">${noteLink(n)}</div>` : ""}</article>`;
   }
   function syncText() {
     const pending = ["notes", "expenses", "shopping", "checklist"].reduce((t, k) => t + state[k].filter((x) => x.pending).length, 0);
@@ -1167,7 +1127,7 @@ window.Together = (() => {
         (list.length
           ? list.map(noteItem).join("")
           : f === "coupon"
-            ? Kit.empty("還沒有優惠券", "按右下角「新增」，再選「優惠券」，影低優惠券或貼上連結。")
+            ? Kit.empty("還沒有優惠券", "按右下角「＋筆記」，再選「優惠券」，影低優惠券或貼上連結。")
             : Kit.empty("還沒有筆記", "寫下提醒、想吃的東西或任何旅程點滴，可以加相片和連結。"))
       );
     }
@@ -1178,7 +1138,7 @@ window.Together = (() => {
         stats() +
         summary() +
         (!state.expenses.length
-          ? Kit.empty("還沒有開支", "按右下角「記一筆」，或影收據讓 AI 讀出金額。")
+          ? Kit.empty("還沒有開支", "按右下角「＋開支」，或影收據讓 AI 讀出金額。")
           : state.expSearch.trim() && !found.length
             ? Kit.empty(`找不到「${esc(state.expSearch.trim())}」`, "試試其他字，或清除搜尋。")
             : (state.expSearch.trim() ? `<p class="note exp-found">找到 ${found.length} 筆${foundTotal(found)}</p>` : "") + found.map(expenseItem).join(""))
@@ -1196,7 +1156,7 @@ window.Together = (() => {
     const row = (i) => {
       const done = (i.doneBy || []).includes(me),
         others = (i.doneBy || []).filter((u) => u !== me).map(nameOf);
-      return `<li class="check-row${done ? " done" : ""}"><label><input type="checkbox" data-check="${esc(i.id)}"${done ? " checked" : ""}><span>${esc(i.text)}</span></label>${ppl.length > 1 ? `<small>${others.length ? `✓ ${esc(others.join("、"))}` : ""}</small>` : ""}${Kit.btn(`刪除 ${esc(i.text)}`, { icon: "x", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-tg-del": `checklist:${i.id}` } })}</li>`;
+      return `<li class="list-row check-row${done ? " done" : ""}"><label><input type="checkbox" data-check="${esc(i.id)}"${done ? " checked" : ""}><span>${esc(i.text)}</span></label>${ppl.length > 1 ? `<small>${others.length ? `✓ ${esc(others.join("、"))}` : ""}</small>` : ""}${Kit.btn(`刪除 ${esc(i.text)}`, { icon: "x", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-tg-del": `checklist:${i.id}` } })}</li>`;
     };
     return `<div class="check-progress"><b>你已完成 ${mine}／${items.length}</b><div class="tg-progress"><div style="width:${Math.round((mine / items.length) * 100)}%"></div></div></div>${Object.entries(
       CHECK_GROUPS,
@@ -1204,7 +1164,7 @@ window.Together = (() => {
       .map(([g, label]) => {
         const list = items.filter((i) => (CHECK_GROUPS[i.group] ? i.group : "other") === g);
         return list.length
-          ? `<section class="panel check-group"><h3>${label}</h3><ul>${list.map(row).join("")}</ul></section>`
+          ? `<section class="panel check-group"><h3>${label}</h3><ul class="list plain">${list.map(row).join("")}</ul></section>`
           : "";
       })
       .join("")}${Kit.btn("加入未有的建議項目", { size: "sm", variant: "ghost", icon: "plus", attrs: { "data-tg": "checkSuggest" } })}`;
@@ -1309,9 +1269,9 @@ window.Together = (() => {
         { cls: "tabs", label: "共用分頁" },
       )}${state.tab === "expenses" ? `<div id="tgDrafts" class="tg-drafts"></div><div class="searchrow"><input id="expSearch" class="search" type="search" placeholder="搜尋項目、物品、付款人、分類、日子…" aria-label="搜尋開支" value="${esc(state.expSearch)}"></div>` : ""}${state.tab === "checklist" ? forms() : ""}<div class="tg-list" data-tg-live="list"></div>${
         state.tab === "notes"
-          ? Kit.fab("新增", { "data-tg": "newEntry" })
+          ? Kit.fab("筆記", { "data-tg": "newEntry", "aria-label": "新增筆記或優惠券" })
           : state.tab === "expenses"
-            ? Kit.fab("記一筆", { "data-tg": "newEntry" })
+            ? Kit.fab("開支", { "data-tg": "newEntry", "aria-label": "記一筆開支" })
             : ""
       }`,
       live: { status: statusBar(), list: lists() },
@@ -1324,7 +1284,7 @@ window.Together = (() => {
       sig: "ready",
       shell: '<div data-tg-live="list"></div>',
       live: {
-        list: `${Kit.sectionHead("旅伴筆記", Kit.btn("寫筆記", { size: "sm", icon: "plus", attrs: { "data-tg": "dayNote", "data-note-day": n } }))}${ns.length ? ns.map(noteItem).join("") : '<p class="note">這天還沒有旅伴筆記。</p>'}`,
+        list: `${Kit.sectionHead("旅伴筆記", Kit.btn("筆記", { size: "sm", icon: "plus", attrs: { "data-tg": "dayNote", "data-note-day": n, "aria-label": "寫筆記" } }))}${ns.length ? ns.map(noteItem).join("") : '<p class="note">這天還沒有旅伴筆記。</p>'}`,
       },
     };
   }
@@ -1438,7 +1398,7 @@ window.Together = (() => {
     const docs = x.docs || [],
       title = kind === "hotels" ? x.name : `${x.flightNo} ${x.from || ""} → ${x.to || ""}`;
     $("#detailBody").innerHTML =
-      `<div class="eyebrow" data-docs-for="${esc(kind)}:${esc(id)}">文件</div><h2 class="detailtitle">${esc(title)}</h2><p class="note">訂單確認、電子機票或截圖，只限這個旅程的旅伴登入查看。</p><div class="doc-list">${docs.length ? docs.map((d) => `<div class="doc-row" data-doc-path="${esc(d.path)}"><div class="doc-thumb">${d.type === "application/pdf" ? "PDF" : "…"}</div><div><b>${esc(d.name)}</b><small>${esc(d.byName || "")} · ${Math.max(1, Math.round(d.size / 1024))} KB</small></div><a class="btn btn-outline btn-sm" data-doc-open hidden target="_blank" rel="noopener">打開</a>${Kit.btn(`刪除 ${esc(d.name)}`, { icon: "trash", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-doc-del": `${kind}:${id}:${d.path}` } })}</div>`).join("") : Kit.empty("還沒有文件", "可以上載訂單確認、電子機票或截圖。")}</div>${docs.length < DOC_MAX ? `${Kit.btn("上載文件（相片或 PDF）", { variant: "primary", icon: "clip", cls: "btn-block", attrs: { "data-doc-add": true } })}<input type="file" id="docInput" data-target="${esc(kind)}:${esc(id)}" accept="image/*,application/pdf" multiple hidden>` : `<p class="note">每項最多 ${DOC_MAX} 個文件。</p>`}`;
+      `<div class="eyebrow" data-docs-for="${esc(kind)}:${esc(id)}">文件</div><h2 class="detailtitle">${esc(title)}</h2><p class="note">訂單確認、電子機票或截圖，只限這個旅程的旅伴登入查看。</p><div class="list doc-list">${docs.length ? docs.map((d) => `<div class="list-row doc-row" data-doc-path="${esc(d.path)}"><div class="doc-thumb">${d.type === "application/pdf" ? "PDF" : "…"}</div><div><b>${esc(d.name)}</b><small>${esc(d.byName || "")} · ${Math.max(1, Math.round(d.size / 1024))} KB</small></div><a class="btn btn-outline btn-sm" data-doc-open hidden target="_blank" rel="noopener">打開</a>${Kit.btn(`刪除 ${esc(d.name)}`, { icon: "trash", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-doc-del": `${kind}:${id}:${d.path}` } })}</div>`).join("") : Kit.empty("還沒有文件", "可以上載訂單確認、電子機票或截圖。")}</div>${docs.length < DOC_MAX ? `${Kit.btn("上載文件（相片或 PDF）", { variant: "primary", icon: "clip", cls: "btn-block", attrs: { "data-doc-add": true } })}<input type="file" id="docInput" data-target="${esc(kind)}:${esc(id)}" accept="image/*,application/pdf" multiple hidden>` : `<p class="note">每項最多 ${DOC_MAX} 個文件。</p>`}`;
     if (!$("#detail").open) $("#detail").showModal();
     if (!docs.length) return;
     try {
@@ -1549,29 +1509,18 @@ window.Together = (() => {
       toast("一次最多 10 張，已取頭 10 張。");
       files = files.slice(0, 10);
     }
-    const { fs, db } = fb;
     let n = 0;
     for (const f of files) {
       try {
         let image = await shrink(f, 1000, 0.72);
         if (image.length > 380000) image = await shrink(f, 800, 0.65);
-        fs.addDoc(tcol("receiptJobs"), {
-          images: [image],
-          kind: "product",
-          file: String(f.name || "相片").slice(0, 120),
-          status: "pending",
-          by: state.user.uid,
-          byName: me().name,
-          at: Date.now(),
-          createdAt: fs.serverTimestamp(),
-        }).catch((e) => {
+        queueJob({ images: [image], kind: "product", file: String(f.name || "相片").slice(0, 120) }).sent.catch((e) => {
           toast("未能上載相片，請確認你仍在旅伴名單。");
           console.error(e);
         });
         n++;
       } catch (e) {
-        toast(`${f.name || "相片"}：${scanError(e)}`);
-        console.error(e);
+        photoError(f, e);
       }
     }
     if (n) toast(`已加入 ${n} 張物品相片，AI 會在背景辨識並加入清單`);
@@ -1583,8 +1532,7 @@ window.Together = (() => {
       host = new URL(url).hostname;
     } catch {}
     if (!/^https?:\/\//i.test(url) || !host) return toast("請貼上 http:// 或 https:// 開頭的連結。");
-    const { fs } = fb;
-    fs.addDoc(tcol("receiptJobs"), { url: url.slice(0, 500), kind: "product", file: host.slice(0, 120), status: "pending", by: state.user.uid, byName: me().name, at: Date.now(), createdAt: fs.serverTimestamp() }).catch(() => toast("未能送出連結，請確認你仍在旅伴名單。"));
+    queueJob({ url: url.slice(0, 500), kind: "product", file: host.slice(0, 120) }).sent.catch(() => toast("未能送出連結，請確認你仍在旅伴名單。"));
     toast("已送出連結，AI 會在背景讀取並加入清單");
   }
   // An article link that lists several products comes back as choices: tick the ones to buy, then add them together.
@@ -1597,7 +1545,7 @@ window.Together = (() => {
     const r = j.result,
       picks = (articlePicks[j.id] ??= new Set()),
       cur = (c) => (c.price != null ? esc(S.format(S.toMinor(c.price, c.currency), c.currency)) : "");
-    return `<article class="tg-item article-choices" data-draft="${esc(j.id)}"><div class="tg-meta">${Kit.badge(`找到 ${r.choices.length} 件`)}<span>${esc(r.title || j.file)}</span></div><ul class="choice-list">${r.choices
+    return `<article class="card tg-item article-choices" data-draft="${esc(j.id)}"><div class="tg-meta">${Kit.badge(`找到 ${r.choices.length} 件`)}<span>${esc(r.title || j.file)}</span></div><ul class="list choice-list">${r.choices
       .map(
         (c, i) =>
           `<li><label><input type="checkbox" data-article-pick="${esc(j.id)}:${i}"${picks.has(i) ? " checked" : ""}>${c.photo ? `<img src="${photoSrc(c.photo)}" alt="">` : `<span class="choice-ph">${icon("bag")}</span>`}<span><b>${esc(c.name)}</b><small>${[c.qty, cur(c), c.place].filter(Boolean).map(esc).join(" · ")}</small>${c.detail ? `<small>${esc(c.detail)}</small>` : ""}</span></label></li>`,
@@ -1652,7 +1600,7 @@ window.Together = (() => {
         const st = jobState(j),
           fail = st === "fail",
           retry = canRetry(j);
-        return `<article class="tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta">${Kit.badge(fail ? "未能辨識" : STATUS[st])}<span>${esc(j.file)}</span></div>${fail ? `<p class="note">${esc(j.error || "未能辨識。")}</p>` : Kit.progress({ seconds: j.url ? 25 : 20, since: j.at })}${fail || retry ? `<div class="links">${retry ? Kit.btn("重試", { size: "sm", icon: "redo", attrs: { "data-draft-retry": j.id } }) : ""}${Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": j.id } })}</div>` : ""}</article>`;
+        return `<article class="card tg-item tg-draft" data-draft="${esc(j.id)}"><div class="tg-meta">${Kit.badge(fail ? "未能辨識" : STATUS[st])}<span>${esc(j.file)}</span></div>${fail ? `<p class="note">${esc(j.error || "未能辨識。")}</p>` : Kit.progress({ seconds: j.url ? 25 : 20, since: j.at })}${fail || retry ? `<div class="links">${retry ? Kit.btn("重試", { size: "sm", icon: "redo", attrs: { "data-draft-retry": j.id } }) : ""}${Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": j.id } })}</div>` : ""}</article>`;
       })
       .join("")}</div>`;
   }
@@ -1662,6 +1610,7 @@ window.Together = (() => {
   // Shopping categories (shopping/{id}.cat); the product AI picks one, and companions can change it.
   const SHOP_CATS = { drug: "💄 藥妝", food: "🍱 食品", fashion: "👕 衣服鞋袋", home: "🏠 生活用品", stationery: "✏️ 文具", toys: "🧸 玩具精品", electronics: "🔌 電器", other: "📦 其他" };
   const shopCat = (x) => (SHOP_CATS[x.cat] ? x.cat : "other");
+  // ---- Notes and coupons: photos for the note being written, AI fill from a photo or link ----
   // Photos picked for the note or coupon being written (shrunk JPEG, base64), shown under the form until it is sent.
   const NOTE_PHOTO_MAX = 3;
   let notePhotoDraft = [];
@@ -1698,20 +1647,14 @@ window.Together = (() => {
   }
   function requestNoteFill({ images, url }) {
     if (!navigator.onLine) return noteFillStatus("離線中，AI 未能分析，請自行填寫。", false);
-    const { fs } = fb,
-      ref = fs.doc(tcol("receiptJobs"));
-    noteFillJob = ref.id;
-    fs.setDoc(ref, {
+    const job = queueJob({
       ...(images ? { images } : { url: url.slice(0, 500) }),
       kind: "noteFill",
       mode: state.noteKind === "coupon" ? "coupon" : "note",
       file: images ? "筆記相片" : (() => { try { return new URL(url).hostname.slice(0, 120); } catch { return "網頁"; } })(),
-      status: "pending",
-      by: state.user.uid,
-      byName: me().name,
-      at: Date.now(),
-      createdAt: fs.serverTimestamp(),
-    }).catch(() => {
+    });
+    noteFillJob = job.id;
+    job.sent.catch(() => {
       noteFillJob = null;
       noteFillStatus("未能送出給 AI，請自行填寫。", false);
     });
@@ -1753,6 +1696,7 @@ window.Together = (() => {
     $("#detailBody").innerHTML = `${Kit.sheetHead(esc(n.title || String(n.text || "").split("\n")[0].slice(0, 40)), n.kind === "coupon" ? "優惠券" : "筆記")}${n.code ? `<p class="coupon-code big"><b>${esc(n.code)}</b></p>` : ""}<img class="note-photo-full" src="${photoSrc(p)}" alt="">`;
     if (!$("#detail").open) $("#detail").showModal();
   }
+  // ---- 購物: the add / edit sheet and its AI helpers (購買地點 search, AI 填寫) ----
   const shopPreview = () =>
     shopPhoto
       ? `<img src="${photoSrc(shopPhoto)}" alt="物品相片">${Kit.btn("移除相片", { size: "sm", icon: "x", iconOnly: true, cls: "shop-photo-del", attrs: { "data-tg": "shopPhotoClear" } })}`
@@ -1847,7 +1791,7 @@ window.Together = (() => {
     const v = (k) => esc(x?.[k] ?? "");
     return `<form class="tg-form" data-tg-form="shop"><div class="shop-photo" id="shopPreview">${shopPreview()}</div><label>物品<input name="name" maxlength="500" required placeholder="${x ? "物品名稱" : "物品名稱，或貼上產品網址"}" value="${v("name")}"></label><div class="shop-actions">${Kit.btn("相片", { icon: "camera", attrs: { "data-tg": "shopPic" } })}${Kit.btn("AI 填寫", { variant: "secondary", icon: "sparkles", attrs: { "data-tg": "shopFindAll" } })}</div><input type="file" accept="image/*" id="shopPicInput" multiple hidden><p class="note" id="shopFillInfo">${
       x ? "按「AI 填寫」：AI 按名稱（或相片）上網找資料、使用評價、相片及購買地點，只填空白欄位。" : "輸入名稱後按「AI 填寫」，AI 會上網找資料、使用評價、相片及購買地點。貼上產品網址、或未輸入名稱時按「相片」（可多張），AI 會認出物品直接加入清單。"
-    }</p><details class="shop-more"${x ? " open" : ""}><summary>更多資料（數量、購買地點、價錢…）</summary><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰<input name="forWhom" maxlength="60" placeholder="例如：媽媽、同事" value="${v("forWhom")}"></label></div><label>備註<input name="detail" maxlength="500" placeholder="例如：要辣味、限定口味" value="${v("detail")}"></label><label>使用評價<textarea name="reviews" rows="3" maxlength="1000" placeholder="按「AI 填寫」由 AI 上網找用家評價">${v("reviews")}</textarea></label><label>分類<select name="cat">${Object.entries(SHOP_CATS)
+    }</p><details class="fold shop-more"${x ? " open" : ""}><summary>更多資料（數量、購買地點、價錢…）</summary><div class="tg-row"><label>數量／規格<input name="qty" maxlength="30" placeholder="例如：2 盒、M 碼" value="${v("qty")}"></label><label>給誰<input name="forWhom" maxlength="60" placeholder="例如：媽媽、同事" value="${v("forWhom")}"></label></div><label>備註<input name="detail" maxlength="500" placeholder="例如：要辣味、限定口味" value="${v("detail")}"></label><label>使用評價<textarea name="reviews" rows="3" maxlength="1000" placeholder="按「AI 填寫」由 AI 上網找用家評價">${v("reviews")}</textarea></label><label>分類<select name="cat">${Object.entries(SHOP_CATS)
       .map(([k, v]) => `<option value="${k}"${(x ? shopCat(x) : "food") === k ? " selected" : ""}>${v}</option>`)
       .join("")}</select></label><fieldset class="buy-places"><legend>購買地點／地址（可多個）</legend><div id="shopPlaceRows">${(x ? placesOf(x) : []).concat("").map(placeRow).join("")}</div>${Kit.btn("加入地點", { size: "sm", icon: "plus", attrs: { "data-tg": "shopPlaceAdd" } })}<p class="note" id="shopPlaceInfo">每行一個店名或地址，也可以貼上 Google 地圖連結。</p></fieldset><label>探索地點<input name="placeQ" list="shopPlaceList" maxlength="120" autocomplete="off" placeholder="留空＝按購買地點名稱自動配對；可打字搜尋" value="${esc(x?.placeId === "-" ? NO_PLACE : placeLabel(T().places.find((p) => p.id === x?.placeId)))}"></label><datalist id="shopPlaceList"><option value="${NO_PLACE}">${[...T().places]
       .sort((a, b) => a.v[0].localeCompare(b.v[0]) || a.v[1].localeCompare(b.v[1]))
@@ -1879,12 +1823,12 @@ window.Together = (() => {
     const price = x.price != null ? `<b class="shop-price">${esc(S.format(S.toMinor(x.price, x.currency), x.currency))}</b>` : "";
     // a round tick box on the left: empty until bought (like a to-do list); tapping it again sets it back
     const tick = `<button type="button" class="shop-check${x.bought ? " on" : ""}" data-shop-toggle="${esc(x.id)}" role="checkbox" aria-checked="${x.bought}" aria-label="${x.bought ? `${esc(x.name)} 已買，按一下改回未買` : `標記 ${esc(x.name)} 為已買`}">${x.bought ? icon("check") : ""}</button>`;
-    return `<article class="tg-item shop-item${x.bought ? " bought" : ""}">${tick}${x.photo ? `<button type="button" class="shop-thumb" data-shop-open="${esc(x.id)}" aria-label="放大 ${esc(x.name)} 的相片"><img src="${photoSrc(x.photo)}" alt=""></button>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}${zhLine(zhName(x, x.name))}</h3>${price}</div>${x.forWhom ? `<p class="shop-place shop-for">${icon("users")}<span>給：${esc(x.forWhom)}</span></p>` : ""}${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${x.reviews ? `<details class="shop-reviews"><summary>使用評價</summary><p class="tg-text">${esc(x.reviews)}</p></details>` : ""}${matchPlaces(x).length ? `<p class="shop-place">${icon("compass")}探索：${matchPlaces(x).map((p) => `<button type="button" class="buy-item" data-place="${esc(p.id)}">${esc(p.v[1])}</button>`).join("、")}</p>` : ""}${placesOf(x).map((t) => `<p class="shop-place">${icon("pin")}<span>${esc(t)}</span>${Kit.btn(`${esc(t)} 地圖`, { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t)}`, external: true, icon: "map", iconOnly: true, variant: "ghost", size: "sm" })}</p>`).join("")}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}${x.url ? `<div class="links">${Kit.btn("產品網頁", { size: "sm", external: true, href: x.url })}</div>` : ""}</div></article>`;
+    return `<article class="card tg-item shop-item${x.bought ? " bought" : ""}">${tick}${x.photo ? `<button type="button" class="shop-thumb" data-shop-open="${esc(x.id)}" aria-label="放大 ${esc(x.name)} 的相片"><img src="${photoSrc(x.photo)}" alt=""></button>` : ""}<div>${itemTop(x, `${Kit.badge(SHOP_CATS[shopCat(x)], "shop-cat")}${x.ai ? Kit.badge("AI 填寫") : ""}`, [{ label: "編輯", icon: "edit", attrs: { "data-shop-edit": x.id } }, del("shopping", x)])}<div class="tg-expense"><h3>${esc(x.name)}${x.qty ? ` <small>· ${esc(x.qty)}</small>` : ""}${zhLine(zhName(x, x.name))}</h3>${price}</div>${x.forWhom ? `<p class="shop-place shop-for">${icon("users")}<span>給：${esc(x.forWhom)}</span></p>` : ""}${x.detail ? `<p class="tg-text">${esc(x.detail)}</p>` : ""}${x.reviews ? `<details class="fold shop-reviews"><summary>使用評價</summary><p class="tg-text">${esc(x.reviews)}</p></details>` : ""}${matchPlaces(x).length ? `<p class="shop-place">${icon("compass")}探索：${matchPlaces(x).map((p) => `<button type="button" class="buy-item" data-place="${esc(p.id)}">${esc(p.v[1])}</button>`).join("、")}</p>` : ""}${placesOf(x).map((t) => `<p class="shop-place">${icon("pin")}<span>${esc(t)}</span>${Kit.btn(`${esc(t)} 地圖`, { href: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t)}`, external: true, icon: "map", iconOnly: true, variant: "ghost", size: "sm" })}</p>`).join("")}${x.bought ? `<p class="note">✓ ${esc(x.boughtBy || "旅伴")} 已買 · ${esc(when(x.boughtAt))}</p>` : ""}${x.url ? `<div class="links">${Kit.btn("產品網頁", { size: "sm", external: true, href: x.url })}</div>` : ""}</div></article>`;
   }
   // Photo grid: one tile per item; tapping opens the item with a large photo in the detail dialog.
   function shopTile(x) {
     const price = x.price != null ? esc(S.format(S.toMinor(x.price, x.currency), x.currency)) : "";
-    return `<button type="button" class="shop-tile${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.photo ? `<img src="${photoSrc(x.photo)}" alt="" loading="lazy">` : `<span class="shop-tile-ph" aria-hidden="true">${icon("bag")}</span>`}<span class="shop-tile-name">${x.bought ? "✓ " : ""}${esc(zhName(x, x.name) || x.name)}</span>${price ? `<span class="shop-tile-price">${price}</span>` : ""}</button>`;
+    return `<button type="button" class="card shop-tile${x.bought ? " bought" : ""}" data-shop-open="${esc(x.id)}">${x.photo ? `<img src="${photoSrc(x.photo)}" alt="" loading="lazy">` : `<span class="shop-tile-ph" aria-hidden="true">${icon("bag")}</span>`}<span class="shop-tile-name">${x.bought ? "✓ " : ""}${esc(zhName(x, x.name) || x.name)}</span>${price ? `<span class="shop-tile-price">${price}</span>` : ""}</button>`;
   }
   // Add / edit sheet: AI from photos or a link first, then the form for typing an item in.
   function openShopSheet(x = null) {
@@ -1906,6 +1850,7 @@ window.Together = (() => {
       `${x.photo ? `<img class="shop-detail-photo" src="${photoSrc(x.photo)}" alt="${esc(x.name)}">` : ""}${shopItem(x).replace(/<button type="button" class="shop-thumb"[\s\S]*?<\/button>/, "")}`;
     if (!$("#detail").open) $("#detail").showModal();
   }
+  // ---- 購物: the page (list and grid) and duplicate names ----
   function shopPage() {
     if (state.status !== "ready") return { sig: "wait", shell: Kit.empty("正在連接…") };
     const todo = state.shopping.filter((x) => !x.bought),
@@ -1938,7 +1883,7 @@ window.Together = (() => {
         ? Kit.empty(`找不到「${esc(state.shopSearch)}」`, "試試其他字，或清除搜尋。")
         : state.shopFilter === "done"
           ? Kit.empty("還沒有已買的東西", "買了之後按「已買」。")
-          : Kit.empty("清單是空的", "按右下角「加入物品」，影相讓 AI 認物品，或自己輸入。");
+          : Kit.empty("清單是空的", "按右下角「＋物品」，影相讓 AI 認物品，或自己輸入。");
     return {
       sig: ["shop", state.shopView, state.user.uid].join("|"),
       shell: `<div data-tg-live="status"></div><div data-tg-live="jobs"></div><div class="searchrow shop-tools"><input id="shopSearch" class="search" type="search" placeholder="搜尋，或貼上產品網址" aria-label="搜尋購物" value="${esc(state.shopSearch)}">${Kit.chips(
@@ -1947,7 +1892,7 @@ window.Together = (() => {
           { label: '<span class="sr-only">相片</span>', icon: "grid", active: state.shopView === "grid", attrs: { "data-shop-view": "grid", title: "相片" } },
         ],
         { cls: "view-toggle", label: "顯示方式" },
-      )}</div><div data-tg-live="filters"></div><div data-tg-live="cats"></div><div class="tg-list" data-tg-live="list"></div>${Kit.fab("加入物品", { "data-tg": "shopAdd" })}`,
+      )}</div><div data-tg-live="filters"></div><div data-tg-live="cats"></div><div class="tg-list" data-tg-live="list"></div>${Kit.fab("物品", { "data-tg": "shopAdd", "aria-label": "加入物品" })}`,
       live: {
         status: statusBar(),
         jobs: productJobsHtml(),
@@ -1972,6 +1917,7 @@ window.Together = (() => {
       return m === n || z === n || whole === all || (Math.min(n.length, m.length) >= 4 && (all.includes(n) || whole.includes(m)));
     });
   }
+  // ---- 購物: matching 購買地點 to explore places, shopping spots for 探索 / 附近 / 行程, geocoding ----
   // Match a 購買地點 to an explore shop: the whole name, or one distinctive word of it (島本, 唐十), compared without
   // spaces/brackets/punctuation and with 雞/鶏 treated alike; generic words (博多, 本店…) never match on their own.
   const norm = (t) =>
@@ -2070,46 +2016,43 @@ window.Together = (() => {
       .map((x) => ({ id: x.id, name: x.name, bought: !!x.bought }));
   }
   // Places to buy unbought items, for adding to the plan (coordinates not needed): explore place, else the 購買地點 text.
+  // Each 購買地點 line of every unbought item: fn(item, line, its explore place or null, its own pin or null)
+  const eachBuyPlace = (fn) =>
+    state.shopping.filter((x) => !x.bought).forEach((x) => placesOf(x).forEach((line, i) => fn(x, line, linePlace(x, i), pinOf(x, i))));
   function shoppingPlaces() {
     const spots = {};
-    for (const x of state.shopping.filter((x) => !x.bought))
-      placesOf(x).forEach((line, i) => {
-        const p = linePlace(x, i),
-          pin = pinOf(x, i),
-          key = p ? "p:" + p.id : "t:" + norm(shopLabel(line));
-        const spot = (spots[key] ??= {
-          name: p ? p.v[1] : shopLabel(line),
-          placeId: p ? p.id : null,
-          address: p ? p.v[3] : line,
-          ...(pin ? { lat: pin.lat, lng: pin.lng } : {}),
-          items: [],
-          ids: [],
-        });
-        if (spot.ids.includes(x.id)) return;
-        spot.items.push(x.name);
-        spot.ids.push(x.id);
+    eachBuyPlace((x, line, p, pin) => {
+      const key = p ? "p:" + p.id : "t:" + norm(shopLabel(line));
+      const spot = (spots[key] ??= {
+        name: p ? p.v[1] : shopLabel(line),
+        placeId: p ? p.id : null,
+        address: p ? p.v[3] : line,
+        ...(pin ? { lat: pin.lat, lng: pin.lng } : {}),
+        items: [],
+        ids: [],
       });
+      if (spot.ids.includes(x.id)) return;
+      spot.items.push(x.name);
+      spot.ids.push(x.id);
+    });
     return Object.values(spots);
   }
   function shoppingSpots() {
     const spots = {},
       geo = window.TRIP_GEO?.places || {};
-    for (const x of state.shopping.filter((x) => !x.bought))
-      placesOf(x).forEach((line, i) => {
-        const p = linePlace(x, i),
-          pin = p && geo[p.id]?.[0],
-          own = pinOf(x, i);
-        let key, spot;
-        if (pin) {
-          key = "p:" + p.id;
-          spot = { name: p.v[1], lat: pin.lat, lng: pin.lng, placeId: p.id, address: p.v[3] };
-        } else if (own) {
-          key = `${own.lat.toFixed(4)},${own.lng.toFixed(4)}`;
-          spot = { name: shopLabel(line), lat: own.lat, lng: own.lng, placeId: null, address: line };
-        } else return;
-        const s = (spots[key] ??= { ...spot, items: [] });
-        if (!s.items.includes(x.name)) s.items.push(x.name);
-      });
+    eachBuyPlace((x, line, p, own) => {
+      const pin = p && geo[p.id]?.[0];
+      let key, spot;
+      if (pin) {
+        key = "p:" + p.id;
+        spot = { name: p.v[1], lat: pin.lat, lng: pin.lng, placeId: p.id, address: p.v[3] };
+      } else if (own) {
+        key = `${own.lat.toFixed(4)},${own.lng.toFixed(4)}`;
+        spot = { name: shopLabel(line), lat: own.lat, lng: own.lng, placeId: null, address: line };
+      } else return;
+      const s = (spots[key] ??= { ...spot, items: [] });
+      if (!s.items.includes(x.name)) s.items.push(x.name);
+    });
     return Object.values(spots);
   }
   // Geocode 購買地點 once per text (geoFor remembers which text the coordinates belong to); one at a time.
@@ -2144,10 +2087,9 @@ window.Together = (() => {
     }
   }
   // A Google Maps link pasted into 購買地點 becomes the shop name and address.
-  const MAPS_LINK = /^https:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)/i;
   async function placeFromMaps(input) {
     const url = input.value.trim().match(/https:\/\/\S+/)?.[0];
-    if (!url || !MAPS_LINK.test(url) || input.dataset.looking) return;
+    if (!url || !Kit.isMapsLink(url) || input.dataset.looking) return;
     const hint = $("#shopPlaceInfo");
     input.disabled = true;
     input.dataset.looking = "1";
@@ -2166,6 +2108,7 @@ window.Together = (() => {
       delete input.dataset.looking;
     }
   }
+  // ---- 購物: the form's photo and AI fill jobs ----
   function renderShopping() {
     return `${header("購物")}<div id="shopPage"></div>`;
   }
@@ -2193,19 +2136,9 @@ window.Together = (() => {
   }
   function requestFill(image) {
     if (!navigator.onLine) return fillStatus("離線中，AI 未能辨識，請手動輸入。", false);
-    const { fs, db } = fb,
-      ref = fs.doc(tcol("receiptJobs"));
-    fillJob = ref.id;
-    fs.setDoc(ref, {
-      images: [image],
-      kind: "productFill",
-      file: "購物表格相片",
-      status: "pending",
-      by: state.user.uid,
-      byName: me().name,
-      at: Date.now(),
-      createdAt: fs.serverTimestamp(),
-    }).catch((e) => {
+    const job = queueJob({ images: [image], kind: "productFill", file: "購物表格相片" });
+    fillJob = job.id;
+    job.sent.catch((e) => {
       fillJob = null;
       fillStatus("未能上載相片給 AI，請手動輸入。", false);
       console.error(e);
@@ -2294,29 +2227,29 @@ window.Together = (() => {
     const members = (t?.members || [])
       .map(
         (e) =>
-          `<div class="pp-row"><div><b>${esc(memberLabel(e))}</b>${e === myEmail() ? "<small>你</small>" : ""}</div>${e !== myEmail() ? `${Kit.btn("移除", { size: "sm", attrs: { "data-trip-remove": e } })}` : ""}</div>`,
+          `<div class="list-row pp-row"><div><b>${esc(memberLabel(e))}</b>${e === myEmail() ? "<small>你</small>" : ""}</div>${e !== myEmail() ? `${Kit.btn("移除", { size: "sm", attrs: { "data-trip-remove": e } })}` : ""}</div>`,
       )
       .join("");
     const trips =
       (state.trips || [])
         .map(
           (x) =>
-            `<div class="pp-row"><div><b>${esc(x.name)}</b><small>${esc(x.destination || "")} · ${esc(x.startDate || "")} → ${esc(x.endDate || "")}</small></div>${x.id === tripId ? Kit.badge("目前") : Kit.btn("開啟", { variant: "secondary", size: "sm", attrs: { "data-trip-open": x.id } })}</div>`,
+            `<div class="list-row pp-row"><div><b>${esc(x.name)}</b><small>${esc([x.destination, x.startDate && Kit.dateRange(x.startDate, x.endDate, { year: true })].filter(Boolean).join(" · "))}</small></div>${x.id === tripId ? Kit.badge("目前") : Kit.btn("開啟", { variant: "secondary", size: "sm", attrs: { "data-trip-open": x.id } })}</div>`,
         )
         .join("") || '<p class="note">還沒有旅程。</p>';
     return {
       sig: ["trips", tripId || "", state.status].join("|"),
-      shell: `${t ? `<section class="panel trip-panel"><div class="eyebrow">目前旅程</div><h2>${esc(t.name)}</h2><p class="note">${esc(t.destination || "")} · ${esc(t.startDate || "")} → ${esc(t.endDate || "")} · ${esc(CURRENCY_NAMES[t.currency] || t.currency || "")}</p><details><summary>${icon("edit")} 修改旅程資料</summary>${tripForm(t)}</details>${copyForm(t)}</section><section class="panel trip-panel"><h3>旅伴</h3><div class="pp-list" data-tg-live="members"></div><details><summary>${icon("plus")} 邀請旅伴</summary><form class="tg-form" data-trip-invite><div class="radio-row" role="radiogroup" aria-label="帳戶類型"><label class="tg-check"><input type="radio" name="kind" value="account" checked> 建立帳號 ID</label><label class="tg-check"><input type="radio" name="kind" value="google"> Google 帳戶</label></div><div class="tg-row"><label>帳號 ID 或 Gmail<input name="who" required maxlength="80" autocapitalize="none" spellcheck="false" placeholder="例如：amy 或 amy@gmail.com"></label><label>顯示名稱（帳號 ID 用）<input name="name" maxlength="40"></label></div>${Kit.btn("邀請", { type: "submit", variant: "primary", cls: "btn-block" })}<p class="note" data-trip-msg></p></form></details></section>` : ""}<section class="panel trip-panel"><h3>我的旅程</h3><div class="pp-list" data-tg-live="trips"></div></section><section class="panel trip-panel"><details${t ? "" : " open"}><summary>${icon("plus")} 建立新旅程</summary>${tripForm(null)}</details></section>`,
+      shell: `${t ? `<section class="panel trip-panel"><div class="eyebrow">目前旅程</div><h2>${esc(t.name)}</h2><p class="note">${esc([t.destination, t.startDate && Kit.dateRange(t.startDate, t.endDate, { year: true }), CURRENCY_NAMES[t.currency] || t.currency].filter(Boolean).join(" · "))}</p>${Kit.fold(`${icon("edit")} 修改旅程資料`, tripForm(t))}${copyForm(t)}</section><section class="panel trip-panel"><h3>旅伴</h3><div class="list pp-list" data-tg-live="members"></div><details class="fold"><summary>${icon("plus")} 邀請旅伴</summary><form class="tg-form" data-trip-invite><div class="radio-row" role="radiogroup" aria-label="帳戶類型"><label class="tg-check"><input type="radio" name="kind" value="account" checked> 建立帳號 ID</label><label class="tg-check"><input type="radio" name="kind" value="google"> Google 帳戶</label></div><div class="tg-row"><label>帳號 ID 或 Gmail<input name="who" required maxlength="80" autocapitalize="none" spellcheck="false" placeholder="例如：amy 或 amy@gmail.com"></label><label>顯示名稱（帳號 ID 用）<input name="name" maxlength="40"></label></div>${Kit.btn("邀請", { type: "submit", variant: "primary", cls: "btn-block" })}<p class="note" data-trip-msg></p></form></details></section>` : ""}<section class="panel trip-panel"><h3>我的旅程</h3><div class="list pp-list" data-tg-live="trips"></div></section><section class="panel trip-panel"><details${t ? "" : " open"}><summary>${icon("plus")} 建立新旅程</summary>${tripForm(null)}</details></section>`,
       live: { members, trips },
     };
   }
   // Copy the current trip as a new one (only you as companion): places, day plans (days that fit), checklist and shopping list.
   function copyForm(t) {
-    return `<details><summary>${icon("copy")} 複製為新旅程</summary><form class="tg-form" data-trip-copy><label>新旅程名稱<input name="name" required maxlength="60" value="${esc((t.name + "（複本）").slice(0, 60))}"></label><div class="tg-row"><label>開始日期<input name="startDate" type="date" required value="${esc(t.startDate || "")}"></label><label>結束日期<input name="endDate" type="date" required value="${esc(t.endDate || "")}"></label></div><fieldset><legend>一併複製</legend>${[
+    return `<details class="fold"><summary>${icon("copy")} 複製為新旅程</summary><form class="tg-form" data-trip-copy><label>新旅程名稱<input name="name" required maxlength="60" value="${esc((t.name + "（複本）").slice(0, 60))}"></label><div class="tg-row"><label>開始日期<input name="startDate" type="date" required value="${esc(t.startDate || "")}"></label><label>結束日期<input name="endDate" type="date" required value="${esc(t.endDate || "")}"></label></div><fieldset><legend>一併複製</legend>${[
       ["places", "探索地點"],
       ["planDays", "每日行程"],
       ["checklist", "清單（不包括已剔選）"],
-      ["shopping", "購物清單（全部改為未買）"],
+      ["shopping", "購物（全部改為未買）"],
     ]
       .map(([k, v]) => `<label class="tg-check"><input type="checkbox" name="copy" value="${k}" checked> ${v}</label>`)
       .join(
@@ -2597,6 +2530,7 @@ window.Together = (() => {
     }
     f.reset();
   });
+  // ---- Click handlers for the together pages ----
   document.addEventListener("click", (e) => {
     const el = e.target.closest("button");
     if (!el) return;
@@ -2798,6 +2732,7 @@ window.Together = (() => {
     )
       $("#detail").close();
   });
+  // ---- Change, input, paste and key handlers for the together pages ----
   document.addEventListener("change", (e) => {
     if (e.target.id === "tgReceipt" && e.target.files.length) {
       if (state.status === "ready") queueReceipts([...e.target.files]);

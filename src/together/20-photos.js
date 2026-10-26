@@ -1,6 +1,17 @@
   // ---- Photos: decoding (HEIC too), shrinking, receipt strips and Firebase Storage copies ----
   // Browsers differ: try ImageBitmap (with and without EXIF rotation), then <img>; HEIC that the
   // browser cannot read is converted on the phone with the vendored heic2any (loaded only when needed).
+  // A canvas as base64 JPEG (without the data: prefix)
+  async function canvasB64(c, quality = 0.8) {
+    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", quality));
+    if (!blob) throw new Error("encode");
+    return new Promise((ok, fail) => {
+      const fr = new FileReader();
+      fr.onload = () => ok(String(fr.result).split(",")[1]);
+      fr.onerror = fail;
+      fr.readAsDataURL(blob);
+    });
+  }
   const isHeic = (f) => /hei[cf]/i.test(f.type || "") || /\.hei[cf]$/i.test(f.name || "");
   const viaImg = (blob) =>
     new Promise((ok, fail) => {
@@ -47,17 +58,7 @@
     const img = await decodeImage(file),
       w = img.naturalWidth || img.width,
       h = img.naturalHeight || img.height,
-      parts = h / w > 3.2 ? 3 : h / w > 1.6 ? 2 : 1,
-      toB64 = (c) =>
-        new Promise((r) => c.toBlob(r, "image/jpeg", 0.8)).then((b) => {
-          if (!b) throw new Error("encode");
-          return new Promise((ok, fail) => {
-            const fr = new FileReader();
-            fr.onload = () => ok(String(fr.result).split(",")[1]);
-            fr.onerror = fail;
-            fr.readAsDataURL(b);
-          });
-        });
+      parts = h / w > 3.2 ? 3 : h / w > 1.6 ? 2 : 1;
     const strip = h / parts,
       overlap = strip * 0.08,
       out = [];
@@ -70,7 +71,7 @@
       c.width = Math.round(w * k);
       c.height = Math.round(sh * k);
       c.getContext("2d").drawImage(img, 0, top, w, sh, 0, 0, c.width, c.height);
-      out.push(await toB64(c));
+      out.push(await canvasB64(c));
     }
     img.close?.();
     return out;
@@ -85,15 +86,13 @@
     c.height = Math.round(h * k);
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
     img.close?.();
-    const blob = await new Promise((r) => c.toBlob(r, "image/jpeg", quality));
-    if (!blob) throw new Error("encode");
-    return new Promise((ok, fail) => {
-      const fr = new FileReader();
-      fr.onload = () => ok(String(fr.result).split(",")[1]);
-      fr.onerror = fail;
-      fr.readAsDataURL(blob);
-    });
+    return canvasB64(c, quality);
   }
+  // A photo that could not be read: its name and why
+  const photoError = (f, e) => {
+    toast(`${f.name || "相片"}：${scanError(e)}`);
+    console.error(e);
+  };
   const scanError = (e) =>
     /unsupported|heic|img|encode/.test(e?.message) ? "未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。" : "未能處理這張相片。";
   // Receipt photos are also kept in Firebase Storage (receipts/{uid}/{job}-{n}.jpg, members only): a 2400px copy

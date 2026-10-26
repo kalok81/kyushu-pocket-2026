@@ -1,0 +1,29 @@
+/* ---- Route suggestions sheet (查路線, AI 分析) and the day's route map ---- */
+.route-results{display:grid;gap:10px;margin:6px 0 14px}
+.route-actions{display:flex;gap:6px}
+.route-actions>.btn{flex:1 1 0;gap:4px;justify-content:center;min-width:0;padding:6px 4px;font-size:var(--fs-sm);white-space:nowrap}
+.route-actions>.btn[hidden]{display:none}
+.route-actions .icon{flex:none;width:15px;height:15px}
+.route-actions>.btn>.icon:last-child:not(:first-child){display:none}
+@media(max-width:360px){.route-actions>.btn>.icon:first-child{display:none}}
+.card.route-option{padding:12px 14px}
+.route-option.picked{border-color:var(--primary);box-shadow:0 0 0 2px var(--secondary)}
+.route-option.ai{border-style:dashed}
+.route-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;margin-bottom:6px}
+.route-head b{font-size:var(--fs-title)}
+.route-head span{font-size:var(--fs-md);color:var(--muted-foreground)}
+.route-steps{display:grid;gap:6px;margin:0 0 10px;padding:0 0 0 12px;border-left:2px solid var(--secondary);font-size:var(--fs-md);list-style:none}
+.route-steps small{color:var(--muted-foreground)}
+.route-steps div{font-size:var(--fs-sm);color:var(--muted-foreground)}
+.route-ai-head{padding:10px 12px;border-radius:var(--r-lg);background:var(--muted-bg)}
+.route-ai-head p{margin:4px 0 0;font-size:var(--fs-md)}
+.route-ai-wait{padding:12px;border:1px dashed var(--input);border-radius:var(--r-lg)}
+.route-ai-wait .note{margin:4px 0 0}
+/* the day's route map */
+.route-map{height:min(52vh,420px)}
+.route-pin span{display:grid;place-items:center;width:28px;height:28px;border:2px solid var(--card);border-radius:50%;background:var(--primary);color:var(--primary-foreground);font:700 var(--fs-sm)/1 system-ui,sans-serif;box-shadow:var(--shadow)}
+.route-list{display:grid;gap:6px;margin:14px 0;padding:0;list-style:none}
+.route-list li{display:grid;grid-template-columns:26px auto 1fr;align-items:baseline;gap:8px;font-size:var(--fs-lg)}
+.route-list b{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--secondary);font-size:var(--fs-sm)}
+.route-list span{font-size:var(--fs-sm);color:var(--muted-foreground);font-variant-numeric:tabular-nums}
+.route-go{display:flex;align-items:center;justify-content:center;text-decoration:none}

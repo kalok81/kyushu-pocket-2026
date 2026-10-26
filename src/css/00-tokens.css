@@ -1,0 +1,32 @@
+/* ---- Design tokens: every colour, type size, radius and shadow used by the site. Change them here only. ----
+   Breakpoints (media queries cannot use variables): 360px tiny phones, 480px phones, 760px tablets (sheets,
+   one-column layouts), 900px desktop (navigation in the top bar). */
+:root{
+  /* surfaces and text */
+  --background:#f6f4ed;--foreground:#183e39;--card:#fffefa;
+  --primary:#183e39;--primary-hover:#24504a;--primary-foreground:#fffefa;--on-primary-muted:#d1ddcb;
+  --secondary:#e6ecdf;--secondary-hover:#dbe4d2;--secondary-foreground:#183e39;
+  --muted-bg:#eef1e8;--muted-foreground:#697871;--accent:#eef1e8;--placeholder:#97a39c;--selection:#cfe0d4;
+  --border:#dce1d5;--input:#cfd6c8;--ring:#2d5c53;
+  /* states */
+  --destructive:#b42318;--destructive-hover:#9a1d14;--destructive-soft:#fdeceb;--destructive-border:#f2c6c1;
+  --error-fg:#8e3d2a;--error-bg:#fbebe3;
+  --warn-fg:#7a5d12;--warn-bg:#f6efd9;--gold:#c9a227;--gold-bg:#fffaf0;--highlight:#ffe491;--star:#d99a2b;
+  --ok-fg:#2f6b52;--ok-bg:#e3ece4;--night:#2b3359;
+  --orange:#bc4d32;--notice-line:#9eae86;--notice-fg:#3f5049;--transport-fg:#50624c;
+  --map-bg:#e8e7df;--map-pin:#bd593b;
+  /* place categories */
+  --cat-food:#955236;--cat-food-bg:#f5e5d7;--cat-sights:#37745e;--cat-sights-bg:#e3ece4;
+  --cat-transit:#3c5a7a;--cat-transit-bg:#e2e8f0;--cat-shop:#50657d;--cat-shop-bg:#e5e9f1;--cat-gift:#885b79;--cat-gift-bg:#eee4ec;
+  /* type scale: 8 sizes */
+  --fs-xs:12px;--fs-sm:13px;--fs-md:14px;--fs-lg:15px;--fs-body:16px;--fs-title:18px;--fs-xl:22px;--fs-2xl:28px;
+  /* radius: 4 sizes, plus 999px pills and 50% circles */
+  --r-sm:8px;--r-md:10px;--r-lg:12px;--r-xl:18px;
+  /* shadows */
+  --shadow-sm:0 1px 2px rgb(24 62 57/.06);
+  --shadow:0 1px 3px rgb(24 62 57/.08),0 1px 2px rgb(24 62 57/.05);
+  --shadow-lg:0 16px 40px rgb(24 62 57/.18),0 4px 12px rgb(24 62 57/.08);
+  /* layout */
+  --topbar-h:60px;--gutter:18px;--card-pad:14px 16px;
+}
+@media(min-width:761px){:root{--gutter:24px}}

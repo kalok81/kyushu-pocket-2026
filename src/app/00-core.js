@@ -3,8 +3,7 @@
     { icon } = Kit,
     zhLine = (z) => (z ? `<span class="zh-name">${esc(z)}</span>` : "");
   const $ = (s) => document.querySelector(s),
-    esc = (s) =>
-      String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    esc = Kit.esc;
   const urlList = (s) =>
       [...new Set((s || "").match(/https?:\/\/[^\s<>]+/g) || [])].filter((u) => {
         try {
@@ -47,13 +46,17 @@
     },
   };
   let saved = new Set(storage.get("kyushu-saved-v1"));
+  // Lists that show the ★
+  function savedChanged() {
+    if ($("#results")) renderResults();
+    if ($("#notebookResults")) notebookResults();
+    if (current === "nearby") nearbyResults();
+  }
   // Favourites sync per companion through Firestore (members/{uid}.saved).
   function setSaved(ids) {
     saved = new Set(ids);
     storage.set("kyushu-saved-v1", [...saved]);
-    if ($("#results")) renderResults();
-    if ($("#notebookResults")) notebookResults();
-    if (current === "nearby") nearbyResults();
+    savedChanged();
     if (current === "home") render();
   }
   // One star on or off: this device, the companion's synced list, and every list showing it
@@ -61,9 +64,7 @@
     on ? saved.add(id) : saved.delete(id);
     const ok = storage.set("kyushu-saved-v1", [...saved]);
     window.Together?.saveFavorites([...saved]);
-    if ($("#results")) renderResults();
-    if ($("#notebookResults")) notebookResults();
-    if (current === "nearby") nearbyResults();
+    savedChanged();
     if (!ok) toast("瀏覽器未允許儲存；收藏只保留至本次離開。");
   }
   let current = "home",
@@ -72,15 +73,35 @@
     region = "全部區域",
     search = "",
     onlySaved = false;
-  // Message for a failed Cloud Function call: the function's own (Chinese) message, a clear one when the App Check
-  // security check failed (the SDK then waits a day before retrying), else the fallback.
-  const fnError = (e, fallback) =>
-    e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
-      ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
-      : // the function's own (Chinese) message; a bare SDK code such as "internal" means the server could not be reached
-        String(e?.code || "").startsWith("functions/") && e.message && !/^[a-z-]+$/.test(e.message)
-        ? e.message.replace(/\s*\[\d+\]$/, "")
-        : `${fallback}（伺服器未能處理請求）`;
+  const fnError = Kit.fnError;
+  // 自動填寫 from a Google Maps link (place, stop and hotel forms): the button is off and info shows progress while
+  // waiting; fill(result, put, fields) fills the form (put only fills empty fields) and may return the message to show.
+  async function mapsAutofill(form, { btn, info, opts, seconds = 5, wait = "正在查詢 Google 地圖…", fill }) {
+    const el = form.elements,
+      url = el.mapsUrl.value.trim();
+    if (!url) return toast("請先貼上 Google 地圖連結。");
+    if (btn) btn.disabled = true;
+    info.textContent = wait;
+    const done = Kit.busy(info, { seconds });
+    try {
+      const r = await window.Together.lookupPlace(url, opts),
+        put = (name, value) => {
+          if (value && !el[name].value.trim()) el[name].value = value;
+        };
+      info.textContent = fill(r, put, el) || "已填入，請檢查後按儲存。";
+    } catch (e) {
+      info.textContent = fnError(e, "未能自動填寫，請手動輸入。");
+      console.error(e);
+    } finally {
+      done();
+      if (btn) btn.disabled = false;
+    }
+  }
+  // The explore place nearest to a point and how far it is (metres)
+  const nearestPlace = (pt, list = places) =>
+    list
+      .map((p) => ({ p, d: Math.min(...(window.TRIP_GEO.places[p.id] || []).map((g) => window.Nearby.distance(pt, g)), Infinity) }))
+      .sort((a, b) => a.d - b.d)[0];
   function toast(s) {
     window.UI.toast(s);
   }
@@ -101,7 +122,9 @@
         da = d.getUTCDate();
       out.push({
         n,
-        date: `${da}/${mo}/${y}`,
+        // date is the one format used on every page (Kit.date): 10/29（四）; md for the narrow day tabs
+        date: `${mo}/${da}（${wk[d.getUTCDay()]}）`,
+        md: `${mo}/${da}`,
         weekday: "星期" + wk[d.getUTCDay()],
         region: m.destination || "",
         hotel: "",
@@ -112,7 +135,9 @@
     return out;
   }
   const lists = () => window.Together?.lists() || { hotels: [], flights: [], events: [] };
-  const isoDash = (d) => d.iso.replaceAll("/", "-");
+  const isoDash = (d) => d.iso.replaceAll("/", "-"),
+    // first and last day as YYYY-MM-DD (date inputs' defaults)
+    tripDates = () => [days[0] ? isoDash(days[0]) : "", days.at(-1) ? isoDash(days.at(-1)) : ""];
   // Day titles (planDays label) and the hotel for each night (check-in ≤ night < check-out).
   function refreshDays() {
     const hs = lists().hotels;
@@ -129,4 +154,4 @@
     else if (current === "plan") refreshPlan();
   }
   const nights = (h) => (h.checkIn && h.checkOut ? Math.round((Date.parse(h.checkOut) - Date.parse(h.checkIn)) / 864e5) : 0);
-  const fmtTime = (t) => (t ? t.replace("T", " ") : "");
+  const fmtTime = (t) => (t ? `${Kit.date(t)} ${String(t).slice(11, 16)}`.trim() : "");

@@ -120,19 +120,14 @@
     const src = group.map((d) => jobs.find((j) => j.id === d.key) || {}),
       hashes = src.flatMap((j) => j.hashes || []).slice(0, 4),
       stored = src.flatMap((j) => j.photos || []);
-    fs.addDoc(tcol("receiptJobs"), {
+    queueJob({
       images,
       hashes,
       file: group
         .map((d) => d.file)
         .join(" + ")
         .slice(0, 120),
-      status: "pending",
-      by: state.user.uid,
-      byName: me().name,
-      at: Date.now(),
-      createdAt: fs.serverTimestamp(),
-    }).then(
+    }).sent.then(
       (ref) => {
         group.forEach((d) => {
           fs.deleteDoc(jobRef(d.key)).catch(() => {});
@@ -154,11 +149,11 @@
       retry = d.retry ? Kit.btn("重試", { size: "sm", icon: "redo", attrs: { "data-draft-retry": d.key } }) : "",
       drop = Kit.btn("捨棄", { size: "sm", icon: "trash", attrs: { "data-draft-drop": d.key } });
     if (d.status !== "done" && d.status !== "fail")
-      return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}${Kit.progress({ seconds: 30, since: d.at })}${d.retry ? `<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>` : ""}</article>`;
+      return `<article class="card tg-item tg-draft" data-draft="${d.key}">${head}${Kit.progress({ seconds: 30, since: d.at })}${d.retry ? `<p class="note">等候時間較長，可以按重試。</p><div class="links">${retry}${drop}</div>` : ""}</article>`;
     if (d.status === "fail")
-      return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error || "未能讀取。")}</p><div class="links">${retry}${drop}</div></article>`;
+      return `<article class="card tg-item tg-draft" data-draft="${d.key}">${head}<p class="note">${esc(d.error || "未能讀取。")}</p><div class="links">${retry}${drop}</div></article>`;
     const warn = draftDup(d, all) || d.warn;
-    return `<article class="tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links">${Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-draft-add": d.key } })}${drop}</div></article>`;
+    return `<article class="card tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links">${Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-draft-add": d.key } })}${drop}</div></article>`;
   }
   function renderDrafts() {
     const box = $("#tgDrafts");
@@ -193,7 +188,7 @@
     }
   }
   async function queueReceipts(files) {
-    const { fs, db } = fb;
+    const { fs } = fb;
     if (files.length > 10) {
       toast("一次最多 10 張，已取頭 10 張。");
       files = files.slice(0, 10);
@@ -222,17 +217,8 @@
       try {
         let images = await receiptImages(f);
         if (images.join("").length > 850000) images = [await shrink(f, 1400, 0.7)];
-        const ref = fs.doc(tcol("receiptJobs"));
-        fs.setDoc(ref, {
-          images,
-          hashes: hashes[i] ? [hashes[i]] : [],
-          file: String(f.name || "相片").slice(0, 120),
-          status: "pending",
-          by: state.user.uid,
-          byName: me().name,
-          at: Date.now(),
-          createdAt: fs.serverTimestamp(),
-        }).catch((e) => {
+        const { ref, sent } = queueJob({ images, hashes: hashes[i] ? [hashes[i]] : [], file: String(f.name || "相片").slice(0, 120) });
+        sent.catch((e) => {
           toast("未能上載收據，請確認你仍在旅伴名單。");
           console.error(e);
         });
@@ -242,8 +228,7 @@
           .then((photos) => fs.updateDoc(ref, { photos }))
           .catch((e) => console.warn("receipt photo upload", e));
       } catch (e) {
-        toast(`${f.name || "相片"}：${scanError(e)}`);
-        console.error(e);
+        photoError(f, e);
       }
     }
     if (n) toast(`已加入 ${n} 張收據，會在背景分析`);

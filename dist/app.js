@@ -7,8 +7,7 @@ window.startTrip = (meta = {}) => {
     { icon } = Kit,
     zhLine = (z) => (z ? `<span class="zh-name">${esc(z)}</span>` : "");
   const $ = (s) => document.querySelector(s),
-    esc = (s) =>
-      String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+    esc = Kit.esc;
   const urlList = (s) =>
       [...new Set((s || "").match(/https?:\/\/[^\s<>]+/g) || [])].filter((u) => {
         try {
@@ -51,13 +50,17 @@ window.startTrip = (meta = {}) => {
     },
   };
   let saved = new Set(storage.get("kyushu-saved-v1"));
+  // Lists that show the ★
+  function savedChanged() {
+    if ($("#results")) renderResults();
+    if ($("#notebookResults")) notebookResults();
+    if (current === "nearby") nearbyResults();
+  }
   // Favourites sync per companion through Firestore (members/{uid}.saved).
   function setSaved(ids) {
     saved = new Set(ids);
     storage.set("kyushu-saved-v1", [...saved]);
-    if ($("#results")) renderResults();
-    if ($("#notebookResults")) notebookResults();
-    if (current === "nearby") nearbyResults();
+    savedChanged();
     if (current === "home") render();
   }
   // One star on or off: this device, the companion's synced list, and every list showing it
@@ -65,9 +68,7 @@ window.startTrip = (meta = {}) => {
     on ? saved.add(id) : saved.delete(id);
     const ok = storage.set("kyushu-saved-v1", [...saved]);
     window.Together?.saveFavorites([...saved]);
-    if ($("#results")) renderResults();
-    if ($("#notebookResults")) notebookResults();
-    if (current === "nearby") nearbyResults();
+    savedChanged();
     if (!ok) toast("瀏覽器未允許儲存；收藏只保留至本次離開。");
   }
   let current = "home",
@@ -76,15 +77,35 @@ window.startTrip = (meta = {}) => {
     region = "全部區域",
     search = "",
     onlySaved = false;
-  // Message for a failed Cloud Function call: the function's own (Chinese) message, a clear one when the App Check
-  // security check failed (the SDK then waits a day before retrying), else the fallback.
-  const fnError = (e, fallback) =>
-    e?.code === "functions/unauthenticated" || /appCheck/i.test(String(e?.code || e?.message || ""))
-      ? "這部手機未能通過安全驗證，地圖及 AI 功能暫時不能使用；請稍後再試，或用另一個瀏覽器。"
-      : // the function's own (Chinese) message; a bare SDK code such as "internal" means the server could not be reached
-        String(e?.code || "").startsWith("functions/") && e.message && !/^[a-z-]+$/.test(e.message)
-        ? e.message.replace(/\s*\[\d+\]$/, "")
-        : `${fallback}（伺服器未能處理請求）`;
+  const fnError = Kit.fnError;
+  // 自動填寫 from a Google Maps link (place, stop and hotel forms): the button is off and info shows progress while
+  // waiting; fill(result, put, fields) fills the form (put only fills empty fields) and may return the message to show.
+  async function mapsAutofill(form, { btn, info, opts, seconds = 5, wait = "正在查詢 Google 地圖…", fill }) {
+    const el = form.elements,
+      url = el.mapsUrl.value.trim();
+    if (!url) return toast("請先貼上 Google 地圖連結。");
+    if (btn) btn.disabled = true;
+    info.textContent = wait;
+    const done = Kit.busy(info, { seconds });
+    try {
+      const r = await window.Together.lookupPlace(url, opts),
+        put = (name, value) => {
+          if (value && !el[name].value.trim()) el[name].value = value;
+        };
+      info.textContent = fill(r, put, el) || "已填入，請檢查後按儲存。";
+    } catch (e) {
+      info.textContent = fnError(e, "未能自動填寫，請手動輸入。");
+      console.error(e);
+    } finally {
+      done();
+      if (btn) btn.disabled = false;
+    }
+  }
+  // The explore place nearest to a point and how far it is (metres)
+  const nearestPlace = (pt, list = places) =>
+    list
+      .map((p) => ({ p, d: Math.min(...(window.TRIP_GEO.places[p.id] || []).map((g) => window.Nearby.distance(pt, g)), Infinity) }))
+      .sort((a, b) => a.d - b.d)[0];
   function toast(s) {
     window.UI.toast(s);
   }
@@ -105,7 +126,9 @@ window.startTrip = (meta = {}) => {
         da = d.getUTCDate();
       out.push({
         n,
-        date: `${da}/${mo}/${y}`,
+        // date is the one format used on every page (Kit.date): 10/29（四）; md for the narrow day tabs
+        date: `${mo}/${da}（${wk[d.getUTCDay()]}）`,
+        md: `${mo}/${da}`,
         weekday: "星期" + wk[d.getUTCDay()],
         region: m.destination || "",
         hotel: "",
@@ -116,7 +139,9 @@ window.startTrip = (meta = {}) => {
     return out;
   }
   const lists = () => window.Together?.lists() || { hotels: [], flights: [], events: [] };
-  const isoDash = (d) => d.iso.replaceAll("/", "-");
+  const isoDash = (d) => d.iso.replaceAll("/", "-"),
+    // first and last day as YYYY-MM-DD (date inputs' defaults)
+    tripDates = () => [days[0] ? isoDash(days[0]) : "", days.at(-1) ? isoDash(days.at(-1)) : ""];
   // Day titles (planDays label) and the hotel for each night (check-in ≤ night < check-out).
   function refreshDays() {
     const hs = lists().hotels;
@@ -133,7 +158,7 @@ window.startTrip = (meta = {}) => {
     else if (current === "plan") refreshPlan();
   }
   const nights = (h) => (h.checkIn && h.checkOut ? Math.round((Date.parse(h.checkOut) - Date.parse(h.checkIn)) / 864e5) : 0);
-  const fmtTime = (t) => (t ? t.replace("T", " ") : "");
+  const fmtTime = (t) => (t ? `${Kit.date(t)} ${String(t).slice(11, 16)}`.trim() : "");
   // ---- 總覽 (home): the trip in one line, today's stops, shortcuts and the 資料簿 search ----
   const todayIso = () => {
     const n = new Date();
@@ -155,16 +180,16 @@ window.startTrip = (meta = {}) => {
           : "旅程已完結";
     const todayStops = now ? stopsFor(now.n) : [];
     const today = now
-      ? `${Kit.sectionHead(`今天 · ${esc(now.region)}`, Kit.btn("全日行程", { href: `#plan?day=${now.n}`, size: "sm", icon: "calendar" }))}<div class="panel today-list">${
+      ? `${Kit.sectionHead(`今天 · ${esc(now.region)}`, Kit.btn("全日行程", { href: `#plan?day=${now.n}`, size: "sm", icon: "calendar" }))}<div class="list today-list">${
           todayStops.length
             ? todayStops
-                .map((s) => `<a class="today-row" href="#plan?day=${now.n}"><time>${esc(s.time || "—")}</time><span>${esc(s.title)}</span></a>`)
+                .map((s) => Kit.row({ href: `#plan?day=${now.n}`, lead: `<time>${esc(s.time || "—")}</time>`, title: esc(s.title), cls: "today-row" }))
                 .join("")
             : '<p class="note">這天還沒有安排。</p>'
         }</div>`
       : "";
     const tile = (href, ic, title, sub) => `<a class="quick" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span></a>`;
-    const info = [meta.destination, first && `${first.iso.slice(5).replace("/", ".")}–${last.iso.slice(5).replace("/", ".")}`, first && `${days.length} 天`, when].filter(Boolean);
+    const info = [meta.destination, first && Kit.dateRange(first.iso, last.iso, { weekday: false }), first && `${days.length} 天`, when].filter(Boolean);
     return `<section class="trip-card trip-bar"><div class="trip-line"><h1>${esc(meta.name || "我們的旅程")}</h1><span>${info.map(esc).join(" · ")}</span></div></section>${today}<div class="quicklinks">${tile(`#plan?day=${now ? now.n : 1}`, "calendar", "行程", now ? `今天 D${now.n}` : `${days.length} 天`)}${tile("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${tile("#hotels", "bed", "住宿", `${hs.length} 間`)}${tile("#events", "ticket", "活動", `${lists().events?.length || 0} 個`)}${tile("#nearby", "locate", "附近", "定位找地點")}</div>${Kit.sectionHead("資料簿")}${notebookBody()}`;
   }
   // ---- 附近 (nearby places and shops within 100/200/500 m) ----
@@ -179,7 +204,7 @@ window.startTrip = (meta = {}) => {
     )}${Kit.chips(
       ["全部", ...exploreCats, "購物"].map((c) => ({ label: c, icon: c === "購物" ? "bag" : "", active: nearbyState.category === c, attrs: { "data-near-category": c } })),
       { label: "附近地點分類" },
-    )}${nearbyState.category === "購物" ? '<p class="note">按購物清單中未買物品的「購買地點」定位。</p>' : ""}<div id="nearbyStatus" role="status" aria-live="polite">${nearbyState.error ? `<div class="notice nearby-error">${esc(nearbyState.error)}</div>` : nearbyState.loading ? "<p>定位中，請稍候…</p>" : nearbyState.position && nearbyState.mode === "manual" ? '<p class="note">以地圖選取的位置為中心 · 距離並非從手機目前位置計算</p>' : nearbyState.position ? `<p class="note">已取得位置 · 定位精度約 ±${Math.ceil(nearbyState.accuracy)}米${nearbyState.accuracy > nearbyState.radius ? "；誤差大於所選範圍，建議到室外重新定位或選較大範圍。" : ""}</p>` : '<p class="note">尚未選取位置。選擇範圍後，可用手機定位或在地圖選位置。</p>'}</div></section><div id="nearbyResults"></div><p class="note">距離為直線估算，並非步行路程；樓層、入口及河道可能影響實際路程。已建立座標 ${coverage}/${places.length} 個地點；未有可靠座標的項目暫不納入附近結果。</p><p class="note">座標來源：店方／場地地圖及公開地點資料。</p>${Kit.btn("查看座標覆蓋情況", { size: "sm", variant: "ghost", attrs: { id: "nearbyCoverage" } })}`;
+    )}${nearbyState.category === "購物" ? '<p class="note">按購物中未買物品的「購買地點」定位。</p>' : ""}<div id="nearbyStatus" role="status" aria-live="polite">${nearbyState.error ? `<div class="notice nearby-error">${esc(nearbyState.error)}</div>` : nearbyState.loading ? "<p>定位中，請稍候…</p>" : nearbyState.position && nearbyState.mode === "manual" ? '<p class="note">以地圖選取的位置為中心 · 距離並非從手機目前位置計算</p>' : nearbyState.position ? `<p class="note">已取得位置 · 定位精度約 ±${Math.ceil(nearbyState.accuracy)}米${nearbyState.accuracy > nearbyState.radius ? "；誤差大於所選範圍，建議到室外重新定位或選較大範圍。" : ""}</p>` : '<p class="note">尚未選取位置。選擇範圍後，可用手機定位或在地圖選位置。</p>'}</div></section><div id="nearbyResults"></div><p class="note">距離為直線估算，並非步行路程；樓層、入口及河道可能影響實際路程。已建立座標 ${coverage}/${places.length} 個地點；未有可靠座標的項目暫不納入附近結果。</p><p class="note">座標來源：店方／場地地圖及公開地點資料。</p>${Kit.btn("查看座標覆蓋情況", { size: "sm", variant: "ghost", attrs: { id: "nearbyCoverage" } })}`;
   }
   function nearbyResults() {
     const target = $("#nearbyResults");
@@ -210,10 +235,10 @@ window.startTrip = (meta = {}) => {
         ? `<div class="cardgrid">${spots
             .map((s) => {
               const p = s.placeId && places.find((x) => x.id === s.placeId);
-              return `<article class="card place"><div class="place-top">${Kit.badge("購物", "shop")}</div><h3>${esc(s.name)}</h3><div class="distance-badge">距離約 ${Math.round(s.distance)} 米</div><p class="buy-here">${icon("bag")} 可買：${s.items.map(esc).join("、")}</p>${s.address ? `<p class="note">${esc(s.address)}</p>` : ""}<div class="actions">${p ? Kit.btn("店舖資料", { variant: "secondary", size: "sm", attrs: { "data-place": p.id } }) : ""}${link(route(p ? `${p.v[1]} ${p.v[3]}` : s.address), "導航")}</div></article>`;
+              return `<article class="card place"><div class="card-top place-top">${Kit.badge("購物", "shop")}</div><h3>${esc(s.name)}</h3><div class="distance-badge">距離約 ${Math.round(s.distance)} 米</div><p class="buy-here">${icon("bag")} 可買：${s.items.map(esc).join("、")}</p>${s.address ? `<p class="note">${esc(s.address)}</p>` : ""}<div class="actions">${p ? Kit.btn("店舖資料", { size: "sm", attrs: { "data-place": p.id } }) : ""}${link(route(p ? `${p.v[1]} ${p.v[3]}` : s.address), "導航")}</div></article>`;
             })
             .join("")}</div>`
-        : Kit.empty("這個範圍內暫時沒有可買清單物品的地方", "購物清單中未買、而且有「購買地點」的物品才會顯示。可試試較大範圍。", Kit.btn("查看購物清單", { href: "#shopping", size: "sm" }))
+        : Kit.empty("這個範圍內暫時沒有可買清單物品的地方", "購物中未買、而且有「購買地點」的物品才會顯示。可試試較大範圍。", Kit.btn("查看購物", { href: "#shopping", size: "sm" }))
     }`;
   }
   function refreshNearby() {
@@ -347,19 +372,19 @@ window.startTrip = (meta = {}) => {
   }
   function renderExplore() {
     const chip = (c, label, ic) => ({ label, icon: ic, active: category === c, attrs: { "data-cat": c } });
-    return `${header("探索", "", `${Kit.btn("AI 推薦", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-discover": "" } })}${Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" })}`)}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋，或貼上 Google 地圖連結" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
+    return `${header("探索", "", `${Kit.btn("AI 推薦", { size: "sm", icon: "sparkles", attrs: { "data-discover": "" } })}${Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" })}`)}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋，或貼上 Google 地圖連結" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
       [
         ...["全部", ...exploreCats].map((c) => chip(c, c)),
         chip("購物清單", "購物", "bag"),
         { label: "收藏", icon: "star", active: onlySaved, attrs: { id: "savedToggle" } },
       ],
       { label: "分類" },
-    )}</div><div id="results"></div>${Kit.fab("新增地點", { "data-place-new": true })}`;
+    )}</div><div id="results"></div>${Kit.fab("地點", { "data-place-new": true, "aria-label": "新增地點" })}`;
   }
   // 🛍 購物清單 also lists 購買地點 that are not explore places yet, with 加入探索 to make them one.
   let buySpots = [];
   const spotCard = (s, k) =>
-    `<article class="card place shop-spot"><div class="place-top">${Kit.badge("購物", "shop")}</div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
+    `<article class="card place shop-spot"><div class="card-top place-top">${Kit.badge("購物", "shop")}</div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
   function renderResults() {
     let q = search.toLocaleLowerCase();
     const ps = places.filter(
@@ -404,7 +429,7 @@ window.startTrip = (meta = {}) => {
   function placeCard(p, near) {
     const [c, cls] = placeCat(p),
       on = saved.has(p.id);
-    return `<article class="card place${p.photo ? " has-photo" : ""}" data-card-place="${esc(p.id)}">${p.photo ? `<img class="place-thumb" src="data:image/jpeg;base64,${p.photo}" alt="" loading="lazy">` : ""}<div class="place-top">${Kit.badge(esc(c), cls)}<span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: placeMap(p), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button>${zhLine(p.zh)}</h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
+    return `<article class="card place${p.photo ? " has-photo" : ""}" data-card-place="${esc(p.id)}">${p.photo ? `<img class="place-thumb" src="data:image/jpeg;base64,${p.photo}" alt="" loading="lazy">` : ""}<div class="card-top place-top">${Kit.badge(esc(c), cls)}<span class="region" title="${esc(p.v[0])}">${esc(areaOf(p) || p.v[0])}</span>${Kit.btn(`${esc(p.v[1])} 地圖`, { href: placeMap(p), external: true, variant: "ghost", size: "sm", icon: "pin", iconOnly: true })}<button class="save btn btn-ghost btn-icon btn-sm${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"} ${esc(p.v[1])}" aria-pressed="${on}">${icon("star")}</button></div><h3><button type="button" class="card-title" data-place="${p.id}">${esc(p.v[1])}</button>${zhLine(p.zh)}</h3>${near && typeof near === "object" ? `<div class="distance-badge">距離約 ${Math.round(near.distance)} 米${near.point.label ? " · " + esc(near.point.label) : ""}</div>` : ""}${p.v[9]?.includes("已閉店") ? '<div class="closed">已結業 · 保留原有記錄</div>' : ""}${p.v[4] ? `<p class="feature">${esc(p.v[4])}</p>` : ""}${p.v[5] ? `<p class="hours">${icon("clock")}<span>${esc(p.v[5])}</span></p>` : ""}${buyLine(buysAt({ placeId: p.id }))}</article>`;
   }
   // Place details: category and area, the main actions, then the facts as icon rows and the links as a list.
   function placeDetail(id) {
@@ -413,9 +438,9 @@ window.startTrip = (meta = {}) => {
     const [cat, catCls] = placeCat(p),
       on = saved.has(p.id),
       row = (ic, label, html, extra = "") =>
-        `<div class="info-row">${icon(ic)}<div><small>${label}</small><p>${html}</p></div>${extra}</div>`,
+        `<div class="list-row info-row">${icon(ic)}<div><small>${label}</small><p>${html}</p></div>${extra}</div>`,
       linkRow = (u, label, ic) =>
-        `<a class="info-row info-link" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${icon(ic)}<div><p>${esc(label)}</p></div>${icon("external")}</a>`,
+        `<a class="list-row info-row info-link" href="${esc(u)}" target="_blank" rel="noopener noreferrer">${icon(ic)}<div><p>${esc(label)}</p></div>${icon("external")}</a>`,
       pins = window.TRIP_GEO.places[p.id] || [],
       // 網站／參考連結: the place's own website first (its own row, named by its address), Google Maps links named as such.
       isMaps = (u) => /(^|\.)google\.[a-z.]+\/maps|maps\.google\.|maps\.app\.goo\.gl|goo\.gl\/maps/i.test(u),
@@ -439,7 +464,7 @@ window.startTrip = (meta = {}) => {
       `${p.photo ? `<figure class="place-photo detail-photo"><img src="data:image/jpeg;base64,${p.photo}" alt=""><figcaption>${esc(photoCredit(p.photoBy))}</figcaption></figure>` : ""}<div class="detail-badges">${Kit.badge(esc(cat), catCls)}<span>${esc(areaOf(p) || p.v[0])}</span></div><h2 class="detailtitle">${esc(p.v[1])}${zhLine(p.zh)}</h2>${p.v[9]?.includes("已閉店") ? '<p class="closed">已結業 · 保留原有記錄</p>' : ""}<div class="detail-actions">${Kit.btn("加入行程", { variant: "primary", icon: "plus", attrs: { "data-place-plan": p.id } })}<button class="save btn btn-outline btn-icon${on ? " saved" : ""}" data-save="${p.id}" aria-label="${on ? "取消收藏" : "收藏"}" aria-pressed="${on}">${icon("star")}</button>${Kit.btn("編輯", { icon: "edit", iconOnly: true, attrs: { "data-place-edit": p.id } })}${Kit.menu([
         { label: "複製地址", icon: "copy", attrs: { "data-copy": p.v[3] || p.v[1] } },
         { label: "刪除地點", icon: "trash", danger: true, attrs: { "data-place-delete": p.id } },
-      ])}</div><div class="info-list">${[
+      ])}</div><div class="list info-list">${[
         // Address with its map, directions and copy buttons as small icons (map and directions even without an address).
         row("pin", "地址", esc(p.v[3] || "未有地址"), `<span class="row-tools">${Kit.btn("Google 地圖", { href: placeMap(p), external: true, icon: "map", iconOnly: true, variant: "ghost", size: "sm" })}${Kit.btn("導航", { href: route(p.v[1] + " " + p.v[3]), external: true, icon: "nav", iconOnly: true, variant: "ghost", size: "sm" })}${p.v[3] ? Kit.btn("複製地址", { icon: "copy", iconOnly: true, variant: "ghost", size: "sm", attrs: { "data-copy": p.v[3] } }) : ""}</span>`),
         p.v[4] && row("sparkles", "必吃・必買・特色", esc(p.v[4])),
@@ -453,10 +478,11 @@ window.startTrip = (meta = {}) => {
         buys.length
           ? `<section class="detail-section"><h3>購物（${buys.length}）</h3><div class="links">${buys.map((x) => Kit.btn(esc(x.name), { size: "sm", icon: x.bought ? "check" : "bag", cls: x.bought ? "bought" : "", attrs: { "data-shop-open": x.id } })).join("")}</div></section>`
           : ""
-      }${pins.length > 1 ? `<section class="detail-section"><h3>分店／地址（${pins.length}）</h3><div class="info-list">${pins.map((g, k) => linkRow(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]), "pin")).join("")}</div></section>` : ""}${refs.length ? `<section class="detail-section"><h3>其他連結</h3><div class="info-list">${refs.join("")}</div></section>` : ""}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>${p.v[9] || p.v[7] ? `<p class="note detail-foot">${esc([p.v[9], p.v[7]].filter(Boolean).join(" · "))}</p>` : ""}`,
+      }${pins.length > 1 ? `<section class="detail-section"><h3>分店／地址（${pins.length}）</h3><div class="list info-list">${pins.map((g, k) => linkRow(`https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}`, g.label || (k ? `分店 ${k + 1}` : p.v[1]), "pin")).join("")}</div></section>` : ""}${refs.length ? `<section class="detail-section"><h3>其他連結</h3><div class="list info-list">${refs.join("")}</div></section>` : ""}<section class="tg-slot" data-tg-place="${esc(p.id)}"></section>${p.v[9] || p.v[7] ? `<p class="note detail-foot">${esc([p.v[9], p.v[7]].filter(Boolean).join(" · "))}</p>` : ""}`,
     );
     window.Together?.refresh();
   }
+  // ---- 探索: place data, the place form (branches, photo, paste, 自動填寫) and duplicates ----
   // Places are trips/{t}/places documents (id "u_" + document id); each may have several pins (branches).
   function applyPlaceEdits(list) {
     const geo = {},
@@ -588,7 +614,6 @@ window.startTrip = (meta = {}) => {
   });
   // Pasted anywhere on 探索 (or into its search box): a Google Maps link opens 新增地點 and runs 自動填寫; a picture opens
   // it with that photo. Duplicates are caught when saving (placeDuplicate).
-  const mapsLink = (t) => /^https?:\/\/(maps\.app\.goo\.gl|goo\.gl\/maps|(www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)\S*$/i.test(t);
   document.addEventListener("paste", (e) => {
     const t = e.target;
     if (current !== "explore" || $("#detail").open || (t.matches?.("input, textarea, select") && t.id !== "search")) return;
@@ -602,7 +627,7 @@ window.startTrip = (meta = {}) => {
     }
     if (!/^https?:\/\/\S+$/i.test(text)) return;
     e.preventDefault();
-    if (!mapsLink(text)) return toast("請貼上 Google 地圖連結。");
+    if (!Kit.isMapsLink(text)) return toast("請貼上 Google 地圖連結。");
     placeForm(null);
     $("#placeForm").elements.mapsUrl.value = text;
     lookupPlaceForm();
@@ -614,53 +639,36 @@ window.startTrip = (meta = {}) => {
     f.elements.photoBy.value = photo ? by : "";
     $("#placePhotoBox").innerHTML = placePhotoHtml(photo, by);
   }
-  async function lookupPlaceForm() {
+  function lookupPlaceForm() {
     const f = $("#placeForm"),
-      btn = $("#placeLookup"),
-      info = $("#placeLookupInfo"),
       el = f.elements,
-      url = el.mapsUrl.value.trim();
-    if (!url) return toast("請先貼上 Google 地圖連結。");
-    btn.disabled = true;
-    // The AI write-up (類型, 必吃・必買・特色, 參考價格與營業時間) is asked for only while one of them is empty (one AI use).
-    const wantHighlights = ["f2", "f4", "f5"].some((k) => !el[k].value.trim());
-    info.textContent = wantHighlights ? "正在查詢 Google 地圖，並由 AI 整理評論…" : "正在查詢 Google 地圖…";
-    const done = Kit.busy(info, { seconds: wantHighlights ? 12 : 5 });
-    try {
-      const r = await window.Together.lookupPlace(url, { highlights: wantHighlights, photo: !el.photo.value, name: `${el.f1.value} ${el.f3.value}`.trim() }),
-        put = (name, value) => {
-          if (value && !el[name].value.trim()) el[name].value = value;
-        };
-      put("f1", r.name);
-      put("f2", r.type);
-      put("f3", r.address);
-      put("f4", r.highlights);
-      if (r.photo && !el.photo.value) setPlacePhoto(r.photo, r.photoBy);
-      put("f5", r.priceHours || [r.price && "價格：" + r.price, r.hours && "時間：\n" + r.hours].filter(Boolean).join("\n"));
-      put("f10", [r.website, r.tabelog, r.mapsUrl].filter(Boolean).join("\n"));
-      if (r.category && ![...el.cats].some((c) => c.checked)) [...el.cats].forEach((c) => (c.checked = c.value === r.category));
-      if (Number.isFinite(r.lat) && Number.isFinite(r.lng)) {
-        el.lat.value = r.lat;
-        el.lng.value = r.lng;
-        const near = places
-          .filter((p) => p.v[0])
-          .map((p) => ({
-            p,
-            d: Math.min(...(window.TRIP_GEO.places[p.id] || []).map((g) => window.Nearby.distance(r, g)), Infinity),
-          }))
-          .sort((a, b) => a.d - b.d)[0];
-        if (near && near.d < 8000) put("f0", near.p.v[0]);
-      }
-      put("f0", r.district);
-      info.textContent = r.highlights || r.priceHours ? "已填入。類型、「必吃・必買・特色」及「參考價格與營業時間」由 AI 按 Google 資料及評論整理，請檢查後按儲存。" : "已填入，請檢查後按儲存。";
-    } catch (e) {
-      info.textContent =
-        fnError(e, "未能自動填寫，請手動輸入。");
-      console.error(e);
-    } finally {
-      done();
-      btn.disabled = false;
-    }
+      // The AI write-up (類型, 必吃・必買・特色, 參考價格與營業時間) is asked for only while one of them is empty (one AI use).
+      wantHighlights = ["f2", "f4", "f5"].some((k) => !el[k].value.trim());
+    return mapsAutofill(f, {
+      btn: $("#placeLookup"),
+      info: $("#placeLookupInfo"),
+      opts: { highlights: wantHighlights, photo: !el.photo.value, name: `${el.f1.value} ${el.f3.value}`.trim() },
+      seconds: wantHighlights ? 12 : 5,
+      wait: wantHighlights ? "正在查詢 Google 地圖，並由 AI 整理評論…" : "正在查詢 Google 地圖…",
+      fill: (r, put) => {
+        put("f1", r.name);
+        put("f2", r.type);
+        put("f3", r.address);
+        put("f4", r.highlights);
+        if (r.photo && !el.photo.value) setPlacePhoto(r.photo, r.photoBy);
+        put("f5", r.priceHours || [r.price && "價格：" + r.price, r.hours && "時間：\n" + r.hours].filter(Boolean).join("\n"));
+        put("f10", [r.website, r.tabelog, r.mapsUrl].filter(Boolean).join("\n"));
+        if (r.category && ![...el.cats].some((c) => c.checked)) [...el.cats].forEach((c) => (c.checked = c.value === r.category));
+        if (Number.isFinite(r.lat) && Number.isFinite(r.lng)) {
+          el.lat.value = r.lat;
+          el.lng.value = r.lng;
+          const near = nearestPlace(r, places.filter((p) => p.v[0]));
+          if (near && near.d < 8000) put("f0", near.p.v[0]);
+        }
+        put("f0", r.district);
+        if (r.highlights || r.priceHours) return "已填入。類型、「必吃・必買・特色」及「參考價格與營業時間」由 AI 按 Google 資料及評論整理，請檢查後按儲存。";
+      },
+    });
   }
   // Already in 探索: the same Google place, the same or a similar name (without spaces, brackets or punctuation), or a
   // pin within 20 m
@@ -810,7 +818,7 @@ window.startTrip = (meta = {}) => {
     if (discover.day !== day) discover = { kind: "any", prefs: new Set(), day, results: null, area: d ? d.region : "" };
     const regions = [...new Set([...(d ? [d.region] : []), ...areas.map((a) => a.name), ...places.map((p) => p.v[0])].filter(Boolean))];
     openDialog(
-      `${Kit.sheetHead("AI 推薦新地點", d ? `D${day} · ${esc(d.date)} ${esc(d.weekday)}` : "")}<p class="note">AI 上網搜尋${d ? "這天站點附近" : ""}你清單未有的好去處，每個都用 Google 地圖核實，附評分、營業時間及相片。</p><form class="tg-form" id="discoverForm"><label>區域${d ? "（預設這天的區域，可以改）" : ""}<input name="area" list="discoverAreas" maxlength="60" placeholder="例如：由布院、天神" value="${esc(discover.area)}"><datalist id="discoverAreas">${regions.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label><div><span class="field-label">類型</span>${Kit.chips(
+      `${Kit.sheetHead("AI 推薦新地點", d ? `D${day} · ${esc(d.date)}` : "")}<p class="note">AI 上網搜尋${d ? "這天站點附近" : ""}你清單未有的好去處，每個都用 Google 地圖核實，附評分、營業時間及相片。</p><form class="tg-form" id="discoverForm"><label>區域${d ? "（預設這天的區域，可以改）" : ""}<input name="area" list="discoverAreas" maxlength="60" placeholder="例如：由布院、天神" value="${esc(discover.area)}"><datalist id="discoverAreas">${regions.map((r) => `<option value="${esc(r)}">`).join("")}</datalist></label><div><span class="field-label">類型</span>${Kit.chips(
         DISCOVER_KIND.map(([k, t]) => ({ label: t, active: discover.kind === k, attrs: { "data-discover-kind": k } })),
         { label: "類型" },
       )}</div><div><span class="field-label">喜好（可多選）</span>${Kit.chips(
@@ -843,7 +851,7 @@ window.startTrip = (meta = {}) => {
     return `<div class="discover-list">${r.places
       .map((p, k) => {
         const open = d ? hoursOn(p.hours, d.weekday) : "";
-        return `<article class="discover-card">${p.photo ? `<img src="data:image/jpeg;base64,${p.photo}" alt="" loading="lazy">` : `<span class="discover-ph">${icon("pin")}</span>`}<div><h3>${esc(p.name)}</h3><p class="discover-meta">${[p.type, stars(p)].filter(Boolean).map(esc).join(" · ")}</p>${p.reason ? `<p class="discover-reason">${esc(p.reason)}</p>` : ""}${open ? `<p class="discover-meta">${icon("clock")} ${esc(d.weekday)}：${esc(open)}</p>` : ""}<p class="discover-meta">${esc(p.address.replace(/^〒\d{3}-\d{4}\s*/, "").replace(/^日本、?/, ""))}</p><div class="links">${have.has(p.name) ? Kit.badge("✓ 已加入探索") : Kit.btn(d ? `加入 D${discover.day}` : "加入探索", { size: "sm", variant: "secondary", icon: "plus", attrs: { "data-discover-add": k } })}${Kit.btn(`${esc(p.name)} 地圖`, { href: p.mapsUrl, external: true, size: "sm", icon: "map", iconOnly: true })}</div>${p.photo ? `<small class="discover-credit">相片：${esc(p.photoBy || "Google 地圖")}</small>` : ""}</div></article>`;
+        return `<article class="card discover-card">${p.photo ? `<img src="data:image/jpeg;base64,${p.photo}" alt="" loading="lazy">` : `<span class="discover-ph">${icon("pin")}</span>`}<div><h3>${esc(p.name)}</h3><p class="discover-meta">${[p.type, stars(p)].filter(Boolean).map(esc).join(" · ")}</p>${p.reason ? `<p class="discover-reason">${esc(p.reason)}</p>` : ""}${open ? `<p class="discover-meta">${icon("clock")} ${esc(d.weekday)}：${esc(open)}</p>` : ""}<p class="discover-meta">${esc(p.address.replace(/^〒\d{3}-\d{4}\s*/, "").replace(/^日本、?/, ""))}</p><div class="links">${have.has(p.name) ? Kit.badge("✓ 已加入探索") : Kit.btn(d ? `加入 D${discover.day}` : "加入探索", { size: "sm", variant: "secondary", icon: "plus", attrs: { "data-discover-add": k } })}${Kit.btn(`${esc(p.name)} 地圖`, { href: p.mapsUrl, external: true, size: "sm", icon: "map", iconOnly: true })}</div>${p.photo ? `<small class="discover-credit">相片：${esc(p.photoBy || "Google 地圖")}</small>` : ""}</div></article>`;
       })
       .join("")}</div>${r.dropped ? `<p class="note">另有 ${r.dropped} 個在 Google 地圖找不到或已在清單，已略去。</p>` : ""}${Kit.btn("再推薦更多", { variant: "secondary", icon: "sparkles", cls: "btn-block", attrs: { "data-discover-more": true } })}`;
   }
@@ -1065,6 +1073,7 @@ window.startTrip = (meta = {}) => {
       paintWeather();
     }
   }
+  // ---- 行程: the stop form and adding an explore place to a day ----
   // Editing a stop: time and transport always; the place itself is edited in 探索 / 住宿 when the stop is linked to one.
   function stopForm(day, index) {
     const s = stopsFor(day)[index] || {},
@@ -1078,43 +1087,22 @@ window.startTrip = (meta = {}) => {
   function areaAt(pt) {
     const a = areas.map((x) => ({ x, d: window.Nearby.distance(pt, x) })).sort((p, q) => p.d - q.d)[0];
     if (a && a.d <= 6000) return a.x.name;
-    const near = places
-      .map((p) => ({
-        p,
-        d: Math.min(...(window.TRIP_GEO.places[p.id] || []).map((g) => window.Nearby.distance(pt, g)), Infinity),
-      }))
-      .sort((p, q) => p.d - q.d)[0];
+    const near = nearestPlace(pt);
     return near && near.d < 8000 ? near.p.v[0] : "";
   }
-  async function lookupStopForm() {
-    const f = $("#stopForm"),
-      btn = $("#stopLookup"),
-      info = $("#stopLookupInfo"),
-      el = f.elements,
-      url = el.mapsUrl.value.trim();
-    if (!url) return toast("請先貼上 Google 地圖連結。");
-    btn.disabled = true;
-    info.textContent = "正在查詢 Google 地圖…";
-    const done = Kit.busy(info, { seconds: 5 });
-    try {
-      const r = await window.Together.lookupPlace(url),
-        put = (name, value) => {
-          if (value && !el[name].value.trim()) el[name].value = value;
-        };
-      put("title", r.name);
-      put("target", [r.name, r.address].filter(Boolean).join(" "));
-      put("detail", [r.type, r.price && "價格：" + r.price, r.hours && "營業時間：\n" + r.hours].filter(Boolean).join("\n"));
-      if (Number.isFinite(r.lat) && Number.isFinite(r.lng)) put("area", areaAt({ lat: r.lat, lng: r.lng }));
-      f.dataset.ref = r.website || r.mapsUrl || "";
-      info.textContent = "已填入，請檢查後按儲存。";
-    } catch (e) {
-      info.textContent =
-        fnError(e, "未能自動填寫，請手動輸入。");
-      console.error(e);
-    } finally {
-      done();
-      btn.disabled = false;
-    }
+  function lookupStopForm() {
+    const f = $("#stopForm");
+    return mapsAutofill(f, {
+      btn: $("#stopLookup"),
+      info: $("#stopLookupInfo"),
+      fill: (r, put) => {
+        put("title", r.name);
+        put("target", [r.name, r.address].filter(Boolean).join(" "));
+        put("detail", [r.type, r.price && "價格：" + r.price, r.hours && "營業時間：\n" + r.hours].filter(Boolean).join("\n"));
+        if (Number.isFinite(r.lat) && Number.isFinite(r.lng)) put("area", areaAt({ lat: r.lat, lng: r.lng }));
+        f.dataset.ref = r.website || r.mapsUrl || "";
+      },
+    });
   }
   function saveStopForm(f) {
     const day = Number(f.dataset.day),
@@ -1143,6 +1131,7 @@ window.startTrip = (meta = {}) => {
       `${Kit.sheetHead(`把「${esc(p.v[1])}」加入行程`)}<form class="tg-form" id="placeToPlan" data-place="${esc(p.id)}"><label>日子<select name="day">${days.map((d) => `<option value="${d.n}"${d.n === sel ? " selected" : ""}>D${d.n} ${esc(d.date)} ${esc(d.region)}</option>`).join("")}</select></label><label>時間（可留空，留空會放在最後）<input name="time" maxlength="30" placeholder="例如：12:00–13:00"></label>${Kit.btn("加入行程", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
+  // ---- 行程: the 加入地點 picker (explore places, hotels, shopping spots, AI 推薦) ----
   // In-page picker: search explore places and add them to the selected day without leaving the plan.
   let ppCat = "全部",
     ppArea = "";
@@ -1176,13 +1165,13 @@ window.startTrip = (meta = {}) => {
     const s = slot != null ? stopsFor(day)[slot] : null,
       before = at != null ? stopsFor(day)[at] : null;
     openDialog(
-      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note pp-where">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : before ? `加在「${esc(before.title)}」之前` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p><div class="tg-form plan-pick"><div class="pp-bar"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、特色…" aria-label="搜尋地點">${s ? Kit.btn("自己輸入", { size: "sm", icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增", { size: "sm", icon: "plus", attrs: { "data-stop-new": true, "aria-label": "新增地點" } })}${Kit.btn("發掘", { size: "sm", variant: "secondary", icon: "sparkles", attrs: { "data-discover": day, "aria-label": "發掘新地點" } })}</div>${Kit.chips(
-        ["全部", ...(saved.size ? ["★ 收藏"] : []), "✨ AI 推薦", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物清單"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
+      `${Kit.sheetHead(s ? "加入同一時間的選擇" : "加入地點", `D${day}`)}<p class="note pp-where">${s ? `與「${esc(s.title)}」同在 ${esc(s.time || "這個時段")}` : before ? `加在「${esc(before.title)}」之前` : `${esc(days[day - 1].date)} · ${esc(days[day - 1].region)}`}</p><div class="tg-form plan-pick"><div class="pp-bar"><input id="ppSearch" class="search" type="search" placeholder="搜尋地點、特色…" aria-label="搜尋地點">${s ? Kit.btn("自己輸入", { size: "sm", icon: "edit", attrs: { "data-stop-own": slot } }) : Kit.btn("新增", { size: "sm", icon: "plus", attrs: { "data-stop-new": true, "aria-label": "新增地點" } })}${Kit.btn("發掘", { size: "sm", icon: "sparkles", attrs: { "data-discover": day, "aria-label": "發掘新地點" } })}</div>${Kit.chips(
+        ["全部", ...(saved.size ? ["★ 收藏"] : []), "✨ AI 推薦", ...(lists().hotels.length ? ["住宿"] : []), ...(window.Together?.shoppingPlaces?.().length ? ["購物"] : []), ...exploreCats].map((c) => ({ label: c, active: c === ppCat, attrs: { "data-pp-cat": c } })),
         { label: "分類" },
       )}<label class="pp-time">區域<select id="ppArea"><option value="">全部區域</option>${[...new Set(places.map((p) => p.v[0]).filter(Boolean))]
         .sort((a, b) => a.localeCompare(b, "zh-Hant"))
         .map((r) => `<option value="${esc(r)}">${esc(r)}</option>`)
-        .join("")}</select></label>${s || before ? "" : '<label class="pp-time">時間<input id="ppTime" maxlength="30" placeholder="可留空，例如 12:00–13:00"></label>'}</div><div id="ppList" class="pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}" title="收藏的地點排先，其餘按與這天站點的距離排列"></div>`,
+        .join("")}</select></label>${s || before ? "" : '<label class="pp-time">時間<input id="ppTime" maxlength="30" placeholder="可留空，例如 12:00–13:00"></label>'}</div><div id="ppList" class="list pp-list" data-day="${day}" data-slot="${slot ?? ""}" data-at="${at ?? ""}" title="收藏的地點排先，其餘按與這天站點的距離排列"></div>`,
     );
     ppResults();
   }
@@ -1249,7 +1238,7 @@ window.startTrip = (meta = {}) => {
         : `${ppAi.advice ? `<p class="note">${icon("sparkles")} ${esc(ppAi.advice)}</p>` : ""}${ppAi.picks
             .map(({ k, reason }) => {
               const p = places.find((x) => x.id === k);
-              return `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(dist(p))}</small>${reason ? `<small class="pp-reason">${esc(reason)}</small>` : ""}${againNote(p)}</div>${planned(p) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`;
+              return `<div class="list-row pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(dist(p))}</small>${reason ? `<small class="pp-reason">${esc(reason)}</small>` : ""}${againNote(p)}</div>${planned(p) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`;
             })
             .join("") || '<p class="note">AI 沒有合適的推薦。</p>'}`;
       box.insertAdjacentHTML("beforeend", Kit.btn("再推薦一次", { size: "sm", icon: "redo", attrs: { "data-pp-ai-again": true } }));
@@ -1272,7 +1261,7 @@ window.startTrip = (meta = {}) => {
       hotelIn = stopsFor(day).reduce((m, s) => (s.hotelId ? m.set(s.hotelId, (m.get(s.hotelId) || 0) + 1) : m), new Map());
     const dist = dayDistance(day),
       far = new Map(places.map((p) => [p.id, dist(p)]));
-    const ps = ["住宿", "購物清單"].includes(ppCat)
+    const ps = ["住宿", "購物"].includes(ppCat)
       ? []
       : places
           .filter(
@@ -1285,12 +1274,12 @@ window.startTrip = (meta = {}) => {
     const hotelRows = hs
       .map(
         (h) =>
-          `<div class="pp-row"><div><b>${icon("bed")} ${esc(h.name)}</b><small>${h.checkIn ? `${esc(h.checkIn.slice(5))} → ${esc((h.checkOut || "").slice(5))}` : "住宿"}${h.address ? ` · ${esc(h.address.slice(0, 40))}` : ""}</small></div>${hotelIn.get(h.id) ? Kit.badge(`✓ ${hotelIn.get(h.id)} 次`) : ""}${addBtn({ "data-pp-hotel": h.id })}</div>`,
+          `<div class="list-row pp-row"><div><b>${icon("bed")} ${esc(h.name)}</b><small>${h.checkIn ? esc(Kit.dateRange(h.checkIn, h.checkOut)) : "住宿"}${h.address ? ` · ${esc(h.address.slice(0, 40))}` : ""}</small></div>${hotelIn.get(h.id) ? Kit.badge(`✓ ${hotelIn.get(h.id)} 次`) : ""}${addBtn({ "data-pp-hotel": h.id })}</div>`,
       )
       .join("");
     // 購物清單: where unbought list items are bought (explore places, or the item's own geocoded 購買地點).
     ppSpots =
-      ppCat === "購物清單"
+      ppCat === "購物"
         ? (window.Together?.shoppingPlaces?.() || []).filter(
             (s) => !q || `${s.name} ${s.address} ${s.items.join(" ")}`.toLocaleLowerCase().includes(q),
           )
@@ -1298,7 +1287,7 @@ window.startTrip = (meta = {}) => {
     const spotRows = ppSpots
       .map(
         (s, k) =>
-          `<div class="pp-row"><div><b>${icon("bag")} ${esc(s.name)}</b><small>要買：${s.items.map(esc).join("、")}</small></div>${s.placeId && inPlan.has(s.placeId) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-spot": k })}</div>`,
+          `<div class="list-row pp-row"><div><b>${icon("bag")} ${esc(s.name)}</b><small>要買：${s.items.map(esc).join("、")}</small></div>${s.placeId && inPlan.has(s.placeId) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-spot": k })}</div>`,
       )
       .join("");
     box.innerHTML = hotelRows + spotRows + (ps.length || hotelRows || spotRows ? "" : '<p class="note">找不到符合的地點。</p>');
@@ -1309,7 +1298,7 @@ window.startTrip = (meta = {}) => {
         .slice(0, 40)
         .map(
           (p) =>
-            `<div class="pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(far.get(p.id))}${p.v[2] ? ` · ${esc(p.v[2])}` : ""}</small>${againNote(p)}</div>${planned(p) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
+            `<div class="list-row pp-row"><div><b>${saved.has(p.id) ? "★ " : ""}${esc(p.v[1])}</b><small>${esc(areaOf(p) || p.v[0])}${kmText(far.get(p.id))}${p.v[2] ? ` · ${esc(p.v[2])}` : ""}</small>${againNote(p)}</div>${planned(p) ? Kit.badge("✓ 已加入") : addBtn({ "data-pp-add": p.id })}</div>`,
         )
         .join("")}${ps.length > 40 ? `<p class="note">還有 ${ps.length - 40} 個，請輸入更多字縮窄搜尋。</p>` : ""}`,
     );
@@ -1378,6 +1367,7 @@ window.startTrip = (meta = {}) => {
       savePlaceToPlan(e.target);
     }
   });
+  // ---- 行程: the day page (day tabs, heading, 方案, timeline) ----
   // Consecutive stops with the same (non-empty) time are alternatives for one slot, shown side by side.
   const stopGroups = (stops) =>
     stops.reduce((gs, s, i) => {
@@ -1388,7 +1378,7 @@ window.startTrip = (meta = {}) => {
     }, []);
   function stopCard(s, i, label, last) {
     const placeOk = s.placeId && places.some((p) => p.id === s.placeId);
-    return `<div class="stopcontent"><div class="stop-top"><span class="eyebrow">${label} / ${esc(s.area)}</span>${Kit.menu(
+    return `<div class="card stopcontent"><div class="card-top stop-top"><span class="eyebrow">${label} / ${esc(s.area)}</span>${Kit.menu(
       [
         { label: "修改", icon: "edit", attrs: { "data-stop-edit": i } },
         { label: "移去其他日子", icon: "calendar", attrs: { "data-stop-to-day": i } },
@@ -1407,7 +1397,7 @@ window.startTrip = (meta = {}) => {
       stops = stopsFor(day),
       last = stops.length - 1,
       first = stops[0];
-    return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)} · ${esc(d.weekday)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
+    return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
       [
         { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
         { label: "新增方案（複製這個）", icon: "copy", attrs: { "data-plan-variant-new": true } },
@@ -1428,13 +1418,12 @@ window.startTrip = (meta = {}) => {
               .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last))
               .join("")}</div></article>`,
         )
-        .join("") || Kit.empty("這天還沒有行程", "按右下角「加入地點」，從探索、住宿或購物清單選擇，或新增地點。")
+        .join("") || Kit.empty("這天還沒有行程", "按右下角「＋地點」，從探索、住宿或購物選擇，或新增地點。")
     }</div><section class="tg-slot" data-tg-day="${day}"></section><div class="fab-row">${Kit.fab("地點", { "data-plan-pick": true, "aria-label": "加入地點" })}${Kit.fab("筆記", { "data-tg": "dayNote", "data-note-day": day, "aria-label": "寫筆記" })}</div>`;
   }
   function renderPlan() {
     const tab = (d) => {
-      const [dd, mm] = d.date.split("/");
-      return `<button class="daytab ${d.n === selectedDay ? "active" : ""}" data-day="${d.n}" aria-pressed="${d.n === selectedDay}" aria-label="第 ${d.n} 天 ${esc(d.date)} ${esc(d.region)}"><b>D${d.n}</b><span>${dd}/${mm} ${d.weekday.slice(-1)}</span><small class="weather-tab" data-weather-tab="${d.n}"></small></button>`;
+      return `<button class="daytab ${d.n === selectedDay ? "active" : ""}" data-day="${d.n}" aria-pressed="${d.n === selectedDay}" aria-label="第 ${d.n} 天 ${esc(d.date)} ${esc(d.region)}"><b>D${d.n}</b><span>${d.md} ${d.weekday.slice(-1)}</span><small class="weather-tab" data-weather-tab="${d.n}"></small></button>`;
     };
     return `<h1 class="sr-only">每日行程</h1><div class="daytabs" aria-label="選擇行程日期">${days.map(tab).join("")}</div><article class="journey-day" aria-label="第${selectedDay}天行程">${renderPlanDay(selectedDay)}</article>`;
   }
@@ -1476,16 +1465,16 @@ window.startTrip = (meta = {}) => {
       fl = [...L.flights].sort((a, b) => String(a.depart).localeCompare(String(b.depart))),
       hs = [...L.hotels].sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)));
     const title = meta.name || "旅程",
-      range = days.length ? `${days[0].iso} – ${days.at(-1).iso}` : "";
+      range = days.length ? Kit.dateRange(days[0].iso, days.at(-1).iso, { year: true }) : "";
     const html = `<h1>${esc(title)}</h1><p class="print-sub">${esc([meta.destination, range, `${days.length} 天`].filter(Boolean).join(" · "))}</p>
  ${fl.length ? `<h2>航班</h2><table><tbody>${fl.map((f) => `<tr><td>${esc(fmtTime(f.depart))}</td><td><b>${esc(f.flightNo)}</b> ${esc(f.airline)}</td><td>${esc(f.from)} → ${esc(f.to)}</td><td>到達 ${esc(fmtTime(f.arrive))}</td></tr>`).join("")}</tbody></table>` : ""}
- ${hs.length ? `<h2>住宿</h2><table><tbody>${hs.map((h) => `<tr><td>${h.checkIn ? `${esc(h.checkIn)} → ${esc(h.checkOut)}` : "日期未定"}</td><td><b>${esc(h.name)}</b></td><td>${esc(h.address)}</td></tr>`).join("")}</tbody></table>` : ""}
+ ${hs.length ? `<h2>住宿</h2><table><tbody>${hs.map((h) => `<tr><td>${h.checkIn ? esc(Kit.dateRange(h.checkIn, h.checkOut)) : "日期未定"}</td><td><b>${esc(h.name)}</b></td><td>${esc(h.address)}</td></tr>`).join("")}</tbody></table>` : ""}
  ${days
    .map((d) => {
      // the 方案 on screen for that day (named when the day has more than one)
      const stops = stopsFor(d.n),
        plan = variantsOf(d.n).length ? viewedVariant(d.n)?.name || mainName(d.n) : "";
-     return `<section class="print-day"><h2>DAY ${d.n} · ${esc(d.date)} ${esc(d.weekday)} · ${esc(d.region)}${plan ? ` · ${esc(plan)}` : ""}</h2>${d.hotel ? `<p class="print-sub">住宿：${esc(d.hotel)}</p>` : ""}${stops.length ? `<table><tbody>${stops.map((s) => `<tr><td class="print-time">${esc(s.time)}</td><td><b>${esc(s.title)}</b>${s.note ? `<div>📝 ${esc(s.note)}</div>` : ""}${s.detail ? `<div>${esc(s.detail)}</div>` : ""}${s.transport ? `<div class="print-sub">↳ ${esc(s.transport)}</div>` : ""}</td></tr>`).join("")}</tbody></table>` : '<p class="print-sub">未安排</p>'}</section>`;
+     return `<section class="print-day"><h2>DAY ${d.n} · ${esc(d.date)} · ${esc(d.region)}${plan ? ` · ${esc(plan)}` : ""}</h2>${d.hotel ? `<p class="print-sub">住宿：${esc(d.hotel)}</p>` : ""}${stops.length ? `<table><tbody>${stops.map((s) => `<tr><td class="print-time">${esc(s.time)}</td><td><b>${esc(s.title)}</b>${s.note ? `<div>📝 ${esc(s.note)}</div>` : ""}${s.detail ? `<div>${esc(s.detail)}</div>` : ""}${s.transport ? `<div class="print-sub">↳ ${esc(s.transport)}</div>` : ""}</td></tr>`).join("")}</tbody></table>` : '<p class="print-sub">未安排</p>'}</section>`;
    })
    .join("")}
  <p class="print-sub">列印自口袋旅伴 · ${new Date().toLocaleDateString("zh-HK")}</p>`;
@@ -1664,7 +1653,7 @@ window.startTrip = (meta = {}) => {
               .map(([k, [v]]) => `<option value="${k}">${v}</option>`)
               .join(
                 "",
-              )}</select></label></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { href: "#", external: true, size: "sm", icon: "map", attrs: { id: "routeGm", title: "在 Google 地圖查看" } })}${meta.country === "JP" ? Kit.btn("Yahoo", { href: "#", external: true, size: "sm", icon: "train", attrs: { id: "routeYahoo", title: "Yahoo!乗換案内：實際班次" } }) : ""}${Kit.btn("AI 分析", { variant: "secondary", size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
+              )}</select></label></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { href: "#", external: true, size: "sm", icon: "map", attrs: { id: "routeGm", title: "在 Google 地圖查看" } })}${meta.country === "JP" ? Kit.btn("Yahoo", { href: "#", external: true, size: "sm", icon: "train", attrs: { id: "routeYahoo", title: "Yahoo!乗換案内：實際班次" } }) : ""}${Kit.btn("AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
           : '<p class="note">這天前面沒有站點，亦未有住宿資料，未能查詢路線；可以自行填寫。</p>'
       }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label>${Kit.btn("儲存交通", { type: "submit", variant: "secondary" })}</form>`,
     );
@@ -1723,7 +1712,7 @@ window.startTrip = (meta = {}) => {
       });
       c.options = r.options;
       box.innerHTML = r.options.length
-        ? `${r.source === "navitime" ? '<p class="note">火車路線及車費由 NAVITIME 提供（車費＝車票＋自由席特急料金），時間按平均行車時間估算，沒有列車號數：實際班次請按上面的「Yahoo」（Yahoo!乗換案内）。不包括巴士，搭巴士較方便時請按「AI 分析」。</p>' : ""}${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${o.steps.find((s) => s.mode === "TRANSIT").approx ? "約 " : ""}${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${s.approx ? "約 " : ""}${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": k } })}</div>`).join("")}`
+        ? `${r.source === "navitime" ? '<p class="note">火車路線及車費由 NAVITIME 提供（車費＝車票＋自由席特急料金），時間按平均行車時間估算，沒有列車號數：實際班次請按上面的「Yahoo」（Yahoo!乗換案内）。不包括巴士，搭巴士較方便時請按「AI 分析」。</p>' : ""}${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="card route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${o.steps.find((s) => s.mode === "TRANSIT").approx ? "約 " : ""}${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${s.approx ? "約 " : ""}${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": k } })}</div>`).join("")}`
         : `<p class="note">${mode === "TRANSIT" && meta.country === "JP" ? "找不到公共交通班次，可以按上面的「Yahoo」（Yahoo!乗換案内）或「AI 分析」。" : `Google 地圖找不到${ROUTE_MODES[mode][0]}路線。`}</p>`;
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p>`;
@@ -1763,7 +1752,7 @@ window.startTrip = (meta = {}) => {
       });
       c.aiOptions = r.options;
       box.innerHTML = r.options.length
-        ? `<div class="route-ai-head"><b>${icon("sparkles")} AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-ai-pick": k } })}</div>`).join("")}`
+        ? `<div class="route-ai-head"><b>${icon("sparkles")} AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。</p></div>${r.options.map((o, k) => `<div class="card route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b><span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span><span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-ai-pick": k } })}</div>`).join("")}`
         : '<p class="note">AI 未能提供路線建議。</p>';
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(fnError(e, "未能進行 AI 分析，請檢查網絡後再試。"))}</p>`;
@@ -1797,29 +1786,23 @@ window.startTrip = (meta = {}) => {
     saveTransport(e.target.elements.transport.value);
     $("#detail").close();
   });
+  // 選用這個: the suggestion becomes the leg's 交通 and its card is marked
+  function useRoute(text, btn) {
+    const ta = $("#routeManual textarea");
+    if (ta) ta.value = text;
+    saveTransport(text);
+    document.querySelectorAll(".route-option").forEach((o) => o.classList.toggle("picked", o === btn.closest(".route-option")));
+  }
   document.addEventListener("click", (e) => {
     if (e.target.closest("#routeGo")) runRoutes();
     if (e.target.closest("[data-route-ai]")) runAiRoutes();
     const aiPick = e.target.closest("[data-route-ai-pick]");
     if (aiPick && routeCtx?.aiOptions) {
-      const k = Number(aiPick.dataset.routeAiPick),
-        text = aiRouteText(routeCtx.aiOptions[k]),
-        ta = $("#routeManual textarea");
-      if (ta) ta.value = text;
-      saveTransport(text);
-      document
-        .querySelectorAll(".route-option")
-        .forEach((o) => o.classList.toggle("picked", o === aiPick.closest(".route-option")));
+      useRoute(aiRouteText(routeCtx.aiOptions[Number(aiPick.dataset.routeAiPick)]), aiPick);
     }
     const pick = e.target.closest("[data-route-pick]");
     if (pick && routeCtx?.options) {
-      const text = routeText(routeCtx.options[Number(pick.dataset.routePick)], routeCtx.mode),
-        ta = $("#routeManual textarea");
-      if (ta) ta.value = text;
-      saveTransport(text);
-      document
-        .querySelectorAll(".route-option")
-        .forEach((o, k) => o.classList.toggle("picked", k === Number(pick.dataset.routePick)));
+      useRoute(routeText(routeCtx.options[Number(pick.dataset.routePick)], routeCtx.mode), pick);
     }
   });
   // ---- 行程 tools: order by distance, drag to reorder, every leg's transport at once, AI arrangement and times ----
@@ -2014,6 +1997,7 @@ window.startTrip = (meta = {}) => {
   });
 
   // 查全日交通: every leg without transport (or all of them, when asked) in one request: walks under 1.5 km by Google
+  // ---- 行程 tools: 查全日交通 and ✨ AI 安排 ----
   // Maps, trains in Japan by NAVITIME (lines, fares and estimated times), the rest by the AI.
   const placeForAi = (s) => {
     const p = pointOf(s);
@@ -2123,7 +2107,7 @@ window.startTrip = (meta = {}) => {
         .map((k, j) => {
           const g = gs[Number(k)],
             leg = j ? legOf(k) : null;
-          return `${leg ? `<li class="ai-plan-leg">${esc(legText(leg))}</li>` : ""}<li class="ai-plan-stop"><b>${esc(r.times[k] || "")}</b><span>${g.map((x) => esc(x.s.title)).join(" / ")}</span>${r.warnings[k] ? `<small class="stop-warn">${icon("clock")}<span>${esc(r.warnings[k])}</span></small>` : ""}</li>`;
+          return `${leg ? `<li class="ai-plan-leg">${esc(legText(leg))}</li>` : ""}<li class="card ai-plan-stop"><b>${esc(r.times[k] || "")}</b><span>${g.map((x) => esc(x.s.title)).join(" / ")}</span>${r.warnings[k] ? `<small class="stop-warn">${icon("clock")}<span>${esc(r.warnings[k])}</span></small>` : ""}</li>`;
         })
         .join("")}</ol><p class="note">時間、交通及車費由 AI 估算，出發前請再確認。</p><div class="detail-actions">${Kit.btn("套用", { variant: "primary", icon: "check", attrs: { "data-ai-plan-apply": true } })}${Kit.btn("重新安排", { icon: "redo", attrs: { "data-ai-plan-again": true } })}</div>`;
     } catch (e) {
@@ -2146,13 +2130,14 @@ window.startTrip = (meta = {}) => {
   }
 
   // Another day: 與另一日對調 swaps two whole days (stops and titles); 移去其他日子 moves one stop, keeping its time.
+  // ---- 行程 tools: another day (對調, 移去), the toolbar and its handlers ----
   let dayPick = null;
   function pickDay(title, note, onPick) {
     dayPick = onPick;
     openDialog(
-      `${Kit.sheetHead(title, `D${selectedDay}`)}<p class="note">${note}</p><div class="day-pick">${days
+      `${Kit.sheetHead(title, `D${selectedDay}`)}<p class="note">${note}</p><div class="list day-pick">${days
         .filter((d) => d.n !== selectedDay)
-        .map((d) => `<button type="button" class="day-pick-row" data-day-pick="${d.n}"><b>D${d.n}</b><span>${esc(d.date)} ${esc(d.weekday)}<small>${esc(d.region)} · ${stopsFor(d.n).length} 個站點</small></span></button>`)
+        .map((d) => Kit.row({ lead: `<span class="daynum">D${d.n}</span>`, title: esc(d.date), sub: `${esc(d.region)} · ${stopsFor(d.n).length} 個站點`, attrs: { "data-day-pick": d.n } }))
         .join("")}</div>`,
     );
   }
@@ -2203,7 +2188,7 @@ window.startTrip = (meta = {}) => {
       ["AI 安排", "sparkles", "data-plan-ai"],
       ["推算時間", "clock", "data-plan-times"],
     ]
-      .map(([label, ic, attr]) => Kit.btn(label, { size: "sm", variant: attr === "data-plan-ai" ? "secondary" : "outline", icon: ic, attrs: { [attr]: true, ...(stops.length < 2 && attr !== "data-plan-routes" ? { disabled: true } : {}) } }))
+      .map(([label, ic, attr]) => Kit.btn(label, { size: "sm", icon: ic, attrs: { [attr]: true, ...(stops.length < 2 && attr !== "data-plan-routes" ? { disabled: true } : {}) } }))
       .join("")}</div><p class="note" id="planToolsInfo" hidden></p>`;
   }
   document.addEventListener("click", (e) => {
@@ -2283,7 +2268,7 @@ window.startTrip = (meta = {}) => {
           sub: `D${d.n} ${d.date}${s.time ? ` · ${s.time}` : ""}`,
           source: `第 ${d.n} 天行程`,
           fields: [
-            ["日期", `D${d.n} ${d.date} ${d.weekday}`],
+            ["日期", `D${d.n} ${d.date}`],
             ["時間", s.time],
             ["區域", s.area],
             ["內容", s.detail],
@@ -2304,11 +2289,11 @@ window.startTrip = (meta = {}) => {
         title: h.name,
         region: "住宿",
         summary: h.address || "",
-        sub: h.checkIn ? `${h.checkIn} → ${h.checkOut || "?"}` : "日期未定",
+        sub: h.checkIn ? Kit.dateRange(h.checkIn, h.checkOut) : "日期未定",
         source: "住宿",
         fields: [
-          ["入住", h.checkIn],
-          ["退房", h.checkOut],
+          ["入住", Kit.date(h.checkIn)],
+          ["退房", Kit.date(h.checkOut)],
           ["地址", h.address],
           ["備註", h.note],
         ],
@@ -2341,14 +2326,14 @@ window.startTrip = (meta = {}) => {
         type: "購物",
         types: ["購物"],
         title: x.name,
-        region: window.Together?.shopCats?.[x.cat] || "購物清單",
+        region: window.Together?.shopCats?.[x.cat] || "購物",
         summary: [x.qty, x.detail, x.place].filter(Boolean).join(" · "),
         sub: x.bought
           ? `✓ 已買${x.boughtBy ? `（${x.boughtBy}）` : ""}`
           : x.price != null && S.currencies[x.currency]
             ? `未買 · ${S.format(S.toMinor(x.price, x.currency), x.currency)}`
             : "未買",
-        source: "購物清單",
+        source: "購物",
         shopId: x.id,
       }),
     );
@@ -2401,7 +2386,7 @@ window.startTrip = (meta = {}) => {
               .includes(q)),
       );
     $("#notebookResults").innerHTML =
-      `<div class="resultsbar"><span>找到 ${rs.length} 項${notebookSearch ? " ·「" + esc(notebookSearch) + "」" : ""}</span>${Kit.btn("清除篩選", { variant: "ghost", size: "sm", attrs: { id: "notebookReset" } })}</div><div class="notebook-list">${rs.map((r) => `<article class="notebook-card"><div class="notebook-meta">${Kit.badge(esc(r.type))}<span>${esc(r.region)}</span></div><h2>${esc(r.title)}</h2><p class="notebook-summary">${esc(r.summary)}</p>${r.sub ? `<p class="notebook-sub">${esc(r.sub)}</p>` : ""}<div class="notebook-bottom"><small>${esc(r.source)}</small>${Kit.btn("查看詳情", { variant: "secondary", size: "sm", attrs: { "data-notebook-record": r.id } })}</div></article>`).join("")}</div>${rs.length ? "" : Kit.empty("找不到符合的資料", "試用較短的店名、菜式或日期，或按「清除篩選」。")}`;
+      `<div class="resultsbar"><span>找到 ${rs.length} 項${notebookSearch ? " ·「" + esc(notebookSearch) + "」" : ""}</span>${Kit.btn("清除篩選", { variant: "ghost", size: "sm", attrs: { id: "notebookReset" } })}</div><div class="notebook-list">${rs.map((r) => Kit.card({ cls: "notebook-card", top: `${Kit.badge(esc(r.type))}<span class="card-meta">${esc(r.region)}</span>`, title: esc(r.title), body: `${r.summary ? `<p class="notebook-summary">${esc(r.summary)}</p>` : ""}${r.sub ? `<p class="notebook-sub">${esc(r.sub)}</p>` : ""}<div class="card-foot"><small>${esc(r.source)}</small>${Kit.btn("查看詳情", { size: "sm", attrs: { "data-notebook-record": r.id } })}</div>` })).join("")}</div>${rs.length ? "" : Kit.empty("找不到符合的資料", "試用較短的店名、菜式或日期，或按「清除篩選」。")}`;
   }
   function bindNotebook() {
     notebookResults();
@@ -2435,6 +2420,11 @@ window.startTrip = (meta = {}) => {
     );
   }
   // ---- 住宿 and 機票 (hotels and flights) ----
+  // Label and value pairs under a card's title (empty values are left out)
+  const kv = (rows) => {
+    const r = rows.filter(([, v]) => v);
+    return r.length ? `<dl class="kv">${r.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl>` : "";
+  };
   const docsBtn = (k, x) => Kit.btn(`文件${x.docs?.length ? `（${x.docs.length}）` : ""}`, { size: "sm", icon: "clip", attrs: { "data-docs": `${k}:${x.id}` } }),
     itemMenu = (k, id) =>
       Kit.menu([
@@ -2443,40 +2433,29 @@ window.startTrip = (meta = {}) => {
       ]);
   function renderHotels() {
     const hs = [...lists().hotels].sort((a, b) => String(a.checkIn).localeCompare(String(b.checkIn)));
-    return `${header("住宿")}${hs.length ? `<div class="twocol">${hs.map((h) => `<article class="card hotel"><div class="card-top"><span class="hotelnum">${esc(h.checkIn || "?")} → ${esc(h.checkOut || "?")}${nights(h) > 0 ? ` · ${nights(h)} 晚` : ""}</span>${itemMenu("hotel", h.id)}</div><h2>${esc(h.name)}</h2><dl class="kv">${h.address ? `<dt>地址</dt><dd>${esc(h.address)}</dd>` : ""}${h.note ? `<dt>備註</dt><dd>${esc(h.note)}</dd>` : ""}</dl><div class="links">${link(route(`${h.name} ${h.address}`.trim()), "導航")}${h.mapsUrl ? link(h.mapsUrl, "Google 地圖") : ""}${docsBtn("hotels", h)}</div></article>`).join("")}</div>` : Kit.empty("還沒有住宿", "按右下角「新增住宿」，貼上酒店的 Google 地圖連結即可自動填寫。")}${Kit.sectionHead("每晚住宿")}<div class="panel">${days.map((d) => `<a class="dayrow" href="#plan?day=${d.n}"><span class="daynum">D${d.n}</span><div><strong>${esc(d.date)} · ${esc(d.region)}</strong><small>${esc(d.hotel || "未設定")}</small></div>${icon("chevron")}</a>`).join("")}</div>${Kit.fab("新增住宿", { "data-hotel-new": true })}`;
+    return `${header("住宿")}${hs.length ? `<div class="twocol">${hs.map((h) => Kit.card({ cls: "hotel", top: `<span class="card-date">${h.checkIn ? esc(Kit.dateRange(h.checkIn, h.checkOut)) : "日期未定"}${nights(h) > 0 ? ` · ${nights(h)} 晚` : ""}</span>${itemMenu("hotel", h.id)}`, title: esc(h.name), body: kv([["地址", h.address], ["備註", h.note]]), links: `${link(route(`${h.name} ${h.address}`.trim()), "導航")}${h.mapsUrl ? link(h.mapsUrl, "Google 地圖") : ""}${docsBtn("hotels", h)}` })).join("")}</div>` : Kit.empty("還沒有住宿", "按右下角「＋住宿」，貼上酒店的 Google 地圖連結即可自動填寫。")}${Kit.sectionHead("每晚住宿")}<div class="list">${days.map((d) => Kit.row({ href: `#plan?day=${d.n}`, lead: `<span class="daynum">D${d.n}</span>`, title: `${esc(d.date)} · ${esc(d.region)}`, sub: esc(d.hotel || "未設定"), trail: icon("chevron") })).join("")}</div>${Kit.fab("住宿", { "data-hotel-new": true, "aria-label": "新增住宿" })}`;
   }
   function hotelForm(h) {
     const v = (k) => esc(h?.[k] ?? ""),
-      first = days[0] ? isoDash(days[0]) : "",
-      last = days.at(-1) ? isoDash(days.at(-1)) : "";
+      [first, last] = tripDates();
     openDialog(
       `${Kit.sheetHead(h ? "修改住宿" : "新增住宿")}<form class="tg-form" id="hotelForm" data-id="${h ? esc(h.id) : ""}"><label>Google 地圖連結<span class="searchrow"><input name="mapsUrl" class="search" inputmode="url" autocomplete="off" placeholder="貼上酒店的 Google 地圖分享連結" value="${v("mapsUrl")}">${Kit.btn("自動填寫", { variant: "secondary", icon: "sparkles", attrs: { id: "hotelLookup" } })}</span></label><p class="note" id="hotelLookupInfo"></p><label>酒店名稱<input name="name" required maxlength="100" value="${v("name")}"></label><label>地址<input name="address" maxlength="200" value="${v("address")}"></label><div class="tg-row"><label>入住<input name="checkIn" type="date" value="${h ? v("checkIn") : first}"></label><label>退房<input name="checkOut" type="date" value="${h ? v("checkOut") : last}"></label></div><label>備註（訂單、早餐、寄存行李…）<textarea name="note" rows="2" maxlength="500">${v("note")}</textarea></label><input type="hidden" name="lat" value="${h?.lat ?? ""}"><input type="hidden" name="lng" value="${h?.lng ?? ""}">${Kit.btn(h ? "儲存修改" : "加入住宿", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
   }
-  async function lookupHotel() {
-    const f = $("#hotelForm"),
-      el = f.elements,
-      info = $("#hotelLookupInfo"),
-      url = el.mapsUrl.value.trim();
-    if (!url) return toast("請先貼上 Google 地圖連結。");
-    info.textContent = "正在查詢 Google 地圖…";
-    const done = Kit.busy(info, { seconds: 5 });
-    try {
-      const r = await window.Together.lookupPlace(url);
-      if (r.name) el.name.value = r.name;
-      if (r.address) el.address.value = r.address;
-      if (Number.isFinite(r.lat)) {
-        el.lat.value = r.lat;
-        el.lng.value = r.lng;
-      }
-      if (r.mapsUrl) el.mapsUrl.value = r.mapsUrl;
-      info.textContent = "已填入，請檢查入住及退房日期。";
-    } catch (e) {
-      info.textContent =
-        fnError(e, "未能自動填寫，請手動輸入。");
-    } finally {
-      done();
-    }
+  function lookupHotel() {
+    return mapsAutofill($("#hotelForm"), {
+      info: $("#hotelLookupInfo"),
+      fill: (r, put, el) => {
+        if (r.name) el.name.value = r.name;
+        if (r.address) el.address.value = r.address;
+        if (Number.isFinite(r.lat)) {
+          el.lat.value = r.lat;
+          el.lng.value = r.lng;
+        }
+        if (r.mapsUrl) el.mapsUrl.value = r.mapsUrl;
+        return "已填入，請檢查入住及退房日期。";
+      },
+    });
   }
   function saveHotel(f) {
     const v = new FormData(f),
@@ -2499,7 +2478,7 @@ window.startTrip = (meta = {}) => {
   }
   function renderFlights() {
     const fs = [...lists().flights].sort((a, b) => String(a.depart).localeCompare(String(b.depart)));
-    return `${header("機票", "航班時間為各地當地時間")}${fs.length ? `<div class="twocol">${fs.map((f) => `<article class="ticket"><div class="ticket-top"><b>${esc(f.depart ? f.depart.slice(0, 10) : "")}</b><span>${esc(f.airline)} · ${esc(f.flightNo)}</span></div><div class="flightpath"><div><strong>${esc(f.from)}</strong><b>${esc(f.depart ? f.depart.slice(11, 16) : "")}</b></div><div class="plane">✈</div><div><strong>${esc(f.to)}</strong><b>${esc(f.arrive ? f.arrive.slice(11, 16) : "")}</b><small>${f.arrive && f.depart && f.arrive.slice(0, 10) !== f.depart.slice(0, 10) ? esc(f.arrive.slice(0, 10)) : ""}</small></div></div><div class="ticket-bottom"><span>${esc(f.note)}</span><span>${docsBtn("flights", f)}${itemMenu("flight", f.id)}</span></div></article>`).join("")}</div>` : Kit.empty("還沒有航班", "按右下角「新增航班」，輸入航班號、出發及到達時間。")}<p class="note">電子機票等文件可按「文件」上載，只限旅伴登入查看。</p>${Kit.fab("新增航班", { "data-flight-new": true })}`;
+    return `${header("機票", "航班時間為各地當地時間")}${fs.length ? `<div class="twocol">${fs.map((f) => `<article class="card ticket"><div class="ticket-top"><b>${esc(Kit.date(f.depart))}</b><span>${esc(f.airline)} · ${esc(f.flightNo)}</span></div><div class="flightpath"><div><strong>${esc(f.from)}</strong><b>${esc(f.depart ? f.depart.slice(11, 16) : "")}</b></div><div class="plane">✈</div><div><strong>${esc(f.to)}</strong><b>${esc(f.arrive ? f.arrive.slice(11, 16) : "")}</b><small>${f.arrive && f.depart && f.arrive.slice(0, 10) !== f.depart.slice(0, 10) ? esc(Kit.date(f.arrive)) : ""}</small></div></div><div class="ticket-bottom"><span>${esc(f.note)}</span><span>${docsBtn("flights", f)}${itemMenu("flight", f.id)}</span></div></article>`).join("")}</div>` : Kit.empty("還沒有航班", "按右下角「＋航班」，輸入航班號、出發及到達時間。")}<p class="note">電子機票等文件可按「文件」上載，只限旅伴登入查看。</p>${Kit.fab("航班", { "data-flight-new": true, "aria-label": "新增航班" })}`;
   }
   function flightForm(f) {
     const v = (k) => esc(f?.[k] ?? "");
@@ -2536,30 +2515,33 @@ window.startTrip = (meta = {}) => {
   let evDay = 0,
     evTime = "全部";
   const EV_TIMES = ["日間", "夜間", "全日"],
-    evWeek = (iso) => "日一二三四五六"[new Date(`${iso}T00:00:00Z`).getUTCDay()] || "",
-    evDate = (iso) => (iso ? `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}（${evWeek(iso)}）` : "?"),
     evDays = (ev) => days.filter((d) => (!ev.start || ev.start <= isoDash(d)) && (!ev.end || isoDash(d) <= ev.end)),
     evTimeMatch = (ev) => evTime === "全部" || ev.time === evTime || ev.time === "全日";
   function eventCard(ev) {
     const on = evDays(ev).map((d) => `D${d.n}`).join(" ");
-    return `<article class="card event"><div class="card-top"><span class="eventwhen">${esc(evDate(ev.start))}${ev.end && ev.end !== ev.start ? ` → ${esc(evDate(ev.end))}` : ""}</span>${itemMenu("event", ev.id)}</div><h2>${esc(ev.title)}</h2><div class="event-badges">${ev.area ? Kit.badge(esc(ev.area)) : ""}${ev.time ? Kit.badge(esc(ev.time), ev.time === "夜間" ? "night" : "") : ""}${ev.fee ? Kit.badge(esc(ev.fee), "fee") : ""}${on ? Kit.badge(esc(on), "days") : ""}</div><dl class="kv">${ev.venue ? `<dt>地點</dt><dd>${esc(ev.venue)}</dd>` : ""}${ev.hours ? `<dt>時間</dt><dd>${esc(ev.hours)}</dd>` : ""}${ev.note ? `<dt>備註</dt><dd>${esc(ev.note)}</dd>` : ""}</dl><div class="links">${ev.url ? link(ev.url, "官網") : ""}${ev.venue ? link("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(ev.venue), "地圖") : ""}${on ? Kit.btn("加入行程", { size: "sm", variant: "secondary", icon: "calendar", attrs: { "data-event-plan": ev.id } }) : ""}</div></article>`;
+    return Kit.card({
+      cls: "event",
+      top: `<span class="card-date">${esc(Kit.dateRange(ev.start, ev.end))}</span>${itemMenu("event", ev.id)}`,
+      title: esc(ev.title),
+      body: `<div class="card-badges">${ev.area ? Kit.badge(esc(ev.area)) : ""}${ev.time ? Kit.badge(esc(ev.time), ev.time === "夜間" ? "night" : "") : ""}${ev.fee ? Kit.badge(esc(ev.fee)) : ""}${on ? Kit.badge(esc(on)) : ""}</div>${kv([["地點", ev.venue], ["時間", ev.hours], ["備註", ev.note]])}`,
+      links: `${ev.url ? link(ev.url, "官網") : ""}${ev.venue ? link("https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(ev.venue), "地圖") : ""}${on ? Kit.btn("加入行程", { size: "sm", icon: "calendar", attrs: { "data-event-plan": ev.id } }) : ""}`,
+    });
   }
   function renderEvents() {
     const all = [...lists().events].sort((a, b) => String(a.start).localeCompare(String(b.start)) || String(a.title).localeCompare(String(b.title))),
       d = days[evDay - 1],
       shown = all.filter((ev) => (!d || evDays(ev).includes(d)) && evTimeMatch(ev));
     return `${header("活動", "旅程期間的祭典、點燈及市集")}${Kit.chips(
-      [{ label: "全部日子", active: !d, attrs: { "data-event-day": 0 } }, ...days.map((x) => ({ label: `D${x.n} ${esc(x.date.split("/").slice(0, 2).reverse().join("/"))}`, active: x === d, attrs: { "data-event-day": x.n } }))],
+      [{ label: "全部日子", active: !d, attrs: { "data-event-day": 0 } }, ...days.map((x) => ({ label: `D${x.n} ${esc(x.md)}`, active: x === d, attrs: { "data-event-day": x.n } }))],
       { cls: "event-days", label: "按日子篩選" },
     )}${Kit.chips(
       ["全部", "日間", "夜間"].map((t) => ({ label: t, active: t === evTime, attrs: { "data-event-time": t } })),
       { label: "按時段篩選" },
-    )}${all.length ? (shown.length ? `<div class="twocol">${shown.map(eventCard).join("")}</div>` : Kit.empty("這天沒有活動", "試試選其他日子或時段。")) : Kit.empty("還沒有活動", "按右下角「新增活動」，加入祭典、點燈或市集。")}<p class="note">活動日期及時間以主辦單位公佈為準，出發前請再到官網確認。</p>${Kit.fab("新增活動", { "data-event-new": true })}`;
+    )}${all.length ? (shown.length ? `<div class="twocol">${shown.map(eventCard).join("")}</div>` : Kit.empty("這天沒有活動", "試試選其他日子或時段。")) : Kit.empty("還沒有活動", "按右下角「＋活動」，加入祭典、點燈或市集。")}<p class="note">活動日期及時間以主辦單位公佈為準，出發前請再到官網確認。</p>${Kit.fab("活動", { "data-event-new": true, "aria-label": "新增活動" })}`;
   }
   function eventForm(ev) {
     const v = (k) => esc(ev?.[k] ?? ""),
-      first = days[0] ? isoDash(days[0]) : "",
-      last = days.at(-1) ? isoDash(days.at(-1)) : "";
+      [first, last] = tripDates();
     openDialog(
       `${Kit.sheetHead(ev ? "修改活動" : "新增活動")}<form class="tg-form" id="eventForm" data-id="${ev ? esc(ev.id) : ""}"><label>活動名稱<input name="title" required maxlength="100" value="${v("title")}"></label><div class="tg-row"><label>區域<input name="area" maxlength="40" placeholder="例如：博多" value="${v("area")}"></label><label>時段<select name="time">${EV_TIMES.map((t) => `<option${(ev?.time || "夜間") === t ? " selected" : ""}>${t}</option>`).join("")}</select></label></div><label>地點<input name="venue" maxlength="120" value="${v("venue")}"></label><div class="tg-row"><label>開始<input name="start" type="date" value="${ev ? v("start") : first}"></label><label>結束<input name="end" type="date" value="${ev ? v("end") : last}"></label></div><label>時間<input name="hours" maxlength="120" placeholder="例如：17:30–21:00" value="${v("hours")}"></label><label>費用<input name="fee" maxlength="80" placeholder="例如：免費" value="${v("fee")}"></label><label>官網<input name="url" inputmode="url" maxlength="500" value="${v("url")}"></label><label>備註<textarea name="note" rows="3" maxlength="500">${v("note")}</textarea></label>${Kit.btn(ev ? "儲存修改" : "加入活動", { type: "submit", variant: "primary", cls: "btn-block" })}</form>`,
     );
@@ -2696,10 +2678,9 @@ window.startTrip = (meta = {}) => {
   $("#detail .dialog-close").onclick = () => $("#detail").close();
   // ☰ menu: the pages without a tab, sharing, and the signed-in account.
   function openMenu() {
-    const row = (href, ic, title, sub) =>
-      `<a class="menu-row" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span>${icon("chevron")}</a>`;
+    const row = (href, ic, title, sub) => Kit.row({ href, lead: icon(ic), title, sub, trail: icon("chevron") });
     Kit.open(
-      `${Kit.sheetHead(esc(meta.name || "口袋旅伴"), "選單")}<nav class="menu-list" aria-label="更多頁面">${row("#trips", "suitcase", "我的旅程", "切換、建立或複製旅程，邀請旅伴")}${row("#hotels", "bed", "住宿", `${lists().hotels.length} 間住宿`)}${row("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${row("#events", "ticket", "活動", `${lists().events?.length || 0} 個活動`)}${row("#nearby", "locate", "附近", "100／200／500 米內的地點")}${row("#notebook", "book", "資料簿", "搜尋所有旅程資料")}<button type="button" class="menu-row" id="shareBtn">${icon("share")}<span><b>分享連結</b><small>給已加入旅程的旅伴</small></span></button></nav>${window.Together?.account?.() || ""}`,
+      `${Kit.sheetHead(esc(meta.name || "口袋旅伴"), "選單")}<nav class="list plain" aria-label="更多頁面">${row("#trips", "suitcase", "我的旅程", "切換、建立或複製旅程，邀請旅伴")}${row("#hotels", "bed", "住宿", `${lists().hotels.length} 間住宿`)}${row("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${row("#events", "ticket", "活動", `${lists().events?.length || 0} 個活動`)}${row("#nearby", "locate", "附近", "100／200／500 米內的地點")}${row("#notebook", "book", "資料簿", "搜尋所有旅程資料")}${Kit.row({ lead: icon("share"), title: "分享連結", sub: "給已加入旅程的旅伴", attrs: { id: "shareBtn" } })}</nav>${window.Together?.account?.() || ""}`,
     );
   }
   $("#menuBtn").onclick = openMenu;

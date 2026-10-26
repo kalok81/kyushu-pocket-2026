@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-// Builds dist/kit.js, dist/app.js and dist/together.js from the feature files in src/ui, src/app and src/together: the files are joined in
-// file-name order inside one function each, so they share its variables (no modules or bundler needed).
+// Builds dist/kit.js, dist/app.js, dist/together.js and dist/style.css from the files in src/ui, src/app, src/together and
+// src/css: the files are joined in file-name order (the scripts inside one function each, so they share its variables;
+// no modules or bundler needed).
 // Run after editing src/: `node scripts/build.mjs`. `--check` only reports whether dist is up to date (used by validate).
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 
@@ -23,12 +24,19 @@ const bundles = [
   head: '"use strict";\n// Sign-in gate, trip choice, trip data, shared notes/expenses/shopping list, plan edits and favourites (Firebase).\n// Each trip lives under trips/{tripId} (its own member list); the public site holds no trip details.\n// Generated from src/together/*.js by scripts/build.mjs — edit those files, not this one.\nwindow.Together = (() => {\n',
   tail: '})();\n',
  },
+ {
+  out: 'dist/style.css',
+  dir: 'src/css',
+  ext: '.css',
+  head: '/* 口袋旅伴 stylesheet: tokens, base, controls, surfaces, overlays, shell, then each page.\n   Generated from src/css/*.css by scripts/build.mjs — edit those files, not this one. */\n',
+  tail: '',
+ },
 ];
 
 const check = process.argv.includes('--check');
 const stale = [];
 for (const b of bundles) {
- const files = readdirSync(b.dir).filter((f) => f.endsWith('.js')).sort();
+ const files = readdirSync(b.dir).filter((f) => f.endsWith(b.ext || '.js')).sort();
  const text = b.head + files.map((f) => readFileSync(`${b.dir}/${f}`, 'utf8').replace(/\n*$/, '\n')).join('') + b.tail;
  let current = '';
  try { current = readFileSync(b.out, 'utf8'); } catch {}
