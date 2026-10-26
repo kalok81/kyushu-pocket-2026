@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { test, after, before } from 'node:test';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection, getDocs, query, where, setLogLevel } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs, query, where, setLogLevel } from 'firebase/firestore';
 import { ref, uploadBytes, getBytes } from 'firebase/storage';
 
 setLogLevel('silent'); // expected denials would otherwise be logged as errors
@@ -56,6 +56,17 @@ test('places: companions add valid places', async () => {
  await assertFails(setDoc(doc(db(amy), `${T}/places/p4`), { ...place, ...owned('bob', 'Bob') }));
 });
 
+test('events: valid fields, http links only, any member edits', async () => {
+ const ev = { title: '千年煌夜', area: '博多', venue: '承天寺', start: '2030-04-01', end: '2030-04-04', hours: '17:30–21:00', time: '夜間', fee: '¥2,450', note: '', url: 'https://example.com' };
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/events/e1`), { ...ev, ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(eve), `${T}/events/e2`), { ...ev, ...owned('eve', 'Eve') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/events/e3`), { ...ev, url: 'javascript:alert(1)', ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/events/e4`), { ...ev, title: '', ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/events/e5`), { ...ev, extra: 1, ...owned('amy', 'Amy') }));
+ await assertSucceeds(setDoc(doc(db(bob), `${T}/events/e1`), { ...ev, hours: '18:00–21:00', ...owned('amy', 'Amy'), byName: 'Bob' }));
+ await assertFails(setDoc(doc(db(bob), `${T}/events/e1`), { ...ev, ...owned('bob', 'Bob') }));
+ await assertSucceeds(deleteDoc(doc(db(bob), `${T}/events/e1`)));
+});
 test('shopping: valid items, explore place link, shared updates', async () => {
  const item = { name: '人形燒', qty: '', detail: '', place: '仲見世', placeId: 'u_p1', price: 800, currency: 'JPY', photo: null, bought: false, boughtBy: null, boughtAt: null };
  await assertSucceeds(setDoc(doc(db(amy), `${T}/shopping/s1`), { ...item, ...owned('amy', 'Amy') }));

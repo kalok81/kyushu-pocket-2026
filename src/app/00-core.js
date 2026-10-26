@@ -111,7 +111,7 @@
     }
     return out;
   }
-  const lists = () => window.Together?.lists() || { hotels: [], flights: [] };
+  const lists = () => window.Together?.lists() || { hotels: [], flights: [], events: [] };
   const isoDash = (d) => d.iso.replaceAll("/", "-");
   // Day titles (planDays label) and the hotel for each night (check-in ≤ night < check-out).
   function refreshDays() {
@@ -125,7 +125,7 @@
   function refreshLists() {
     refreshDays();
     if (current === "notebook" && $("#notebookResults")) notebookResults();
-    if (["hotels", "flights", "home"].includes(current) && !$("#detail").open) render();
+    if (["hotels", "flights", "events", "home"].includes(current) && !$("#detail").open) render();
     else if (current === "plan") refreshPlan();
   }
   const nights = (h) => (h.checkIn && h.checkOut ? Math.round((Date.parse(h.checkOut) - Date.parse(h.checkIn)) / 864e5) : 0);

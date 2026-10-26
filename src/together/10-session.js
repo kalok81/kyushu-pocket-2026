@@ -64,6 +64,7 @@
       planDays: [],
       hotels: [],
       flights: [],
+      events: [],
       placesLoaded: false,
       fx: null,
     });
@@ -129,7 +130,7 @@
             else start();
           }
           if (name === "planDays" && started) T().applyPlanEdits(planMap());
-          if ((name === "hotels" || name === "flights") && started) {
+          if ((name === "hotels" || name === "flights" || name === "events") && started) {
             T().refreshLists();
             const box = $("#detailBody [data-docs-for]");
             if (box && $("#detail").open) {
@@ -174,7 +175,7 @@
     unsub = [
       watchJobs,
       watchFx,
-      ...["notes", "expenses", "checklist", "members", "shopping", "places", "planDays", "hotels", "flights"].map(watch),
+      ...["notes", "expenses", "checklist", "members", "shopping", "places", "planDays", "hotels", "flights", "events"].map(watch),
     ];
   }
   // The trip page starts once its places have loaded (pins come from the places themselves).

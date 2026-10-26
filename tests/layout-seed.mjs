@@ -33,6 +33,10 @@ const flights = {
  f1: { flightNo: 'CX 520', airline: '國泰航空 Cathay Pacific', from: 'HKG 香港國際機場 T1', to: 'HND 羽田機場 T3', depart: '2030-04-01T08:15', arrive: '2030-04-01T13:20', note: '行李 2 件 × 23kg；網上 check-in 出發前 48 小時開始', ...by },
  f2: { flightNo: 'UO 623', airline: 'HK Express', from: 'NRT T2', to: 'HKG', depart: '2030-04-05T21:40', arrive: '2030-04-06T01:30', note: '', ...by },
 };
+const events = {
+ ev1: { title: '千年煌夜（東長寺・承天寺・妙楽寺・海元寺・博多千年門 點燈及夜間參拜，很長的名稱測試）', area: '博多', venue: '東長寺、承天寺、妙楽寺、海元寺、博多千年門', start: '2030-04-01', end: '2030-04-04', hours: '17:30–21:00（最後入場 20:45）', time: '夜間', fee: '收費會場電子票 ¥2,450', note: '10/31 17:00 點燈式；AVeryLongWordWithoutSpacesToCheckWrappingInsideEventCards_ABCDEFGHIJ', url: 'https://example.com/sennen-kouya/a/very/long/url/for/wrapping/check', ...by },
+ ev2: { title: '九州本格焼酎の日', area: '博多駅', venue: 'JR博多駅前広場', start: '2030-04-02', end: '2030-04-02', hours: '11:00–18:00', time: '日間', fee: '免費入場', note: '', url: '', ...by },
+};
 const expenses = {
  e1: { title: '一蘭 上野店 晚餐（三人）', amount: 4440, currency: 'JPY', paidBy: 'u1', split: ['u1', 'u2', 'u3'], day: 1, category: 'food', items: [{ name: '天然豚骨拉麵 ×3', amount: 2940 }, { name: '替玉 ×3', amount: 630 }, { name: '半熟鹽味蛋 ×3', amount: 420 }, { name: '生啤 Asahi Super Dry 中杯', amount: 450 }], ...by, at: 5 },
  e2: { title: 'Suica 增值', amount: 3000, currency: 'JPY', paidBy: 'u2', split: ['u2'], day: 1, category: 'transport', ...by, at: 4 },
@@ -48,7 +52,7 @@ const shopping = {
 const checklist = { c1: { text: '護照（有效期最少 6 個月，請檢查簽證要求及入境登記 Visit Japan Web）', group: 'pre', doneBy: ['u2'], ...by }, c2: { text: '尿袋', group: 'pack', doneBy: [], ...by } };
 const notes = { c1: { kind: 'coupon', title: 'Bic Camera ビックカメラ 免稅 10% + 5%（Supercalifragilisticexpialidocious 長名稱測試）', text: '滿 ¥5,000 用 https://www.biccamera.com/bc/c/info/coupon/very/long/link/for/testing', code: 'BICCAMERA2030SPRINGLONGCODE', until: '2030-04-03', used: false, url: 'https://www.biccamera.com', day: null, placeId: null, placeName: null, ...by }, n1: { text: '別府那天記得帶毛巾。\n第二行：AVeryLongWordWithoutSpacesToCheckWrappingInsideNotesCards_ABCDEFGHIJKLMNOPQRSTUVWXYZ', day: 1, placeId: null, placeName: null, ...by } };
 const members = { u1: { name: 'Amy', email: 'amy@kyushu-trip.invalid', at: 1 }, u2: { name: 'Bob Chan Tai Man', email: 'bob@example.com', at: 1 }, u3: { name: '陳大文（Cathy）', email: 'c@example.com', at: 1 } };
-const seed = { places, planDays, hotels, flights, expenses, shopping, checklist, notes, members };
+const seed = { places, planDays, hotels, flights, events, expenses, shopping, checklist, notes, members };
 let out = src.replace("const store={},ls=[];", `const store=${JSON.stringify(seed)},ls=[];`);
 out = out.replace("name:'測試旅程',destination:'日本東京'", "name:'2030 東京櫻花七日遊（很長很長的旅程名稱測試）',destination:'日本東京'").replace("endDate:'2030-04-03'", "endDate:'2030-04-05'");
 out = out.replace("members:['amy@kyushu-trip.invalid']}", "members:['amy@kyushu-trip.invalid','bob@example.com','c@example.com'],areas:[{name:'淺草',lat:35.7148,lng:139.7967},{name:'上野',lat:35.7138,lng:139.7773},{name:'銀座',lat:35.6717,lng:139.765},{name:'新宿',lat:35.6909,lng:139.7003},{name:'澀谷',lat:35.658,lng:139.7016},{name:'秋葉原',lat:35.6984,lng:139.7731}]}");

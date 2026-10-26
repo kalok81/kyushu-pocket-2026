@@ -31,6 +31,7 @@ window.Together = (() => {
     planDays: [],
     hotels: [],
     flights: [],
+    events: [],
     placesLoaded: false,
     shopFilter: "todo",
     shopCat: "all",
@@ -223,6 +224,7 @@ window.Together = (() => {
       planDays: [],
       hotels: [],
       flights: [],
+      events: [],
       placesLoaded: false,
       fx: null,
     });
@@ -288,7 +290,7 @@ window.Together = (() => {
             else start();
           }
           if (name === "planDays" && started) T().applyPlanEdits(planMap());
-          if ((name === "hotels" || name === "flights") && started) {
+          if ((name === "hotels" || name === "flights" || name === "events") && started) {
             T().refreshLists();
             const box = $("#detailBody [data-docs-for]");
             if (box && $("#detail").open) {
@@ -333,7 +335,7 @@ window.Together = (() => {
     unsub = [
       watchJobs,
       watchFx,
-      ...["notes", "expenses", "checklist", "members", "shopping", "places", "planDays", "hotels", "flights"].map(watch),
+      ...["notes", "expenses", "checklist", "members", "shopping", "places", "planDays", "hotels", "flights", "events"].map(watch),
     ];
   }
   // The trip page starts once its places have loaded (pins come from the places themselves).
@@ -1412,7 +1414,7 @@ window.Together = (() => {
       .catch(() => toast("未能儲存，請再試。"));
   }
   // Hotels, flights, shopping and notes for the trip page (住宿, 機票, 資料簿).
-  const tripLists = () => ({ hotels: state.hotels, flights: state.flights, shopping: state.shopping, notes: state.notes });
+  const tripLists = () => ({ hotels: state.hotels, flights: state.flights, events: state.events, shopping: state.shopping, notes: state.notes });
   function saveItem(name, id, data) {
     if (id) {
       update(name, id, data);

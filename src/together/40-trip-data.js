@@ -70,7 +70,7 @@
       .catch(() => toast("未能儲存，請再試。"));
   }
   // Hotels, flights, shopping and notes for the trip page (住宿, 機票, 資料簿).
-  const tripLists = () => ({ hotels: state.hotels, flights: state.flights, shopping: state.shopping, notes: state.notes });
+  const tripLists = () => ({ hotels: state.hotels, flights: state.flights, events: state.events, shopping: state.shopping, notes: state.notes });
   function saveItem(name, id, data) {
     if (id) {
       update(name, id, data);

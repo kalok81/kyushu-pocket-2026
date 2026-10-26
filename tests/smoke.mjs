@@ -44,7 +44,7 @@ try {
   await page.waitForSelector('.hero h1'); assert.equal(await page.locator('.hero h1').innerText(), '測試旅程');
  });
  await step('every page renders', async () => {
-  for (const v of ['home', 'plan', 'explore', 'nearby', 'flights', 'hotels', 'shopping', 'together', 'trips']) {
+  for (const v of ['home', 'plan', 'explore', 'nearby', 'flights', 'hotels', 'events', 'shopping', 'together', 'trips']) {
    await page.goto(`${base}/#${v}`); await page.waitForTimeout(400);
    assert((await page.locator('#app').innerText()).length > 20, `#${v} is empty`);
   }
@@ -593,6 +593,17 @@ try {
   await page.locator('[data-stop-more]').first().click(); await page.click('[data-stop-to-day]:visible'); await page.click('[data-day-pick="3"]');
   await page.waitForFunction((n) => document.querySelectorAll('.timeline h3').length === n - 1, d3.length);
   await page.click('[data-day="3"]'); await page.waitForTimeout(400); assert.ok((await names()).includes(d3[0]), 'the stop is on D3');
+ });
+ await step('events: add, filter by day, add to plan, delete', async () => {
+  await page.goto(base + '/#events'); await page.click('[data-event-new]');
+  await page.fill('#eventForm [name=title]', '測試點燈'); await page.fill('#eventForm [name=venue]', '承天寺'); await page.fill('#eventForm [name=hours]', '17:30–21:00');
+  await page.click('#eventForm button[type=submit]'); await page.waitForSelector('.card.event');
+  await page.click('[data-event-day="1"]'); await page.waitForSelector('[data-event-day="1"].active'); assert.equal(await page.locator('.card.event').count(), 1);
+  await page.click('[data-event-time="日間"]'); await page.waitForSelector('.empty'); await page.click('[data-event-time="全部"]');
+  await page.click('[data-event-plan]'); await page.waitForSelector('.ui-pop', { timeout: 3000 }).then(() => page.click('.ui-pop .btn-primary'), () => {});
+  await page.goto(base + '/#plan?day=1'); await page.waitForFunction(() => /測試點燈/.test(document.querySelector('.timeline')?.textContent || ''));
+  await page.goto(base + '/#events'); await page.click('.card.event .more summary'); await page.click('[data-event-del]:visible'); await page.click('.ui-pop .btn-danger');
+  await page.waitForFunction(() => !document.querySelector('.card.event'));
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');

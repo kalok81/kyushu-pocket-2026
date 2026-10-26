@@ -918,3 +918,10 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .shop-check:focus-visible::before{outline:2px solid var(--primary);outline-offset:2px}
 .shop-check.on::before{background:var(--primary);border-color:var(--primary)}
 .shop-check.on .icon{opacity:1}
+/* 活動 page */
+.event{position:relative}
+.event .eventwhen{font-size:13px;letter-spacing:1px;color:var(--orange)}
+.event h2{margin:6px 0 8px;font-size:19px;font-weight:650;line-height:1.4}
+.event-badges{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.event-badges .badge.night{background:#2b3359;color:#fff}
+.event-days .chip{flex:none}

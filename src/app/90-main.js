@@ -6,6 +6,7 @@
     explore: renderExplore,
     nearby: renderNearby,
     flights: renderFlights,
+    events: renderEvents,
     notebook: renderNotebook,
     shopping: () => window.Together.renderShopping(),
     trips: () => window.Together.renderTrips(),
@@ -25,7 +26,7 @@
     savedIds: () => [...saved],
   });
   // Pages without a tab of their own light up the tab they are reached from.
-  const navOf = { nearby: "explore", hotels: "home", flights: "home" };
+  const navOf = { nearby: "explore", hotels: "home", flights: "home", events: "home" };
   function setActive(view) {
     current = view;
     document.querySelectorAll(".bottomnav a").forEach((a) => {
@@ -69,7 +70,7 @@
     const row = (href, ic, title, sub) =>
       `<a class="menu-row" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span>${icon("chevron")}</a>`;
     Kit.open(
-      `${Kit.sheetHead(esc(meta.name || "口袋旅伴"), "選單")}<nav class="menu-list" aria-label="更多頁面">${row("#trips", "suitcase", "我的旅程", "切換、建立或複製旅程，邀請旅伴")}${row("#hotels", "bed", "住宿", `${lists().hotels.length} 間住宿`)}${row("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${row("#nearby", "locate", "附近", "100／200／500 米內的地點")}${row("#notebook", "book", "資料簿", "搜尋所有旅程資料")}<button type="button" class="menu-row" id="shareBtn">${icon("share")}<span><b>分享連結</b><small>給已加入旅程的旅伴</small></span></button></nav>${window.Together?.account?.() || ""}`,
+      `${Kit.sheetHead(esc(meta.name || "口袋旅伴"), "選單")}<nav class="menu-list" aria-label="更多頁面">${row("#trips", "suitcase", "我的旅程", "切換、建立或複製旅程，邀請旅伴")}${row("#hotels", "bed", "住宿", `${lists().hotels.length} 間住宿`)}${row("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${row("#events", "ticket", "活動", `${lists().events?.length || 0} 個活動`)}${row("#nearby", "locate", "附近", "100／200／500 米內的地點")}${row("#notebook", "book", "資料簿", "搜尋所有旅程資料")}<button type="button" class="menu-row" id="shareBtn">${icon("share")}<span><b>分享連結</b><small>給已加入旅程的旅伴</small></span></button></nav>${window.Together?.account?.() || ""}`,
     );
   }
   $("#menuBtn").onclick = openMenu;

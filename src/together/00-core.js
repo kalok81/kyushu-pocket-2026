@@ -26,6 +26,7 @@
     planDays: [],
     hotels: [],
     flights: [],
+    events: [],
     placesLoaded: false,
     shopFilter: "todo",
     shopCat: "all",

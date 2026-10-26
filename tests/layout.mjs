@@ -48,7 +48,7 @@ await Promise.all([320,390,768,1280].map(async w=>{
  await pg.route(/tile\.openstreetmap|google\.com\/recaptcha/,r=>r.abort());
  await pg.goto(base+'/#home');await shot(pg,`${w}-login`);report[`${w} login`]=await pg.evaluate(checks);
  await pg.fill('[name=id]','amy');await pg.fill('[name=password]','pw12345678');await pg.click('[data-tg-form=login] button');await pg.waitForSelector('.hero h1');
- const states=[['home','#home'],['plan1','#plan?day=1'],['plan2','#plan?day=2'],['explore','#explore'],['nearby','#nearby'],['flights','#flights'],['hotels','#hotels'],['shopping','#shopping'],['notes','#together?tab=notes'],['expenses','#together?tab=expenses'],['checklist','#together?tab=checklist'],['trips','#trips'],['notebook','#notebook']];
+ const states=[['home','#home'],['plan1','#plan?day=1'],['plan2','#plan?day=2'],['explore','#explore'],['nearby','#nearby'],['flights','#flights'],['hotels','#hotels'],['events','#events'],['shopping','#shopping'],['notes','#together?tab=notes'],['expenses','#together?tab=expenses'],['checklist','#together?tab=checklist'],['trips','#trips'],['notebook','#notebook']];
  for(const [k,h] of states){await pg.goto(base+'/'+h);await pg.waitForTimeout(900);await shot(pg,`${w}-${k}`);report[`${w} ${k}`]=await pg.evaluate(checks)}
  await pg.goto(base+'/#shopping');await pg.waitForTimeout(600);const grid=pg.locator('[data-shop-view=grid]');if(await grid.count()){await grid.click();await pg.waitForTimeout(400);await shot(pg,`${w}-shopgrid`);report[`${w} shopgrid`]=await pg.evaluate(checks)}
  const dialogs=[
@@ -67,6 +67,7 @@ await Promise.all([320,390,768,1280].map(async w=>{
   ['discover','#explore',async()=>{await pg.click('[data-discover]');await pg.fill('#discoverForm [name=area]','上野');await pg.click('#discoverForm [type=submit]');await pg.waitForSelector('.discover-card')}],
   ['hotelform','#hotels',async()=>{await pg.click('[data-hotel-new]')}],
   ['flightform','#flights',async()=>{await pg.click('[data-flight-new]')}],
+  ['eventform','#events',async()=>{await pg.click('[data-event-new]')}],
   ['docs','#hotels',async()=>{await pg.locator('[data-docs]').nth(1).click();await pg.waitForTimeout(400)}],
   ['confirm','#hotels',async()=>{await pg.locator('.card.hotel .more summary').first().click();await pg.locator('[data-hotel-del]').first().click();await pg.waitForSelector('.ui-pop');await pg.waitForTimeout(500)}],
   ['ratePrompt','#together?tab=expenses',async()=>{await pg.locator('.tg-fx summary').click();await pg.locator('[data-fx-set]').first().click();await pg.waitForSelector('.ui-pop');await pg.waitForTimeout(500)}],

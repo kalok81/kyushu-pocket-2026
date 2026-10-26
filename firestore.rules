@@ -25,6 +25,13 @@ service cloud.firestore {
         && text(d.mapsUrl, 500) && text(d.note, 500)
         && (d.lat == null || d.lat is number) && (d.lng == null || d.lng is number);
     }
+    // 活動: events during the trip (dates, hours, venue), shown on the 活動 page and addable to a day's plan
+    function eventValid(d) {
+      return d.keys().hasOnly(['title', 'area', 'venue', 'start', 'end', 'hours', 'time', 'fee', 'note', 'url', 'by', 'byName', 'at', 'createdAt'])
+        && text(d.title, 100) && d.title.size() > 0 && text(d.area, 40) && text(d.venue, 120)
+        && text(d.start, 10) && text(d.end, 10) && text(d.hours, 120) && text(d.time, 10) && text(d.fee, 80) && text(d.note, 500)
+        && text(d.url, 500) && (d.url == '' || d.url.matches('^https?://.*'));
+    }
     function flightValid(d) {
       return d.keys().hasOnly(['flightNo', 'airline', 'from', 'to', 'depart', 'arrive', 'note', 'docs', 'by', 'byName', 'at', 'createdAt']) && docsValid(d)
         && text(d.flightNo, 20) && d.flightNo.size() > 0 && text(d.airline, 60) && text(d.from, 80) && text(d.to, 80)
@@ -65,6 +72,11 @@ service cloud.firestore {
         allow read, delete: if tripMember();
         allow create: if tripMember() && owned() && hotelValid(request.resource.data);
         allow update: if tripMember() && hotelValid(request.resource.data) && request.resource.data.by == resource.data.by;
+      }
+      match /events/{id} {
+        allow read, delete: if tripMember();
+        allow create: if tripMember() && owned() && eventValid(request.resource.data);
+        allow update: if tripMember() && eventValid(request.resource.data) && request.resource.data.by == resource.data.by;
       }
       match /flights/{id} {
         allow read, delete: if tripMember();
