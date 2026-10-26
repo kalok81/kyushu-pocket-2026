@@ -135,28 +135,54 @@
               .map(([k, [v]]) => `<option value="${k}">${v}</option>`)
               .join(
                 "",
-              )}</select></label></div>${Kit.btn("查詢路線建議", { variant: "primary", cls: "btn-block", attrs: { id: "routeGo" } })}</div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
+              )}</select></label></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { href: "#", external: true, size: "sm", icon: "map", attrs: { id: "routeGm", title: "在 Google 地圖查看" } })}${meta.country === "JP" ? Kit.btn("Yahoo", { href: "#", external: true, size: "sm", icon: "train", attrs: { id: "routeYahoo", title: "Yahoo!乗換案内：實際班次" } }) : ""}${Kit.btn("AI 分析", { variant: "secondary", size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
           : '<p class="note">這天前面沒有站點，亦未有住宿資料，未能查詢路線；可以自行填寫。</p>'
       }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label>${Kit.btn("儲存交通", { type: "submit", variant: "secondary" })}</form>`,
     );
+    routeLinks();
   }
+  // The dialog's current from, to, time and way, with the Google Maps and Yahoo!乗換案内 links for them
+  function routeInputs() {
+    const c = routeCtx,
+      from = c?.origins.find((o) => o.key === $("#routeFrom")?.value),
+      to = c && stopsFor(c.day)[c.i],
+      dest = to && stopPoint(to);
+    if (!from || !dest) return null;
+    const mode = $("#routeMode").value,
+      time = $("#routeTime").value || "09:00",
+      [yy, mo, dd] = isoDash(days[c.day - 1]).split("-"),
+      [hh, mi] = time.split(":");
+    return {
+      from,
+      to,
+      dest,
+      mode,
+      time,
+      gm: `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from.point.address || `${from.point.lat},${from.point.lng}`)}&destination=${encodeURIComponent(dest.address || `${dest.lat},${dest.lng}`)}&travelmode=${ROUTE_MODES[mode][1]}`,
+      // the timetable in the browser, with the names, date and time filled in
+      yahoo: `https://transit.yahoo.co.jp/search/result?${new URLSearchParams({ from: from.name, to: to.title, y: yy, m: mo, d: dd, hh, m1: mi[0], m2: mi[1], type: "1" })}`,
+    };
+  }
+  function routeLinks() {
+    const r = routeInputs();
+    if (!r) return;
+    $("#routeGm").href = r.gm;
+    const y = $("#routeYahoo");
+    if (y) {
+      y.href = r.yahoo;
+      y.hidden = r.mode !== "TRANSIT";
+    }
+  }
+  document.addEventListener("change", (e) => {
+    if (["routeFrom", "routeTime", "routeMode", "routeTo"].includes(e.target.id)) routeLinks();
+  });
   async function runRoutes() {
     const c = routeCtx,
-      box = $("#routeResults");
-    if (!c || !box) return;
-    const from = c.origins.find((o) => o.key === $("#routeFrom").value),
-      to = stopsFor(c.day)[c.i],
-      dest = stopPoint(to),
-      mode = $("#routeMode").value,
-      time = $("#routeTime").value || "09:00";
+      box = $("#routeResults"),
+      r0 = routeInputs();
+    if (!c || !box || !r0) return;
+    const { from, to, dest, mode, time } = r0;
     c.mode = mode;
-    const gm = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(from.point.address || `${from.point.lat},${from.point.lng}`)}&destination=${encodeURIComponent(dest.address || `${dest.lat},${dest.lng}`)}&travelmode=${ROUTE_MODES[mode][1]}`;
-    // Yahoo!乗換案内 with the names, date and time filled in: the timetable in the browser
-    const [yy, mo, dd] = isoDash(days[c.day - 1]).split("-"),
-      [hh, mi] = time.split(":"),
-      yahoo = `https://transit.yahoo.co.jp/search/result?${new URLSearchParams({ from: from.name, to: to.title, y: yy, m: mo, d: dd, hh, m1: mi[0], m2: mi[1], type: "1" })}`;
-    const gmLink = `${Kit.btn("在 Google 地圖查看", { href: gm, external: true, size: "sm", icon: "map" })}${meta.country === "JP" && mode === "TRANSIT" ? Kit.btn("Yahoo!乗換案内", { href: yahoo, external: true, size: "sm", icon: "train" }) : ""}${Kit.btn("AI 分析", { variant: "secondary", size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}`;
-    c.ai = { from, to, dest, time };
     box.innerHTML = Kit.progress({ text: "正在查詢 Google 地圖…", seconds: 6 });
     try {
       const r = await window.Together.suggestRoutes({
@@ -168,10 +194,10 @@
       });
       c.options = r.options;
       box.innerHTML = r.options.length
-        ? `${r.source === "navitime" ? '<p class="note">火車路線及車費由 NAVITIME 提供（車費＝車票＋自由席特急料金），時間按平均行車時間估算，沒有列車號數：實際班次請按「Yahoo!乗換案内」。不包括巴士，搭巴士較方便時請按「AI 分析」。</p>' : ""}${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${o.steps.find((s) => s.mode === "TRANSIT").approx ? "約 " : ""}${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${s.approx ? "約 " : ""}${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": k } })}</div>`).join("")}<div class="links">${gmLink}</div>`
-        : `<p class="note">${mode === "TRANSIT" && meta.country === "JP" ? "找不到公共交通班次，可以按「Yahoo!乗換案内」或「AI 分析」。" : `Google 地圖找不到${ROUTE_MODES[mode][0]}路線。`}</p><div class="links">${gmLink}</div>`;
+        ? `${r.source === "navitime" ? '<p class="note">火車路線及車費由 NAVITIME 提供（車費＝車票＋自由席特急料金），時間按平均行車時間估算，沒有列車號數：實際班次請按上面的「Yahoo」（Yahoo!乗換案内）。不包括巴士，搭巴士較方便時請按「AI 分析」。</p>' : ""}${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${o.steps.find((s) => s.mode === "TRANSIT").approx ? "約 " : ""}${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${s.approx ? "約 " : ""}${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": k } })}</div>`).join("")}`
+        : `<p class="note">${mode === "TRANSIT" && meta.country === "JP" ? "找不到公共交通班次，可以按上面的「Yahoo」（Yahoo!乗換案内）或「AI 分析」。" : `Google 地圖找不到${ROUTE_MODES[mode][0]}路線。`}</p>`;
     } catch (e) {
-      box.innerHTML = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p><div class="links">${gmLink}</div>`;
+      box.innerHTML = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p>`;
     }
   }
   // AI route advice (aiRoutes function): several ways with lines and stations, times and fares are estimates.
@@ -185,8 +211,9 @@
   async function runAiRoutes() {
     const c = routeCtx,
       box = $("#routeAi");
-    if (!c?.ai || !box) return;
-    const { from, to, dest, time } = c.ai;
+    const r0 = routeInputs();
+    if (!c || !box || !r0) return;
+    const { from, to, dest, time } = r0;
     box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} AI 正在考慮路線…</b>${Kit.progress({ text: "大約需要 10–30 秒。", seconds: 25 })}</div>`;
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     try {

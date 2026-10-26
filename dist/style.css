@@ -425,6 +425,12 @@ dialog#detail[open]{animation:sheet-up .22s ease-out}
 }
 /* ---- Route suggestions ---- */
 .route-results{display:grid;gap:10px;margin:6px 0 14px}
+.route-actions{display:flex;gap:6px}
+.route-actions>.btn{flex:1 1 0;min-width:0;justify-content:center;gap:4px;padding:6px 4px;font-size:13px;white-space:nowrap}
+.route-actions>.btn[hidden]{display:none}
+.route-actions .icon{width:15px;height:15px;flex:none}
+.route-actions>.btn>.icon:last-child:not(:first-child){display:none}
+@media(max-width:360px){.route-actions>.btn>.icon:first-child{display:none}}
 .route-option{border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;background:var(--card);box-shadow:var(--shadow-sm)}
 .route-option.picked{border-color:var(--primary);box-shadow:0 0 0 2px var(--secondary)}
 .route-head{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-bottom:6px}

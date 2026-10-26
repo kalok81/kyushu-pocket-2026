@@ -111,11 +111,16 @@ try {
   await page.locator('[data-route-link]').nth(1).click();
   assert.match(await page.locator('#routeFrom option:checked').innerText(), /上野酒店/);
   assert.equal(await page.inputValue('#routeTime'), '08:00');
-  // Japan by public transport: NAVITIME timetables, with Google Maps and Yahoo!乗換案内 links
+  // one row before any search: 查路線, Google 地圖, Yahoo!乗換 and AI 分析, the links filled in for the current choices
+  assert.deepEqual(await page.locator('.route-actions > .btn:visible').allInnerTexts(), ['查路線', 'Google', 'Yahoo', 'AI 分析']);
+  assert.equal(new Set(await page.locator('.route-actions > .btn:visible').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)))).size, 1, 'all four on one line');
+  assert.match(await page.getAttribute('#routeGm', 'href'), /travelmode=transit/);
+  assert.match(await page.getAttribute('#routeYahoo', 'href'), /transit\.yahoo\.co\.jp.*from=%E4%B8%8A%E9%87%8E%E9%85%92%E5%BA%97.*hh=08/);
+  await page.fill('#routeTime', '09:30'); await page.dispatchEvent('#routeTime', 'change'); assert.match(await page.getAttribute('#routeYahoo', 'href'), /hh=09&m1=3&m2=0/);
+  await page.fill('#routeTime', '08:00'); await page.dispatchEvent('#routeTime', 'change');
+  // Japan by public transport: NAVITIME
   await page.click('#routeGo'); await page.waitForSelector('#routeResults [data-route-pick]');
   assert.match(await page.locator('#routeResults').innerText(), /NAVITIME/);
-  assert.match(await page.locator('#routeResults a').first().getAttribute('href'), /travelmode=transit/);
-  assert.match(await page.locator('#routeResults a:has-text("Yahoo")').getAttribute('href'), /transit\.yahoo\.co\.jp.*from=%E4%B8%8A%E9%87%8E%E9%85%92%E5%BA%97/);
   await page.click('[data-route-ai]'); await page.waitForSelector('[data-route-ai-pick]');
   assert.deepEqual(await page.locator('#routeAi .route-option .route-head b').allInnerTexts(), ['最快', '的士']);
   assert.deepEqual(await page.locator('#routeAi .ai-sure').allInnerTexts(), ['把握：高', '把握：低，請核對']);
