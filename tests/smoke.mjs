@@ -44,7 +44,7 @@ try {
   await page.waitForSelector('.trip-bar h1'); assert.equal(await page.locator('.trip-bar h1').innerText(), '測試旅程');
  });
  await step('every page renders', async () => {
-  for (const v of ['home', 'plan', 'explore', 'nearby', 'flights', 'hotels', 'events', 'shopping', 'together', 'trips']) {
+  for (const v of ['home', 'plan', 'explore', 'nearby', 'flights', 'hotels', 'events', 'ask', 'shopping', 'together', 'trips']) {
    await page.goto(`${base}/#${v}`); await page.waitForTimeout(400);
    assert((await page.locator('#app').innerText()).length > 20, `#${v} is empty`);
   }
@@ -621,6 +621,33 @@ try {
   await page.click('[data-notebook-type=行程]'); await page.waitForSelector('[data-notebook-type=行程].active');
   assert.ok(await page.locator('.trip-bar').count(), 'still on 總覽 after a filter');
   await page.fill('#notebookSearch', 'zzzz-none'); await page.waitForSelector('#notebookResults .empty'); await page.click('#notebookReset');
+ });
+ await step('AI 助手: a photo is translated, a question gets an answer with place buttons', async () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAEklEQVR4nGP4z8CAFWEXHbQSACj/P8Fu7N9hAAAAAElFTkSuQmCC', 'base64');
+  // stands in for processReceipt: answer the newest pending job of this kind
+  const answer = (kind, result) => page.waitForFunction((kind) => Object.values(globalThis.__fakeStore.receiptJobs || {}).some((j) => j.kind === kind && j.status === 'pending'), kind).then(() => page.evaluate(async ([kind, result]) => {
+   const fs = await import('./vendor/firebase/firebase-firestore.js'), jobs = globalThis.__fakeStore.receiptJobs || {};
+   const id = Object.keys(jobs).filter((k) => jobs[k].kind === kind && jobs[k].status === 'pending').sort((a, b) => jobs[b].at - jobs[a].at)[0];
+   const job = { ...jobs[id] };
+   await fs.updateDoc({ c: 'receiptJobs', id }, { status: 'done', result });
+   return job;
+  }, [kind, result]));
+  await page.goto(base + '/#ask'); await page.waitForSelector('#askForm');
+  await page.locator('[data-ask-photo]').first().setInputFiles({ name: 'menu.png', mimeType: 'image/png', buffer: png });
+  await page.waitForSelector('#askTranslations .ai-progress');
+  const tj = await answer('translate', { kind: 'menu', title: '拉麵店菜單', summary: '豚骨拉麵', items: [{ original: 'とんこつラーメン', zh: '豚骨拉麵', price: 980, note: '' }], tips: '' });
+  assert.equal(tj.images.length, 1);
+  await page.waitForSelector('.ask-tr .ask-items li'); assert.match(await page.textContent('.ask-tr'), /豚骨拉麵[\s\S]*¥980/);
+  const place = await page.evaluate(() => TripApp.places[0].v[1]);
+  await page.fill('#askForm [name=q]', '今晚食咩好？'); await page.click('#askForm [type=submit]');
+  const aj = await answer('ask', { answer: `可以去${place}。`, places: [place] });
+  assert.equal(aj.question, '今晚食咩好？'); assert.match(aj.context, /Day plans:[\s\S]*D1 /); assert.ok(aj.context.includes(place), 'saved places are in the context');
+  await page.waitForSelector('.ask-msg.ai [data-place]'); await page.click('.ask-msg.ai [data-place]'); await page.waitForSelector('#detail[open] .detailtitle');
+  await closeSheet();
+  await page.waitForFunction(() => !Object.values(globalThis.__fakeStore.receiptJobs || {}).some((j) => ['ask', 'translate'].includes(j.kind)), null, { timeout: 3000 });
+  const kept = await page.evaluate(() => [JSON.parse(localStorage.getItem('pocket-ask-translations')), JSON.parse(localStorage.getItem('pocket-ask-chat'))]);
+  assert.equal(kept[0][0].title, '拉麵店菜單'); assert.equal(kept[1].at(-1).places[0], place); assert.ok(!kept[1].at(-1).busy, 'kept on this phone without the busy flag');
+  await page.goto(base + '/#home'); await page.goto(base + '/#ask'); await page.waitForSelector('.ask-msg.ai [data-place]');
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');

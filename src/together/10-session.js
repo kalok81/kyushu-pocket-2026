@@ -145,6 +145,7 @@
         renderDrafts();
         handleFillJobs();
         handleNoteFillJobs();
+        handleAiJobs();
         const sp = $("#shopPage");
         if (sp) paint(sp, shopPage());
       },

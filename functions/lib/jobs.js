@@ -1,7 +1,8 @@
-// Background AI jobs (receiptJobs): receipts, product photos and links, note fills.
+// Background AI jobs (receiptJobs): receipts, product photos and links, note fills, and AI 助手 (translate, ask).
 import { cloudEvent } from '@google-cloud/functions-framework';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
+import { answerQuestion, translatePhoto } from './assistant.js';
 import { MAX_IMAGE_BYTES, askDeepSeek, tripInfo, useQuota } from './base.js';
 import { articleItems, articlePictures, cleanNoteFill, cleanProduct, finishProduct, noteFillPrompt, pagePrompt, productPrompt, readProductLink } from './products.js';
 
@@ -55,6 +56,7 @@ async function productFromPhotos(images, tripDoc, unknown) {
  if (!read.name) throw new HttpsError('not-found', unknown);
  return finishProduct(read, tripDoc);
 }
+const FAILED = { receipt: '未能分析收據，請稍後再試。', translate: '未能翻譯，請稍後再試。', ask: 'AI 暫時未能回答，請稍後再試。' };
 const validImage = image => typeof image === 'string' && /^[A-Za-z0-9+/=]+$/.test(image) && image.length * 0.75 <= MAX_IMAGE_BYTES;
 
 // Background receipts and product photos (kind: 'product'): the page stores shrunk photos in receiptJobs (Firestore keeps unsent writes on the
@@ -72,7 +74,7 @@ cloudEvent('processReceipt', async event => {
   const snap = await tx.get(ref);
   if (!snap.exists || snap.get('status') !== 'pending') return null;
   tx.update(ref, { status: 'processing', startedAt: Date.now() });
-  return { images: snap.get('images') ?? (snap.get('image') != null ? [snap.get('image')] : []), url: snap.get('url') || '', mode: snap.get('mode') || 'note', kind: snap.get('kind') || 'receipt', by: snap.get('by'), byName: snap.get('byName') };
+  return { images: snap.get('images') ?? (snap.get('image') != null ? [snap.get('image')] : []), url: snap.get('url') || '', mode: snap.get('mode') || 'note', kind: snap.get('kind') || 'receipt', question: snap.get('question'), context: snap.get('context'), history: snap.get('history'), by: snap.get('by'), byName: snap.get('byName') };
  });
  if (job === null) return;
  const { images } = job;
@@ -93,6 +95,12 @@ cloudEvent('processReceipt', async event => {
    await jobDone(ref, result);
    return;
   }
+  if (job.kind === 'ask') {
+   // AI 助手: a question about the trip, answered from the summary the page sent.
+   await useQuota(job.by, 'ai');
+   await jobDone(ref, await answerQuestion(job, tripDoc));
+   return;
+  }
   if (job.url && job.kind === 'product') {
    // Web link instead of a photo: a product page or a picture.
    await useQuota(job.by, 'ai');
@@ -111,6 +119,11 @@ cloudEvent('processReceipt', async event => {
   }
   if (!Array.isArray(images) || !images.length || images.length > 4 || !images.every(validImage)) throw new HttpsError('invalid-argument', '相片格式不正確或太大。');
   await useQuota(job.by, 'ai');
+  if (job.kind === 'translate') {
+   // AI 助手: a photographed menu or sign, translated.
+   await jobDone(ref, await translatePhoto(images.slice(0, 2), tripDoc));
+   return;
+  }
   if (job.kind === 'productFill') {
    // Photo added in the shopping form: return the details so the page can fill the empty fields.
    const result = await productFromPhotos(images, tripDoc, '認不出物品，請手動輸入。');
@@ -132,6 +145,6 @@ cloudEvent('processReceipt', async event => {
    ? { status: 'done', result, error: FieldValue.delete(), doneAt: Date.now() }
    : { status: 'failed', error: '讀不到金額，可以重試或手動輸入。', result, doneAt: Date.now() });
  } catch (e) {
-  await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : job.kind !== 'receipt' ? '未能辨識物品，請稍後再試。' : '未能分析收據，請稍後再試。', doneAt: Date.now() });
+  await ref.update({ status: 'failed', error: e instanceof HttpsError ? e.message : FAILED[job.kind] || '未能辨識物品，請稍後再試。', doneAt: Date.now() });
  }
 });

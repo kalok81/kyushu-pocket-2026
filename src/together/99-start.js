@@ -24,6 +24,7 @@
     aiRoutes,
     planDay,
     discoverPlaces,
+    aiJob,
     savePlace,
     deletePlace,
     savePlanDay,

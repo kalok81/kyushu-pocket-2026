@@ -1,0 +1,20 @@
+/* ---- AI 助手: photo translations and the question chat ---- */
+.ask-pick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ask-list{display:grid;gap:10px;margin-top:10px}
+.ask-photo{display:block;max-width:100%;max-height:220px;margin:4px 0 8px;border-radius:var(--r-md);object-fit:contain}
+.ask-items{margin:8px 0;padding:0;border-top:1px dashed var(--border);list-style:none}
+.ask-items li{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--border)}
+.ask-items li>div{display:grid;min-width:0}
+.ask-items b{font-size:var(--fs-body);font-weight:600;overflow-wrap:anywhere}
+.ask-items small{font-size:var(--fs-sm);color:var(--muted-foreground);overflow-wrap:anywhere}
+.ask-items small.ask-note{color:var(--foreground)}
+.ask-price{flex:none;font-weight:600;font-variant-numeric:tabular-nums}
+.ask-tips{display:flex;align-items:flex-start;gap:6px}
+.ask-tips .icon{flex:none;width:16px;height:16px;margin-top:3px;color:var(--orange)}
+.ask-chat{display:grid;gap:8px;margin-bottom:12px}
+.ask-msg{max-width:88%;padding:10px 14px;border-radius:var(--r-xl);font-size:var(--fs-body)}
+.ask-msg p{margin:0;white-space:pre-line;overflow-wrap:anywhere}
+.ask-msg.me{justify-self:end;border-bottom-right-radius:var(--r-sm);background:var(--primary);color:var(--primary-foreground)}
+.ask-msg.ai{justify-self:start;width:88%;border:1px solid var(--border);border-bottom-left-radius:var(--r-sm);background:var(--card);box-shadow:var(--shadow-sm)}
+.ask-msg .links{margin-top:10px}
+.ask-form textarea{resize:vertical}

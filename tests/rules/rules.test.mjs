@@ -129,6 +129,14 @@ test('note and coupon AI jobs', async () => {
  await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/nf2`), { ...job, mode: 'note', url: 'https://example.com' }));
  await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/nf3`), { ...job, mode: 'other', url: 'https://example.com' }));
 });
+test('AI 助手 jobs: photo translation and questions', async () => {
+ const job = { file: 'AI 助手', status: 'pending', ...owned('amy', 'Amy') };
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/tr1`), { ...job, kind: 'translate', images: ['abc'] }));
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/ask1`), { ...job, kind: 'ask', question: '今晚食咩好？', context: 'D1 天神', history: [{ q: '你好', a: '你好！' }] }));
+ await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/ask2`), { ...job, kind: 'ask', question: 'x'.repeat(501), context: '' }));
+ await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/ask3`), { ...job, kind: 'receipt', question: '今晚食咩好？', context: '' }));
+ await assertFails(setDoc(doc(db(eve), `${T}/receiptJobs/ask4`), { ...job, ...owned('eve', 'Eve'), kind: 'ask', question: 'hi', context: '' }));
+});
 test('receipt jobs are private to whoever sent them', async () => {
  await assertSucceeds(getDoc(doc(db(amy), `${T}/receiptJobs/j1`)));
  await assertFails(getDoc(doc(db(bob), `${T}/receiptJobs/j1`)));

@@ -1,4 +1,4 @@
-  // ---- 總覽 (home): the trip in one line, today's stops, shortcuts and the 資料簿 search ----
+  // ---- 總覽 (home): the trip in one line, today's stops, shortcuts (AI 助手 among them) and the 資料簿 search ----
   const todayIso = () => {
     const n = new Date();
     return `${n.getFullYear()}/${String(n.getMonth() + 1).padStart(2, "0")}/${String(n.getDate()).padStart(2, "0")}`;
@@ -29,5 +29,5 @@
       : "";
     const tile = (href, ic, title, sub) => `<a class="quick" href="${href}">${icon(ic)}<span><b>${title}</b><small>${sub}</small></span></a>`;
     const info = [meta.destination, first && Kit.dateRange(first.iso, last.iso, { weekday: false }), first && `${days.length} 天`, when].filter(Boolean);
-    return `<section class="trip-card trip-bar"><div class="trip-line"><h1>${esc(meta.name || "我們的旅程")}</h1><span>${info.map(esc).join(" · ")}</span></div></section>${today}<div class="quicklinks">${tile(`#plan?day=${now ? now.n : 1}`, "calendar", "行程", now ? `今天 D${now.n}` : `${days.length} 天`)}${tile("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${tile("#hotels", "bed", "住宿", `${hs.length} 間`)}${tile("#events", "ticket", "活動", `${lists().events?.length || 0} 個`)}${tile("#nearby", "locate", "附近", "定位找地點")}</div>${Kit.sectionHead("資料簿")}${notebookBody()}`;
+    return `<section class="trip-card trip-bar"><div class="trip-line"><h1>${esc(meta.name || "我們的旅程")}</h1><span>${info.map(esc).join(" · ")}</span></div></section>${today}<div class="quicklinks">${tile(`#plan?day=${now ? now.n : 1}`, "calendar", "行程", now ? `今天 D${now.n}` : `${days.length} 天`)}${tile("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${tile("#hotels", "bed", "住宿", `${hs.length} 間`)}${tile("#events", "ticket", "活動", `${lists().events?.length || 0} 個`)}${tile("#nearby", "locate", "附近", "定位找地點")}${tile("#ask", "sparkles", "AI 助手", "翻譯・發問")}</div>${Kit.sectionHead("資料簿")}${notebookBody()}`;
   }
