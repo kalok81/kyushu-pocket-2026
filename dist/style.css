@@ -622,10 +622,10 @@ details.more:not([open]) .menu{display:none}
 /* ---- 總覽 ---- */
 .trip-card{padding:22px 20px 20px;border-radius:18px;background:var(--primary);color:#fffceb}
 .trip-card .eyebrow{color:#b8c9b3}
-.trip-bar{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:14px}
+.trip-bar{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:14px}
 .trip-line{flex:1;min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;column-gap:10px;row-gap:2px}
-.trip-line h1{margin:0;font-family:serif;font-size:19px;font-weight:500;line-height:1.35;overflow-wrap:anywhere}
-.trip-line span{font-size:13px;color:#d5dfd1;font-variant-numeric:tabular-nums}
+.trip-line h1{margin:0;font-family:serif;font-size:23px;font-weight:500;line-height:1.35;overflow-wrap:anywhere}
+.trip-line span{font-size:15px;color:#d5dfd1;font-variant-numeric:tabular-nums}
 .trip-bar .herobtn{flex:none}
 .trip-card .herobtn{background:#efe7d1;border-color:#efe7d1;color:var(--primary)}
 .trip-card .herobtn:hover{background:#e6dcc0}
