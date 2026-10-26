@@ -776,6 +776,8 @@ const ROUTE_FIELDS = ['duration', 'distanceMeters', 'travelAdvisory.transitFare'
 // Japan's public transport with timetables (Google offers none for Japan): NAVITIME Route via RapidAPI (free plan,
 // 500 requests a month; each companion at most DAILY.navi a day). when: local 'YYYY-MM-DDTHH:mm'. Options in the
 // shape of suggestRoutes (steps with lines, stations and times); fare = ticket + unreserved express fee.
+// The marketplace plan has no train timetables either (NAVITIME sells those separately, not on RapidAPI): times come
+// from average running times, so each step says approx and has no train number.
 // The marketplace plan has trains only (local buses need a separate contract), so routes that are mostly walking —
 // where a bus is likely the way — are dropped and the AI (which knows the buses) is asked instead.
 const NAVI_VEHICLE = { superexpress_train: 'HIGH_SPEED_TRAIN', bus: 'BUS', highway_bus: 'INTERCITY_BUS', ferry: 'FERRY' };
@@ -798,7 +800,7 @@ async function naviRoutes(uid, a, b, when, limit = 3) {
     if (last?.mode === 'WALK') { last.minutes += minutes; last.meters += Number(s.distance) || 0; } else steps.push({ mode: 'WALK', minutes, meters: Number(s.distance) || 0 });
     return;
    }
-   steps.push({ mode: 'TRANSIT', vehicle: NAVI_VEHICLE[s.move] || (/train/.test(s.move) ? 'HEAVY_RAIL' : ''), line: String(s.line_name || s.transport?.name || '').slice(0, 60), headsign: '', from: station(secs[i - 1]), to: station(secs[i + 1]), stops: 0, depart: String(s.from_time || '').slice(11, 16), arrive: String(s.to_time || '').slice(11, 16), minutes });
+   steps.push({ mode: 'TRANSIT', vehicle: NAVI_VEHICLE[s.move] || (/train/.test(s.move) ? 'HEAVY_RAIL' : ''), line: String(s.line_name || s.transport?.name || '').slice(0, 60), headsign: '', from: station(secs[i - 1]), to: station(secs[i + 1]), stops: 0, depart: String(s.from_time || '').slice(11, 16), arrive: String(s.to_time || '').slice(11, 16), minutes, approx: !(s.transport?.links || []).some(l => String(l.is_timetable) === 'true') });
   });
   const f = it.summary?.move?.fare || {}, amount = (Number(f.unit_48 ?? f.unit_0) || 0) + (Number(f.unit_1) || 0);
   return { minutes: Number(it.summary?.move?.time) || 0, meters: Number(it.summary?.move?.distance) || 0, fare: amount ? { currency: 'JPY', amount } : null, steps: steps.filter(x => x.mode === 'TRANSIT' || x.minutes > 0) };

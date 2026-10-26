@@ -821,6 +821,9 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .stop.drop-before{box-shadow:0 -3px 0 var(--primary)}
 .stop.drop-after{box-shadow:0 3px 0 var(--primary)}
 .stop-link{padding-right:44px}
+.route-checks{grid-column:2;display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 0 -6px}
+@media(max-width:760px){.route-checks{grid-column:1}}
+.route-checks .btn{min-height:30px;padding:2px 8px;font-size:13px;color:var(--primary)}
 .stop-link .link-add{position:absolute;right:0;top:50%;transform:translateY(-50%);color:var(--muted-foreground)}
 .stop-warn{display:flex;gap:6px;align-items:flex-start;margin:2px 0 6px;font-size:14px;font-weight:600;color:var(--destructive)}
 .stop-warn svg{flex:none;width:16px;height:16px;margin-top:2px}
