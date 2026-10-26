@@ -906,8 +906,14 @@ window.startTrip = (meta = {}) => {
     runDiscover(e.target);
   });
   // ---- 行程 (plan): day stops, the stop form and the in-page place picker ----
-  // Each day's plan lives in Firestore planDays/{day}: the stop list and the day's title.
-  let planEdits = {};
+  // Each day's plan lives in Firestore planDays/{day}: the stop list and the day's title, plus other 方案 of the day
+  // (variants: [{id, name, stops}], the main one named mainName). The plan page shows the 方案 picked in planView and its
+  // tools change that one; every other page (overview, hotels, notebook) uses the main one.
+  let planEdits = {},
+    planView = {};
+  const variantsOf = (day) => planEdits[day]?.variants || [];
+  const viewedVariant = (day) => (current === "plan" && planView[day] && variantsOf(day).find((v) => v.id === planView[day])) || null;
+  const mainName = (day) => planEdits[day]?.mainName || "方案 1";
   // A stop for an explore place or a hotel shows that place's current name, area, details and address, so editing the
   // place in 探索 (or the hotel in 住宿) updates every stop; the copy saved in the stop is only a fallback.
   function resolveStop(s) {
@@ -935,7 +941,7 @@ window.startTrip = (meta = {}) => {
       };
     return s;
   }
-  const stopsFor = (day) => (planEdits[day]?.stops || []).map(resolveStop);
+  const stopsFor = (day) => ((viewedVariant(day) || planEdits[day])?.stops || []).map(resolveStop);
   const stopFields = (s) => ({
     time: String(s.time || "").slice(0, 30),
     area: String(s.area || "").slice(0, 60),
@@ -965,9 +971,73 @@ window.startTrip = (meta = {}) => {
     return i < 0 ? [...list, stop] : [...list.slice(0, i), stop, ...list.slice(i)];
   }
   function savePlan(day, stops) {
-    planEdits = { ...planEdits, [day]: { ...planEdits[day], stops } };
-    window.Together.savePlanDay(day, stops.map(stopFields));
+    const v = viewedVariant(day);
+    if (v) saveVariants(day, variantsOf(day).map((x) => (x === v ? { ...x, stops: stops.map(stopFields) } : x)));
+    else {
+      planEdits = { ...planEdits, [day]: { ...planEdits[day], stops } };
+      window.Together.savePlanDay(day, stops.map(stopFields));
+    }
     if (current === "plan") refreshPlan();
+  }
+  // 方案: the day's main stops stay as they are; only the variants (and the main one's name) change
+  function saveVariants(day, variants, extra = {}) {
+    const main = planEdits[day]?.stops || [];
+    planEdits = { ...planEdits, [day]: { ...planEdits[day], variants, mainName: mainName(day), ...extra } };
+    window.Together.savePlanDay(day, main.map(stopFields), { variants, mainName: mainName(day), ...extra });
+  }
+  async function newVariant(day) {
+    const vs = variantsOf(day);
+    if (vs.length >= 4) return toast("每天最多 5 個方案。");
+    const name = await UI.prompt("新方案的名稱", `方案 ${vs.length + 2}`, "例如：早一班火車");
+    if (name == null || !name.trim()) return;
+    // a copy of the 方案 on screen, to change without touching it
+    const v = { id: Date.now().toString(36), name: name.trim().slice(0, 30), stops: stopsFor(day).map(stopFields) };
+    saveVariants(day, [...vs, v]);
+    planView = { ...planView, [day]: v.id };
+    refreshPlan();
+    toast(`已建立「${v.name}」，現在修改的是這個方案`);
+  }
+  async function renameVariant(day) {
+    const v = viewedVariant(day),
+      name = await UI.prompt("方案名稱", v ? v.name : mainName(day));
+    if (name == null || !name.trim()) return;
+    const n = name.trim().slice(0, 30);
+    if (v) saveVariants(day, variantsOf(day).map((x) => (x === v ? { ...x, name: n } : x)));
+    else saveVariants(day, variantsOf(day), { mainName: n });
+    refreshPlan();
+  }
+  // 設為主要: the 方案 on screen and the main one trade places (the other pages then use it)
+  function makeMainVariant(day) {
+    const v = viewedVariant(day);
+    if (!v) return;
+    const old = { id: v.id, name: mainName(day), stops: (planEdits[day]?.stops || []).map(stopFields) },
+      variants = variantsOf(day).map((x) => (x === v ? old : x));
+    planEdits = { ...planEdits, [day]: { ...planEdits[day], stops: v.stops, variants, mainName: v.name } };
+    window.Together.savePlanDay(day, v.stops, { variants, mainName: v.name });
+    planView = { ...planView, [day]: null };
+    refreshPlan();
+    toast(`「${v.name}」已設為主要方案`);
+  }
+  async function deleteVariant(day) {
+    const v = viewedVariant(day);
+    if (!v || !(await UI.confirm(`刪除「${v.name}」？`, { text: "主要方案及其他方案不受影響。", danger: true, ok: "刪除" }))) return;
+    saveVariants(day, variantsOf(day).filter((x) => x !== v));
+    planView = { ...planView, [day]: null };
+    refreshPlan();
+  }
+  // The day's 方案 as chips above the timeline (only once there is more than one)
+  function variantChips(day) {
+    const vs = variantsOf(day);
+    if (!vs.length) return "";
+    const on = viewedVariant(day)?.id || "main";
+    return Kit.chips(
+      [
+        { label: `${esc(mainName(day))}<small>主要</small>`, active: on === "main", attrs: { "data-plan-variant": "main" } },
+        ...vs.map((v) => ({ label: esc(v.name), active: on === v.id, attrs: { "data-plan-variant": v.id } })),
+        { label: "＋", attrs: { "data-plan-variant-new": true, "aria-label": "新增方案" } },
+      ],
+      { cls: "plan-variants", label: "這天的方案" },
+    );
   }
   function applyPlanEdits(map) {
     planEdits = map;
@@ -1318,13 +1388,17 @@ window.startTrip = (meta = {}) => {
     return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)} · ${esc(d.weekday)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
       [
         { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
+        { label: "新增方案（複製這個）", icon: "copy", attrs: { "data-plan-variant-new": true } },
+        variantsOf(day).length && { label: "方案改名", icon: "edit", attrs: { "data-plan-variant-rename": true } },
+        viewedVariant(day) && { label: "設為主要方案", icon: "check", attrs: { "data-plan-variant-main": true } },
+        viewedVariant(day) && { label: "刪除這個方案", icon: "trash", danger: true, attrs: { "data-plan-variant-del": true } },
         { label: "與另一日對調", icon: "calendar", attrs: { "data-day-swap": true } },
         routeStops(day).length && { label: "當天路線地圖", icon: "map", attrs: { "data-day-map": true } },
         { label: "列印／另存 PDF", icon: "printer", attrs: { "data-plan-print": true } },
-        edit?.stops?.length && { label: "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
+        (viewedVariant(day) ? stops.length : edit?.stops?.length) && { label: viewedVariant(day) ? "清空這個方案" : "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
       ],
       { label: "這天的更多操作", cls: "day-more" },
-    )}</div>${stops.length ? planTools(stops) : ""}${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
+    )}</div>${variantChips(day)}${stops.length ? planTools(stops) : ""}${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
       stopGroups(stops)
         .map(
           (g, n, all) =>
@@ -2058,16 +2132,19 @@ window.startTrip = (meta = {}) => {
     );
   }
   function swapDays(a, b) {
-    const A = stopsFor(a),
-      B = stopsFor(b),
+    // whole days trade places: the main stops, the title and the other 方案
+    const pick = (day) => ({ stops: (planEdits[day]?.stops || []).map(stopFields), variants: variantsOf(day), mainName: planEdits[day]?.mainName || "" }),
+      A = pick(a),
+      B = pick(b),
       la = days[a - 1].region,
       lb = days[b - 1].region;
-    const put = (day, label, stops) => {
-      planEdits = { ...planEdits, [day]: { ...planEdits[day], stops, label } };
-      window.Together.setDayLabel(day, label, stops.map(stopFields));
+    const put = (day, label, { stops, variants, mainName }) => {
+      planEdits = { ...planEdits, [day]: { ...planEdits[day], stops, label, variants, mainName } };
+      window.Together.setDayLabel(day, label, stops, { variants, mainName });
     };
     put(a, lb, B);
     put(b, la, A);
+    planView = { ...planView, [a]: planView[b] || null, [b]: planView[a] || null };
     refreshDays();
     refreshPlan();
     Kit.snack(`已對調 D${a} 與 D${b}`, { action: "復原" }).then((undo) => {
@@ -2549,7 +2626,7 @@ window.startTrip = (meta = {}) => {
     if (el.dataset.dayLabel !== undefined) {
       const day = selectedDay;
       UI.prompt("這天的標題", days[day - 1].region, "例如：首爾市區、濟州").then((label) => {
-        if (label != null && label.trim()) window.Together.setDayLabel(day, label.trim().slice(0, 40), stopsFor(day));
+        if (label != null && label.trim()) window.Together.setDayLabel(day, label.trim().slice(0, 40), (planEdits[day]?.stops || []).map(stopFields));
       });
     }
     if (el.dataset.placePlan) {
@@ -2622,10 +2699,21 @@ window.startTrip = (meta = {}) => {
     }
     if (el.dataset.planReset !== undefined) {
       const day = selectedDay;
-      UI.confirm("清空這天？", { text: "這天的站點及標題會刪除。", danger: true, ok: "清空" }).then(
-        (ok) => ok && window.Together.resetPlanDay(day),
-      );
+      // a 方案 other than the main one: only its stops; the main one: the whole day (all its 方案 and title)
+      if (viewedVariant(day)) UI.confirm("清空這個方案？", { text: "主要方案不受影響。", danger: true, ok: "清空" }).then((ok) => ok && savePlan(day, []));
+      else
+        UI.confirm("清空這天？", { text: `這天的站點及標題會刪除${variantsOf(day).length ? "，其他方案亦會刪除" : ""}。`, danger: true, ok: "清空" }).then(
+          (ok) => ok && window.Together.resetPlanDay(day),
+        );
     }
+    if (el.dataset.planVariant) {
+      planView = { ...planView, [selectedDay]: el.dataset.planVariant === "main" ? null : el.dataset.planVariant };
+      refreshPlan();
+    }
+    if (el.dataset.planVariantNew !== undefined) newVariant(selectedDay);
+    if (el.dataset.planVariantRename !== undefined) renameVariant(selectedDay);
+    if (el.dataset.planVariantMain !== undefined) makeMainVariant(selectedDay);
+    if (el.dataset.planVariantDel !== undefined) deleteVariant(selectedDay);
     if (el.dataset.placeEdit) placeForm(places.find((p) => p.id === el.dataset.placeEdit));
     if (el.id === "placeLookup") lookupPlaceForm();
     if (el.dataset.placePhotoDel !== undefined) setPlacePhoto(null);

@@ -187,10 +187,13 @@ service cloud.firestore {
       match /planDays/{day} {
         allow read, delete: if tripMember();
         allow write: if tripMember() && day.matches('^[1-9][0-9]?$') && int(day) <= 60
-          && request.resource.data.keys().hasOnly(['stops', 'label', 'hotel', 'by', 'byName', 'at'])
+          && request.resource.data.keys().hasOnly(['stops', 'label', 'hotel', 'variants', 'mainName', 'by', 'byName', 'at'])
           && (!('hotel' in request.resource.data) || text(request.resource.data.hotel, 40)) // no longer written; kept for old documents
           && request.resource.data.stops is list && request.resource.data.stops.size() <= 40
           && (!('label' in request.resource.data) || text(request.resource.data.label, 40))
+          // other 方案 of the day ({id, name, stops} each) beside the main one, and the main one's name
+          && (!('variants' in request.resource.data) || (request.resource.data.variants is list && request.resource.data.variants.size() <= 4))
+          && (!('mainName' in request.resource.data) || text(request.resource.data.mainName, 30))
           && request.resource.data.by == request.auth.uid && text(request.resource.data.byName, 40) && request.resource.data.at is int;
       }
     }

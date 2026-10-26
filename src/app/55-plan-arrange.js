@@ -333,16 +333,19 @@
     );
   }
   function swapDays(a, b) {
-    const A = stopsFor(a),
-      B = stopsFor(b),
+    // whole days trade places: the main stops, the title and the other 方案
+    const pick = (day) => ({ stops: (planEdits[day]?.stops || []).map(stopFields), variants: variantsOf(day), mainName: planEdits[day]?.mainName || "" }),
+      A = pick(a),
+      B = pick(b),
       la = days[a - 1].region,
       lb = days[b - 1].region;
-    const put = (day, label, stops) => {
-      planEdits = { ...planEdits, [day]: { ...planEdits[day], stops, label } };
-      window.Together.setDayLabel(day, label, stops.map(stopFields));
+    const put = (day, label, { stops, variants, mainName }) => {
+      planEdits = { ...planEdits, [day]: { ...planEdits[day], stops, label, variants, mainName } };
+      window.Together.setDayLabel(day, label, stops, { variants, mainName });
     };
     put(a, lb, B);
     put(b, la, A);
+    planView = { ...planView, [a]: planView[b] || null, [b]: planView[a] || null };
     refreshDays();
     refreshPlan();
     Kit.snack(`已對調 D${a} 與 D${b}`, { action: "復原" }).then((undo) => {

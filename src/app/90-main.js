@@ -123,7 +123,7 @@
     if (el.dataset.dayLabel !== undefined) {
       const day = selectedDay;
       UI.prompt("這天的標題", days[day - 1].region, "例如：首爾市區、濟州").then((label) => {
-        if (label != null && label.trim()) window.Together.setDayLabel(day, label.trim().slice(0, 40), stopsFor(day));
+        if (label != null && label.trim()) window.Together.setDayLabel(day, label.trim().slice(0, 40), (planEdits[day]?.stops || []).map(stopFields));
       });
     }
     if (el.dataset.placePlan) {
@@ -196,10 +196,21 @@
     }
     if (el.dataset.planReset !== undefined) {
       const day = selectedDay;
-      UI.confirm("清空這天？", { text: "這天的站點及標題會刪除。", danger: true, ok: "清空" }).then(
-        (ok) => ok && window.Together.resetPlanDay(day),
-      );
+      // a 方案 other than the main one: only its stops; the main one: the whole day (all its 方案 and title)
+      if (viewedVariant(day)) UI.confirm("清空這個方案？", { text: "主要方案不受影響。", danger: true, ok: "清空" }).then((ok) => ok && savePlan(day, []));
+      else
+        UI.confirm("清空這天？", { text: `這天的站點及標題會刪除${variantsOf(day).length ? "，其他方案亦會刪除" : ""}。`, danger: true, ok: "清空" }).then(
+          (ok) => ok && window.Together.resetPlanDay(day),
+        );
     }
+    if (el.dataset.planVariant) {
+      planView = { ...planView, [selectedDay]: el.dataset.planVariant === "main" ? null : el.dataset.planVariant };
+      refreshPlan();
+    }
+    if (el.dataset.planVariantNew !== undefined) newVariant(selectedDay);
+    if (el.dataset.planVariantRename !== undefined) renameVariant(selectedDay);
+    if (el.dataset.planVariantMain !== undefined) makeMainVariant(selectedDay);
+    if (el.dataset.planVariantDel !== undefined) deleteVariant(selectedDay);
     if (el.dataset.placeEdit) placeForm(places.find((p) => p.id === el.dataset.placeEdit));
     if (el.id === "placeLookup") lookupPlaceForm();
     if (el.dataset.placePhotoDel !== undefined) setPlacePhoto(null);

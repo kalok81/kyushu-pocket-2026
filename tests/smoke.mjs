@@ -466,6 +466,33 @@ try {
   await page.fill('#stopForm [name=note]', '僅收現金'); await page.click('#stopForm button[type=submit]');
   await page.waitForSelector('.timeline .stop-note'); assert.match(await page.locator('.timeline .stop-note').first().innerText(), /僅收現金/);
  });
+ await step('方案: a second plan for a day, changed on its own, made the main one, deleted', async () => {
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.journey-day');
+  const titles = () => page.locator('.timeline h3').evaluateAll((hs) => hs.map((h) => h.firstChild.textContent.trim()));
+  const main = await titles(); assert.ok(main.length >= 2);
+  await page.click('.day-more summary'); await page.click('[data-plan-variant-new]:visible');
+  await page.waitForSelector('.ui-pop input'); await page.fill('.ui-pop input', '早一班火車'); await page.click('.ui-pop button:has-text("儲存")');
+  await page.waitForSelector('.plan-variants'); assert.deepEqual((await page.locator('.plan-variants .chip').allInnerTexts()).map((t) => t.replace(/\s+/g, '')), ['方案1主要', '早一班火車', '＋']);
+  assert.match(await page.locator('.plan-variants .chip.active').innerText(), /早一班火車/);
+  // the copy changes alone: delete its last stop, the main one keeps it
+  await page.locator('[data-stop-more]').last().click(); await page.click('[data-stop-delete]:visible');
+  if (await page.isVisible('.ui-pop')) await page.click('.ui-pop button.btn-danger, .ui-pop button:has-text("刪除")');
+  await page.waitForFunction((n) => document.querySelectorAll('.timeline h3').length === n, main.length - 1);
+  await page.click('[data-plan-variant="main"]'); assert.deepEqual(await titles(), main, 'the main 方案 is unchanged');
+  const doc = await page.evaluate(() => globalThis.__fakeStore.planDays['1']);
+  assert.deepEqual([doc.stops.length, doc.variants.length, doc.variants[0].stops.length, doc.mainName], [main.length, 1, main.length - 1, '方案 1']);
+  // 設為主要: the copy becomes the main one (the overview uses it), the old main one becomes a 方案
+  await page.locator('.plan-variants .chip', { hasText: '早一班火車' }).click();
+  await page.click('.day-more summary'); await page.click('[data-plan-variant-main]:visible');
+  await page.waitForFunction(() => document.querySelector('.plan-variants .chip.active')?.innerText.replace(/\s+/g, '') === '早一班火車主要');
+  const after = await page.evaluate(() => globalThis.__fakeStore.planDays['1']);
+  assert.deepEqual([after.stops.length, after.mainName, after.variants[0].name, after.variants[0].stops.length], [main.length - 1, '早一班火車', '方案 1', main.length]);
+  // back to the old plan as main, then delete the copy
+  await page.locator('.plan-variants .chip', { hasText: '方案 1' }).click(); await page.click('.day-more summary'); await page.click('[data-plan-variant-main]:visible');
+  await page.locator('.plan-variants .chip', { hasText: '早一班火車' }).click(); await page.click('.day-more summary'); await page.click('[data-plan-variant-del]:visible');
+  await page.click('.ui-pop button:has-text("刪除")'); await page.waitForFunction(() => !document.querySelector('.plan-variants'));
+  assert.deepEqual(await titles(), main);
+ });
  await step('plan picker: every category shows; a 交通 place can be added twice', async () => {
   await page.goto(base + '/#explore'); await page.click('[data-place-new]');
   await page.fill('#placeForm [name=f0]', '上野'); await page.fill('#placeForm [name=f1]', '京成上野駅'); await page.locator('#placeForm [name=cats]').nth(3).check(); await page.click('#placeForm button[type=submit]');

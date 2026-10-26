@@ -52,18 +52,19 @@
   function deletePlace(place) {
     fb.fs.deleteDoc(tdoc("places", place.overlayId)).catch(() => toast("未能刪除，請再試。"));
   }
-  // Day plans: planDays/{day} holds the stop list and title of that day; deleting it clears the day.
+  // Day plans: planDays/{day} holds the stop list and title of that day, and its other 方案 (variants, mainName);
+  // deleting it clears the day. extra: the 方案 fields when they change.
   const planMap = () => Object.fromEntries(state.planDays.map((d) => [Number(d.id), d]));
-  function savePlanDay(day, stops) {
+  function savePlanDay(day, stops, extra = {}) {
     fb.fs
-      .setDoc(tdoc("planDays", String(day)), { stops, by: state.user.uid, byName: me().name, at: Date.now() }, { merge: true })
+      .setDoc(tdoc("planDays", String(day)), { stops, ...extra, by: state.user.uid, byName: me().name, at: Date.now() }, { merge: true })
       .catch(() => toast("未能儲存行程，請再試。"));
   }
-  function setDayLabel(day, label, stops) {
+  function setDayLabel(day, label, stops, extra = {}) {
     fb.fs
       .setDoc(
         tdoc("planDays", String(day)),
-        { stops, label, by: state.user.uid, byName: me().name, at: Date.now() },
+        { stops, label, ...extra, by: state.user.uid, byName: me().name, at: Date.now() },
         { merge: true },
       )
       .catch(() => toast("未能儲存，請再試。"));

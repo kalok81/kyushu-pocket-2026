@@ -874,6 +874,10 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .discover-credit{display:block;margin-top:4px;font-size:11px;color:var(--muted-foreground)}
 #discoverForm{grid-template-columns:minmax(0,1fr)}
 #discoverForm .chips{flex-wrap:wrap;overflow:visible}
+.plan-variants{flex-wrap:wrap;overflow:visible;margin:4px 0 10px}
+.plan-variants .chip{flex:0 1 auto;max-width:100%;white-space:normal;text-align:left}
+.plan-variants .chip small{margin-left:4px;font-size:11px;font-weight:600;color:var(--muted-foreground)}
+.plan-variants .chip.active small{color:inherit;opacity:.8}
 .plan-pick .chips{flex-wrap:wrap;overflow:visible;gap:5px;padding:0}
 .plan-pick .chip{min-height:30px;padding:3px 10px;font-size:13px}
 #detail .plan-pick{position:sticky;top:-1px;z-index:3;margin:6px 0 8px;padding:6px 0 8px;gap:8px;background:var(--card);box-shadow:0 6px 8px -6px rgb(0 0 0/.12)}

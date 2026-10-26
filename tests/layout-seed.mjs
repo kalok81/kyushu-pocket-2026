@@ -22,7 +22,7 @@ const planDays = {
   stop('12:00–13:00', '上野', '阿美橫丁小食街', '午餐第三選擇：海鮮丼、串燒', ''),
   stop('14:00–18:00', '銀座', 'GINZA SIX ギンザシックス（Supercalifragilisticexpialidocious long name test store）', '手信、限定甜品', '', { placeId: 'u_p3' }),
   stop('19:00', '新宿', '思い出横丁', '晚餐', '', { placeId: 'u_p4' }),
- ], label: '淺草・上野・銀座・新宿一日遊（很長的標題測試）', by: 'u1', byName: 'Amy', at: 1 },
+ ], label: '淺草・上野・銀座・新宿一日遊（很長的標題測試）', mainName: '晴天方案', variants: [{ id: 'v1', name: '雨天方案：博物館及室內購物（很長的方案名）', stops: [stop('10:00', '上野', '東京國立博物館', '雨天室內')] }, { id: 'v2', name: '早一班火車', stops: [] }], by: 'u1', byName: 'Amy', at: 1 },
  2: { stops: [stop('10:00', '澀谷', 'SHIBUYA SKY 澀谷天空', '360 度夜景', '', { placeId: 'u_p5' })], by: 'u1', byName: 'Amy', at: 1 },
 };
 const hotels = {
