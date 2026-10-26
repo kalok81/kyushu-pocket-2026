@@ -502,7 +502,7 @@ try {
  });
  await step('plan: ＋寫筆記 beside ＋加入地點 opens a note for that day', async () => {
   await page.goto(base + '/#plan?day=2'); await page.waitForSelector('.fab-row');
-  assert.deepEqual(await page.locator('.fab-row .fab').allInnerTexts(), ['加入地點', '寫筆記']);
+  assert.deepEqual(await page.locator('.fab-row .fab').allInnerTexts(), ['地點', '筆記']);
   const [a, b] = await page.locator('.fab-row .fab').evaluateAll((bs) => bs.map((x) => x.getBoundingClientRect()));
   assert.ok(b.left > a.right && Math.abs(a.top - b.top) < 2, '寫筆記 is to the right of 加入地點');
   await page.click('.fab-row [data-tg=dayNote]'); await page.waitForSelector('#detail [data-tg-form=note]', { state: 'visible' });

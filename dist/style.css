@@ -572,8 +572,6 @@ main{padding-bottom:110px}
 /* two floating buttons side by side (plan: 加入地點 + 寫筆記) */
 .fab-row{position:fixed;z-index:35;right:max(16px,calc((100vw - 1144px)/2 + 16px));bottom:calc(86px + env(safe-area-inset-bottom));display:flex;gap:8px}
 .fab-row .fab{position:static}
-.fab.fab-alt{background:var(--card);color:var(--primary);border:1px solid var(--border)}
-.fab.fab-alt:hover{background:var(--muted-bg)}
 .fab:hover{background:var(--primary-hover)}
 @media(min-width:900px){
 .fab,.fab-row{bottom:28px}
@@ -831,11 +829,14 @@ p.transport{display:flex;gap:8px;align-items:flex-start}
 .stop.dragging .stopcontent{box-shadow:0 10px 30px rgba(0,0,0,.18)}
 .stop.drop-before{box-shadow:0 -3px 0 var(--primary)}
 .stop.drop-after{box-shadow:0 3px 0 var(--primary)}
-.stop-link{padding-right:44px}
 .route-checks{grid-column:2;display:flex;flex-wrap:wrap;gap:4px;margin:2px 0 0 -6px}
 @media(max-width:760px){.route-checks{grid-column:1}}
 .route-checks .btn{min-height:30px;padding:2px 8px;font-size:13px;color:var(--primary)}
-.stop-link .link-add{position:absolute;right:0;top:50%;transform:translateY(-50%);color:var(--muted-foreground)}
+/* The ＋ between two slots sits in the time column, under the slot's own ＋ (on phones: at the right, like the time row's ＋) */
+.stop-link .link-side{display:flex;align-items:center;justify-content:flex-end}
+.stop-link .link-add{color:var(--muted-foreground)}
+.stop-link .link-add .icon{width:16px;height:16px}
+@media(max-width:760px){.stop-link{padding-right:44px}.stop-link>.link-side{display:flex;position:absolute;right:0;top:50%;transform:translateY(-50%)}}
 .stop-warn{display:flex;gap:6px;align-items:flex-start;margin:2px 0 6px;font-size:14px;font-weight:600;color:var(--destructive)}
 .stop-warn svg{flex:none;width:16px;height:16px;margin-top:2px}
 .pp-row small.pp-reason{color:var(--primary);font-weight:600}
