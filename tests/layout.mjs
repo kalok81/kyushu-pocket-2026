@@ -41,7 +41,7 @@ const checks=()=>{
 const b=await chromium.launch(),report={};
 // the four widths at once, each in its own browser context (own fake data and storage)
 await Promise.all([320,390,768,1280].map(async w=>{
- const pg=await b.newPage({viewport:{width:w,height:w<700?780:900}});const errs=[];pg.on('pageerror',e=>errs.push(String(e)));
+ const pg=await b.newPage({viewport:{width:w,height:w<700?780:900},serviceWorkers:'block'});const errs=[];pg.on('pageerror',e=>errs.push(String(e)));
  await pg.route('**/vendor/firebase/*.js',r=>{const f=r.request().url().split('/').pop().split('?')[0];f==='firebase-firestore.js'?r.fulfill({body:seeded,contentType:'text/javascript'}):f==='firebase-storage.js'?r.fulfill({body:storage,contentType:'text/javascript'}):r.fulfill({path:fake+f,contentType:'text/javascript'})});
  await pg.route('https://api.open-meteo.com/**',r=>r.fulfill({json:weather,headers:{'Access-Control-Allow-Origin':'*'}}));
  await pg.route('https://open.er-api.com/**',r=>r.fulfill({json:{result:'success',time_last_update_unix:1900000000,rates:{HKD:1,JPY:19.6}},headers:{'Access-Control-Allow-Origin':'*'}}));

@@ -136,6 +136,10 @@ cd tests && npm ci && npx playwright install chromium && npm test
 
 GitHub Actions 每次 push 先執行以上檢查，通過才發佈網站。`dist/` 只可包含網站程式；旅程資料不要加入乘客姓名、座位、訂單編號、付款明細或任何登入憑證。
 
+## 離線使用
+
+`dist/sw.js`（service worker）把網站本身的檔案存在手機：沒有網絡時（山區、地下）App 仍然打得開。網頁先試網絡（新版本即時生效），4 秒內沒有回應或離線時用存下的版本；有 `?v=` 版本號的檔案直接用存下的（新版本有新網址，舊版本會刪除）；其他檔案用存下的，同時在背景更新。旅程資料不經 service worker，由 Firestore 自己的離線快取提供上次載入的內容。Service worker 在 `kit.js` 載入時註冊（App 本身要連接 Firebase 後才開始）。
+
 ## 鳴謝
 
 部分介面組件改自 [Uiverse.io](https://uiverse.io/)（[galaxy](https://github.com/uiverse-io/galaxy)，MIT），已改用網站本身的顏色：剔選格及單選掣（IndexOC「moody-mouse-53」）、開關（AbanoubMagdy1「pink-panda-32」，`Kit.toggle`）、等候圓點（Cornerstone-04「little-mouse-69」，`Kit.dots`／`Kit.loading`）。

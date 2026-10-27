@@ -20,7 +20,8 @@ const weather = { daily: { time: days, weather_code: [0, 61, 3, 1, 95], temperat
 const rates = { result: 'success', time_last_update_unix: 1900000000, rates: { HKD: 1, JPY: 20 } };
 
 const browser = await chromium.launch(), errors = [];
-const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+// service workers off: page.route (fake Firebase) does not see what a service worker fetches; the offline step has its own
+const page = await browser.newPage({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
 page.on('pageerror', e => errors.push(String(e)));
 await page.route('**/vendor/firebase/*.js', r => r.fulfill({ path: fake + r.request().url().split('/').pop().split('?')[0], contentType: 'text/javascript' }));
 await page.route('https://api.open-meteo.com/**', r => r.fulfill({ json: weather, headers: { 'Access-Control-Allow-Origin': '*' } }));
@@ -684,6 +685,16 @@ try {
   const kept = await page.evaluate(() => [JSON.parse(localStorage.getItem('pocket-ask-translations')), JSON.parse(localStorage.getItem('pocket-ask-chat'))]);
   assert.equal(kept[0][0].title, '拉麵店菜單'); assert.equal(kept[1].at(-1).places[0], place); assert.ok(!kept[1].at(-1).busy, 'kept on this phone without the busy flag');
   await page.goto(base + '/#home'); await page.goto(base + '/#ask'); await page.waitForSelector('.ask-msg.ai [data-place]');
+ });
+ await step('offline: the site opens from what the service worker kept', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } }), off = await ctx.newPage();
+  await ctx.route(/^https:\/\/(?!localhost)/, r => r.abort());
+  await off.goto(base + '/#home'); await off.evaluate(() => navigator.serviceWorker.ready);
+  await off.reload(); await off.waitForFunction(() => !!navigator.serviceWorker.controller);
+  await off.waitForFunction(async () => (await (await caches.open('pocket-travel-1')).keys()).some((r) => /app\.js\?v=/.test(r.url)));
+  await ctx.setOffline(true); await off.reload();
+  await off.waitForSelector('.topbar .brand'); assert.equal(await off.evaluate(() => typeof window.Kit), 'object', 'scripts load offline');
+  await ctx.close();
  });
  await step('Android share from Google Maps (after signing in again, as a full page load) opens 新增地點', async () => {
   await page.goto(base + '/?title=' + encodeURIComponent('雷門') + '&text=' + encodeURIComponent('雷門\nhttps://maps.app.goo.gl/shared1'));
