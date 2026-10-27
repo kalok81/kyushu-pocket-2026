@@ -96,7 +96,10 @@ export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck
  });
  // Alternatives that differ only in departure time are the same way to go: keep the first of each.
  const seen = new Set(), unique = options.filter(o => { const k = o.steps.map(x => x.mode === 'TRANSIT' ? `${x.line}|${x.from}|${x.to}` : x.mode).join('>'); return !seen.has(k) && seen.add(k); });
- return { options: unique.slice(0, 4), estimated, when: when ? when.toISOString() : null };
+ // 公共交通 that is only walking is not public transport (Google has no Japanese transit, and NAVITIME's walk-heavy
+ // routes were dropped as buses are likely there): none, so the page offers Google's own directions and the AI
+ const ways = mode === 'TRANSIT' ? unique.filter(o => o.steps.some(s => s.mode === 'TRANSIT')) : unique;
+ return { options: ways.slice(0, 4), estimated, when: when ? when.toISOString() : null, ...(mode === 'TRANSIT' && !ways.length ? { noTransit: true } : {}) };
 });
 
 // AI route advice (DeepSeek) for a plan link, mainly where Google offers no public transport data (Japan).

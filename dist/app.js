@@ -1942,6 +1942,7 @@ window.startTrip = (meta = {}) => {
     box.innerHTML = Kit.progress({ text: "正在查詢 Google 地圖…", seconds: 6 * modes.length });
     c.options = [];
     const parts = [];
+    let noTransit = false;
     for (const mode of modes) {
       let html;
       try {
@@ -1956,7 +1957,10 @@ window.startTrip = (meta = {}) => {
         c.options.push(...r.options.map((o) => ({ o, mode })));
         html = r.options.length
           ? `${r.source === "navitime" ? '<p class="note">火車路線及車費由 NAVITIME 提供（車費＝車票＋自由席特急料金），時間按平均行車時間估算，沒有列車號數：實際班次請按上面的「Yahoo」（Yahoo!乗換案内）。不包括巴士，搭巴士較方便時請按「AI 分析」。</p>' : ""}${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="card route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${o.steps.find((s) => s.mode === "TRANSIT").approx ? "約 " : ""}${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${s.approx ? "約 " : ""}${esc(s.depart)}–${esc(s.arrive)}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": base + k } })}</div>`).join("")}`
-          : `<p class="note">${mode === "TRANSIT" && meta.country === "JP" ? "找不到公共交通班次，可以按上面的「Yahoo」（Yahoo!乗換案内）或「AI 分析」。" : `Google 地圖找不到${ROUTE_MODES[mode][0]}路線。`}</p>`;
+          : mode === "TRANSIT"
+            ? `<p class="note">${meta.country === "JP" ? "這段沒有方便的火車，多數要搭巴士。下面是 Google 地圖的交通指引（有巴士）；亦可以按「AI 分析」或「Yahoo」。" : "Google 地圖找不到公共交通路線，下面是 Google 地圖的交通指引。"}</p>`
+            : `<p class="note">Google 地圖找不到${ROUTE_MODES[mode][0]}路線。</p>`;
+        if (mode === "TRANSIT" && !r.options.length) noTransit = true;
       } catch (e) {
         html = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p>`;
       }
@@ -1964,6 +1968,8 @@ window.startTrip = (meta = {}) => {
       if (routeCtx !== c || !$("#routeResults")) return;
     }
     box.innerHTML = parts.join("");
+    // no train or bus found: Google's own directions (which have the buses) open by themselves
+    if (noTransit && !$("#routeEmbed iframe")) transitFrame($("#routeEmbed"), { ...from.point, name: from.name }, dest);
   }
   // AI route advice (aiRoutes function): several ways with lines and stations, times and fares are estimates.
   const AI_MODE_ICON = { WALK: "🚶", TAXI: "🚕", DRIVE: "🚗" };

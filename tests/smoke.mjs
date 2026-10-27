@@ -134,6 +134,10 @@ try {
   await page.check('[name=routeMode][value=WALK]'); await page.click('#routeGo'); await page.waitForSelector('.route-mode-head >> nth=1');
   assert.deepEqual(await page.locator('.route-mode-head').allInnerTexts(), ['公共交通', '步行']);
   if (process.env.SHOTS) await page.locator('.route-form').screenshot({ path: process.env.SHOTS + '/route-modes.png' });
+  // no train or bus found (Google's walk-only answer is not public transport): a note, and Google's directions open
+  await page.evaluate(() => { window.noTransitNext = true; document.querySelector('#routeEmbed').innerHTML = ''; }); await page.uncheck('[name=routeMode][value=WALK]'); await page.click('#routeGo');
+  await page.waitForSelector('#routeEmbed iframe'); assert.match(await page.locator('#routeResults').innerText(), /沒有方便的火車，多數要搭巴士/);
+  await page.check('[name=routeMode][value=WALK]');
   await page.uncheck('[name=routeMode][value=TRANSIT]'); assert.equal(await page.locator('#routeYahoo').isHidden(), true, 'Yahoo is for public transport');
   await page.click('#routeGo'); await page.waitForFunction(() => !document.querySelector('.route-mode-head') && document.querySelector('[data-route-pick]'));
   await page.click('[data-route-pick]'); await page.waitForFunction(() => document.querySelector('#routeManual textarea').value.includes('步行約 12 分'));
