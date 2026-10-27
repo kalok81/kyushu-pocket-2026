@@ -363,6 +363,7 @@ details.more:not([open]) .menu{display:none}
 .ui-list{margin:10px 0 0;padding-left:18px;color:var(--foreground);text-align:left}
 .ui-toast{margin-bottom:calc(86px + env(safe-area-inset-bottom))!important;padding:10px 16px!important;border-radius:var(--r-lg)!important;background:var(--primary)!important;color:var(--primary-foreground)!important;font-family:inherit;box-shadow:var(--shadow-lg)!important}
 .ui-toast .swal2-title{margin:0!important;color:var(--primary-foreground)!important;font-size:var(--fs-lg)!important}
+.menu-sep{height:0;margin:4px 6px;border:0;border-top:1px solid var(--border)}
 /* ---- App shell: top bar (brand, search, ☰) and the five-tab navigation (bottom on phones, top bar on desktop) ---- */
 .topbar{position:sticky;top:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:10px;height:var(--topbar-h);padding:0 calc(var(--gutter) - 6px) 0 var(--gutter);border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--background) 92%,transparent);backdrop-filter:blur(10px)}
 .brand{display:flex;align-items:center;gap:10px;flex:1 1 auto;min-width:0;color:inherit;text-decoration:none}

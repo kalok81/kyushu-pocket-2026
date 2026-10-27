@@ -84,3 +84,4 @@ details.more:not([open]) .menu{display:none}
 .ui-list{margin:10px 0 0;padding-left:18px;color:var(--foreground);text-align:left}
 .ui-toast{margin-bottom:calc(86px + env(safe-area-inset-bottom))!important;padding:10px 16px!important;border-radius:var(--r-lg)!important;background:var(--primary)!important;color:var(--primary-foreground)!important;font-family:inherit;box-shadow:var(--shadow-lg)!important}
 .ui-toast .swal2-title{margin:0!important;color:var(--primary-foreground)!important;font-size:var(--fs-lg)!important}
+.menu-sep{height:0;margin:4px 6px;border:0;border-top:1px solid var(--border)}

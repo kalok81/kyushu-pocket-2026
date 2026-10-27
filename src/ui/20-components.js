@@ -56,12 +56,15 @@
   const fold = (summary, body, o = {}) =>
     `<details class="fold${o.cls ? " " + o.cls : ""}"${o.open ? " open" : ""}${attrs(o.attrs)}><summary>${summary}</summary>${body}</details>`;
   // "⋯" menu for an item's less frequent actions (edit, delete…). items: {label, icon, attrs, href, danger}.
+  // "-" between items draws a line between groups (none at either end or twice in a row).
   function menu(items, o = {}) {
-    const list = items.filter(Boolean);
-    if (!list.length) return "";
+    const list = items.filter(Boolean).filter((i, k, all) => i !== "-" || (k > 0 && k < all.length - 1 && all[k - 1] !== "-"));
+    if (!list.some((i) => i !== "-")) return "";
     return `<details class="more${o.cls ? " " + o.cls : ""}"><summary class="btn btn-ghost btn-icon btn-sm" aria-label="${esc(o.label || "更多操作")}"${attrs(o.attrs)}>${icon("more")}</summary><div class="menu" role="menu">${list
       .map((i) =>
-        i.href
+        i === "-"
+          ? '<hr class="menu-sep" role="separator">'
+          : i.href
           ? `<a class="menu-item" role="menuitem" href="${esc(i.href)}"${i.external ? ' target="_blank" rel="noopener noreferrer"' : ""}${attrs(i.attrs)}>${i.icon ? icon(i.icon) : ""}<span>${i.label}</span></a>`
           : `<button type="button" class="menu-item${i.danger ? " danger" : ""}" role="menuitem"${attrs(i.attrs)}${i.disabled ? " disabled" : ""}>${i.icon ? icon(i.icon) : ""}<span>${i.label}</span></button>`,
       )

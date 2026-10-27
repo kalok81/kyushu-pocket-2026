@@ -31,13 +31,17 @@
       startHotel = first && !first.hotelId ? dayStartHotel(day) : null;
     return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
       [
-        { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
+        // 方案, then the day, then what deletes
+        viewedVariant(day) && { label: "設為主要方案", icon: "check", attrs: { "data-plan-variant-main": true } },
         { label: "新增方案（複製這個）", icon: "copy", attrs: { "data-plan-variant-new": true } },
         variantsOf(day).length && { label: "方案改名", icon: "edit", attrs: { "data-plan-variant-rename": true } },
-        viewedVariant(day) && { label: "設為主要方案", icon: "check", attrs: { "data-plan-variant-main": true } },
-        viewedVariant(day) && { label: "刪除這個方案", icon: "trash", danger: true, attrs: { "data-plan-variant-del": true } },
+        stops.length && { label: "移去另一日（作為方案）", icon: "calendar", attrs: { "data-variant-to-day": true } },
+        "-",
+        { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
         { label: "與另一日對調", icon: "calendar", attrs: { "data-day-swap": true } },
         { label: "列印／另存 PDF", icon: "printer", attrs: { "data-plan-print": true } },
+        "-",
+        viewedVariant(day) && { label: "刪除這個方案", icon: "trash", danger: true, attrs: { "data-plan-variant-del": true } },
         (viewedVariant(day) ? stops.length : edit?.stops?.length) && { label: viewedVariant(day) ? "清空這個方案" : "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
       ],
       { label: "這天的更多操作", cls: "day-more" },

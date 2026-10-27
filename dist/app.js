@@ -1558,13 +1558,17 @@ window.startTrip = (meta = {}) => {
       startHotel = first && !first.hotelId ? dayStartHotel(day) : null;
     return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
       [
-        { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
+        // 方案, then the day, then what deletes
+        viewedVariant(day) && { label: "設為主要方案", icon: "check", attrs: { "data-plan-variant-main": true } },
         { label: "新增方案（複製這個）", icon: "copy", attrs: { "data-plan-variant-new": true } },
         variantsOf(day).length && { label: "方案改名", icon: "edit", attrs: { "data-plan-variant-rename": true } },
-        viewedVariant(day) && { label: "設為主要方案", icon: "check", attrs: { "data-plan-variant-main": true } },
-        viewedVariant(day) && { label: "刪除這個方案", icon: "trash", danger: true, attrs: { "data-plan-variant-del": true } },
+        stops.length && { label: "移去另一日（作為方案）", icon: "calendar", attrs: { "data-variant-to-day": true } },
+        "-",
+        { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
         { label: "與另一日對調", icon: "calendar", attrs: { "data-day-swap": true } },
         { label: "列印／另存 PDF", icon: "printer", attrs: { "data-plan-print": true } },
+        "-",
+        viewedVariant(day) && { label: "刪除這個方案", icon: "trash", danger: true, attrs: { "data-plan-variant-del": true } },
         (viewedVariant(day) ? stops.length : edit?.stops?.length) && { label: viewedVariant(day) ? "清空這個方案" : "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
       ],
       { label: "這天的更多操作", cls: "day-more" },
@@ -2415,6 +2419,29 @@ window.startTrip = (meta = {}) => {
       refreshPlan();
     });
   }
+  // 移去另一日: the 方案 on screen becomes a new 方案 of the other day (whose own plan stays as it is). A 方案 that was
+  // not the main one leaves this day; the main one stays here too, so no day is left empty.
+  function moveVariantToDay(from, to) {
+    const v = viewedVariant(from),
+      targets = variantsOf(to);
+    if (targets.length >= 8) return toast(`D${to} 已有 9 個方案，請先刪除一個。`);
+    const stops = stopsFor(from).map(stopFields);
+    if (!stops.length) return toast("這個方案沒有站點。");
+    const nv = { id: Date.now().toString(36), name: `${v ? v.name : mainName(from)}（由 D${from}）`.slice(0, 30), stops },
+      before = { from: variantsOf(from), to: targets };
+    saveVariants(to, [...targets, nv]);
+    if (v) saveVariants(from, before.from.filter((x) => x !== v));
+    planView = { ...planView, [from]: null, [to]: nv.id };
+    location.hash = `#plan?day=${to}`;
+    Kit.snack(`已把「${v ? v.name : mainName(from)}」移去 D${to}${v ? "" : "（D" + from + " 保留原本行程）"}`, { action: "復原" }).then((undo) => {
+      if (!undo) return;
+      saveVariants(to, before.to);
+      if (v) saveVariants(from, before.from);
+      planView = { ...planView, [from]: v ? v.id : null, [to]: null };
+      location.hash = `#plan?day=${from}`;
+      if (current === "plan") refreshPlan();
+    });
+  }
   function moveStopToDay(from, i, to) {
     // into the other day's main 方案, whichever of its 方案 was last on screen
     planView = { ...planView, [to]: null };
@@ -2445,6 +2472,8 @@ window.startTrip = (meta = {}) => {
     const el = e.target.closest("button");
     if (!el) return;
     const day = selectedDay;
+    if (el.dataset.variantToDay !== undefined)
+      pickDay(`把「${esc(viewedVariant(day)?.name || mainName(day))}」移去…`, "會成為那天的一個新方案，那天原本的行程不變；之後可在那天「⋯」設為主要方案。站點的時間及交通照搬，酒店起點會跟那天的住宿。", (to) => moveVariantToDay(day, to));
     if (el.dataset.daySwap !== undefined)
       pickDay("與另一日對調", "兩日的站點、時間、交通、備註及標題會整份對調，可以復原。", (to) => swapDays(day, to));
     if (el.dataset.stopToDay) {

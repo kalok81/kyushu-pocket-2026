@@ -706,6 +706,19 @@ try {
   await off.waitForSelector('.topbar .brand'); assert.equal(await off.evaluate(() => typeof window.Kit), 'object', 'scripts load offline');
   await ctx.close();
  });
+ await step('⋯: grouped; 移去另一日 makes the 方案 one of the other day\'s, that day\'s plan unchanged', async () => {
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
+  const d1 = await page.locator('.timeline h3').allInnerTexts();
+  await page.goto(base + '/#plan?day=2'); await page.waitForSelector('.timeline h3'); const d2 = await page.locator('.timeline h3').allInnerTexts();
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
+  await page.click('.day-more summary'); assert.equal(await page.locator('.day-more .menu-sep').count(), 2);
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/day-menu.png' });
+  await page.click('[data-variant-to-day]:visible'); await page.click('[data-day-pick="2"]');
+  await page.waitForFunction(() => /（由 D1）/.test(document.querySelector('.plan-variants .chip.active')?.innerText || ''));
+  assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), d1, 'D1\'s stops, now a 方案 of D2');
+  await page.click('[data-plan-variant="main"]'); assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), d2, 'D2\'s own plan unchanged');
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3'); assert.deepEqual(await page.locator('.timeline h3').allInnerTexts(), d1, 'the main 方案 stays on D1');
+ });
  await step('day map: the way along the streets, tap a stop to see how to get there', async () => {
   // the explore places on D1 get positions (as when a pin is set), so the map has a route to draw
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline [data-place]');
