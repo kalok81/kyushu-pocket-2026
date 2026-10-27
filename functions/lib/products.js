@@ -152,7 +152,13 @@ function pageFacts(html, base) {
  // Pages without image tags: the first product-looking <img> (not logos, icons or banners).
  const imgs = [...html.matchAll(/<img[^>]+(?:data-src|src)=["']([^"']+\.(?:jpe?g|png|webp)(?:\?[^"']*)?)["']/gi)].map(m => decodeEntities(m[1])).filter(u => !/logo|icon|sprite|banner|btn|button|common|header|footer|sns|badge|loading|blank/i.test(u));
  const firstImg = imgs.find(u => /product|item|goods|upload|img\/|images\//i.test(u)) || imgs[0] || '';
- const picture = meta('og:image') || meta('twitter:image') || (typeof image === 'string' ? image : image?.url) || firstImg;
+ // The product's own picture first: JSON-LD, then an <img> named after the page (…/details/cleandental_premium-cool/ →
+ // cleandental_premium-cool_9B180_main.jpg), then the share image unless it is the site's own for every page
+ // (…/common/ogp.jpg, a logo), which comes last.
+ const slug = decodeURIComponent(base.pathname.split('/').filter(Boolean).pop() || '').replace(/\.\w+$/, '').toLowerCase();
+ const named = slug.length >= 4 && !/^(index|detail|details|item|product|products|goods)$/.test(slug) ? imgs.find(u => u.toLowerCase().includes(slug)) : '';
+ const share = meta('og:image') || meta('twitter:image'), siteWide = /ogp|og[-_]?image|common|default|logo|share|site[-_]?image|noimage/i.test(share);
+ const picture = (typeof image === 'string' ? image : image?.url) || named || (siteWide ? '' : share) || firstImg || share;
  const text = html.replace(/<(script|style|noscript|svg)[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
  return {
   site: meta('og:site_name') || base.hostname,
