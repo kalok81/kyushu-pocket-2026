@@ -51,7 +51,6 @@
   }
   function planTools(stops) {
     return `<div class="plan-tools" role="toolbar" aria-label="安排這天">${[
-      ["排順路", "route", "data-plan-order"],
       ["查全日交通", "train", "data-plan-routes"],
       ["AI 安排", "sparkles", "data-plan-ai"],
       ["推算時間", "clock", "data-plan-times"],
@@ -80,7 +79,6 @@
       const g = stopGroups(stopsFor(day))[Number(el.dataset.planInsert)];
       if (g) pickPlaceForPlan(day, null, g[0].i);
     }
-    if (el.dataset.planOrder !== undefined) orderByDistance(day);
     if (el.dataset.planRoutes !== undefined) fillRoutes(day);
     if (el.dataset.planAi !== undefined) aiArrangeForm(day);
     if (el.dataset.planTimes !== undefined) aiTimes(day);
