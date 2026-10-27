@@ -33,6 +33,11 @@
     if (!navigator.onLine) throw new Error("offline");
     return (await (await callable("lookupPlace", 30000))({ near: { lat, lng }, country: state.meta?.country || "" })).data.nearby || [];
   }
+  // The way along the streets between points for the day map: [{a, b}] → [{mode, line}] (Google encoded polylines)
+  async function streetPaths(legs) {
+    if (!navigator.onLine) throw new Error("offline");
+    return (await (await callable("lookupPlace", 30000))({ paths: legs })).data.paths || [];
+  }
   // Places: trips/{t}/places documents. A new one gets its id here so a plan stop can point at it straight away.
   function savePlace({ place, fields, cats, lat, lng, points = [], mapsUrl, photo = null, photoBy = "" }) {
     const { fs, db } = fb,

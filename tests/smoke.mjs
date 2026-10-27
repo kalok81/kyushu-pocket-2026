@@ -434,7 +434,7 @@ try {
   await page.click('[data-plan-pick]');
   for (let k = 0; k < 3; k++) await page.locator('[data-pp-add]').first().click();
   await closeSheet(); await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 3);
-  assert.equal(await page.locator('.plan-tools button').count(), 3);
+  assert.equal(await page.locator('.plan-tools button').count(), 4);
   // ✨ AI 推薦 in the picker gives reasons; the ＋ between two stops inserts there
   const before = await titles();
   await page.locator('.stop-link .link-add').nth(1).click(); await page.waitForSelector('#ppList');
@@ -695,6 +695,21 @@ try {
   await ctx.setOffline(true); await off.reload();
   await off.waitForSelector('.topbar .brand'); assert.equal(await off.evaluate(() => typeof window.Kit), 'object', 'scripts load offline');
   await ctx.close();
+ });
+ await step('day map: the way along the streets, tap a stop to see how to get there', async () => {
+  // the explore places on D1 get positions (as when a pin is set), so the map has a route to draw
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline [data-place]');
+  await page.evaluate(() => [...new Set([...document.querySelectorAll('.timeline [data-place]')].map((b) => b.dataset.place))].forEach((id, k) => { window.TRIP_GEO.places[id] = [{ lat: 35.71 + k * 0.004, lng: 139.79 + k * 0.003, label: '' }]; }));
+  await page.click('.plan-tools [data-day-map]'); await page.waitForSelector('#routeMap .leaflet-marker-icon');
+  assert.ok((await page.locator('.route-list button').count()) >= 2, 'two stops on the map');
+  await page.waitForFunction(() => window.pathsRequest && document.querySelectorAll('#routeMap path.leaflet-interactive').length > 0);
+  const legs = await page.evaluate(() => window.pathsRequest.paths.length); assert.equal(legs, (await page.locator('.route-list button').count()) - 1);
+  await page.locator('.route-list button').nth(1).click(); assert.match(await page.locator('#routeInfo').innerText(), /由「/);
+  assert.match(await page.locator('#routeMap path.leaflet-interactive').first().getAttribute('d'), /L.*L/, 'a street line has a bend');
+  await closeSheet();
+  // kept on the phone: the same day asks again for nothing
+  await page.evaluate(() => { window.pathsRequest = null; }); await page.click('.plan-tools [data-day-map]'); await page.waitForSelector('#routeMap .leaflet-marker-icon'); await page.waitForTimeout(300);
+  assert.equal(await page.evaluate(() => window.pathsRequest), null); await closeSheet();
  });
  await step('而家: next stop and when to leave; AI 調整餘下行程 saves a new 方案', async () => {
   await page.clock.setFixedTime(new Date('2030-04-03T09:30:00'));

@@ -23,7 +23,15 @@
 .route-map{height:min(52vh,420px)}
 .route-pin span{display:grid;place-items:center;width:28px;height:28px;border:2px solid var(--card);border-radius:50%;background:var(--primary);color:var(--primary-foreground);font:700 var(--fs-sm)/1 system-ui,sans-serif;box-shadow:var(--shadow)}
 .route-list{display:grid;gap:6px;margin:14px 0;padding:0;list-style:none}
-.route-list li{display:grid;grid-template-columns:26px auto 1fr;align-items:baseline;gap:8px;font-size:var(--fs-lg)}
+.route-list li{font-size:var(--fs-lg)}
 .route-list b{display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--secondary);font-size:var(--fs-sm)}
 .route-list span{font-size:var(--fs-sm);color:var(--muted-foreground);font-variant-numeric:tabular-nums}
 .route-go{display:flex;align-items:center;justify-content:center;text-decoration:none}
+.route-pin-start span{background:var(--gold);color:var(--foreground)}
+.route-info{margin:10px 0 0;padding:10px 12px;border-radius:var(--r-sm);background:var(--secondary);font-size:var(--fs-sm)}
+.route-list button{display:grid;grid-template-columns:26px auto 1fr;align-items:baseline;gap:8px;width:100%;padding:4px 6px;border:0;border-radius:var(--r-sm);background:none;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.route-list button.on{background:var(--secondary)}
+.route-key{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-bottom:4px}
+.route-key i{display:inline-block;width:22px;height:0;border-top:4px solid var(--primary)}
+.route-key i.walk{border-top:4px dotted #2f7d4f}
+.route-key i.none{border-top:3px dashed var(--primary);opacity:.6}

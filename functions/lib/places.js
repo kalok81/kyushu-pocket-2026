@@ -157,6 +157,26 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
     .map(p => ({ id: p.id, name: p.displayName.text, type: p.primaryTypeDisplayName?.text || '', category: category(p.types), address: p.formattedAddress || '', lat: p.location.latitude, lng: p.location.longitude, d: Math.round(metersApart(p.location, { lat, lng })) })),
   };
  }
+ // paths: the way along the streets for the plan's day map, leg by leg (walking under 1.5 km, else by road, which
+ // buses and taxis take; Google gives no train lines in Japan), as Google encoded polylines; null where none
+ const paths = req.data?.paths;
+ if (Array.isArray(paths)) {
+  const ok = p => p && Number.isFinite(p.lat) && Number.isFinite(p.lng) && Math.abs(p.lat) <= 90 && Math.abs(p.lng) <= 180;
+  const legs = paths.slice(0, 12);
+  if (!legs.length || !legs.every(l => ok(l?.a) && ok(l?.b))) throw new HttpsError('invalid-argument', '位置不正確。');
+  const way = async ({ a, b }) => {
+   const mode = metersApart({ latitude: a.lat, longitude: a.lng }, b) < 1500 ? 'WALK' : 'DRIVE';
+   const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Goog-Api-Key': PLACES_API_KEY.value().trim(), 'X-Goog-FieldMask': 'routes.polyline.encodedPolyline' },
+    body: JSON.stringify({ origin: { location: { latLng: { latitude: a.lat, longitude: a.lng } } }, destination: { location: { latLng: { latitude: b.lat, longitude: b.lng } } }, travelMode: mode }),
+    signal: AbortSignal.timeout(15_000),
+   }).catch(() => null);
+   const line = res?.ok ? (await res.json()).routes?.[0]?.polyline?.encodedPolyline : null;
+   return { mode, line: typeof line === 'string' ? line : null };
+  };
+  return { paths: await Promise.all(legs.map(way)) };
+ }
  const raw = req.data?.url;
  if (typeof raw !== 'string' || raw.length > 2000) throw new HttpsError('invalid-argument', '請貼上 Google 地圖的連結。');
  const url = await resolveMapsUrl(raw.trim().match(/https:\/\/\S+/)?.[0] || raw.trim());

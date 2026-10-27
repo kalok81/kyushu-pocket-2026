@@ -54,8 +54,9 @@
       ["查全日交通", "train", "data-plan-routes"],
       ["AI 安排", "sparkles", "data-plan-ai"],
       ["推算時間", "clock", "data-plan-times"],
+      ["地圖", "map", "data-day-map"],
     ]
-      .map(([label, ic, attr]) => Kit.btn(label, { size: "sm", icon: ic, attrs: { [attr]: true, ...(stops.length < 2 && attr !== "data-plan-routes" ? { disabled: true } : {}) } }))
+      .map(([label, ic, attr]) => Kit.btn(label, { size: "sm", icon: ic, attrs: { [attr]: true, ...(stops.length < 2 && attr !== "data-plan-routes" && attr !== "data-day-map" ? { disabled: true } : {}) } }))
       .join("")}</div>${planAdvice?.day === selectedDay ? `<p class="note plan-advice">${icon("sparkles")} ${esc(planAdvice.text)}</p>` : ""}<p class="note" id="planToolsInfo" hidden></p>`;
   }
   document.addEventListener("click", (e) => {

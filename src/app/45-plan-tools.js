@@ -20,15 +20,66 @@
     const a = areas[0];
     return a && Number.isFinite(a.lat) ? { lat: a.lat, lng: a.lng } : null;
   }
-  // Stops with coordinates for the route map: the first choice of each time slot, numbered like the plan.
+  // Stops with coordinates for the route map: the first choice of each time slot, numbered like the plan, each with the
+  // way to it (its transport); the day starts at last night's hotel (起) when the plan does not start at a hotel.
   function routeStops(day) {
-    const geo = window.TRIP_GEO?.places || {};
-    return stopGroups(stopsFor(day))
-      .map(([{ s }], n) => {
-        const g = (s.placeId && geo[s.placeId]?.[0]) || (Number.isFinite(s.lat) && Number.isFinite(s.lng) ? s : null);
-        return g ? { n: n + 1, time: s.time || "", title: s.title || "", lat: g.lat, lng: g.lng } : null;
-      })
-      .filter(Boolean);
+    const geo = window.TRIP_GEO?.places || {},
+      list = stopsFor(day),
+      out = stopGroups(list)
+        .map(([{ s }], n) => {
+          const g = (s.placeId && geo[s.placeId]?.[0]) || (Number.isFinite(s.lat) && Number.isFinite(s.lng) ? s : null);
+          return g ? { n: n + 1, time: s.time || "", title: s.title || "", lat: g.lat, lng: g.lng, leg: s.transport || "" } : null;
+        })
+        .filter(Boolean),
+      h = list[0] && !list[0].hotelId ? dayStartHotel(day) : null;
+    return h && Number.isFinite(h.lat) && out.length ? [{ n: "起", time: "出發", title: h.name, lat: h.lat, lng: h.lng, leg: "" }, ...out] : out;
+  }
+  // The way along the streets between the map's stops, kept on this phone (the same leg is not asked for twice).
+  const decodeLine = (str) => {
+    const pts = [];
+    let i = 0,
+      lat = 0,
+      lng = 0;
+    while (i < str.length) {
+      for (const k of [0, 1]) {
+        let b,
+          shift = 0,
+          r = 0;
+        do {
+          b = str.charCodeAt(i++) - 63;
+          r |= (b & 31) << shift;
+          shift += 5;
+        } while (b >= 32);
+        const d = r & 1 ? ~(r >> 1) : r >> 1;
+        if (k) lng += d;
+        else lat += d;
+      }
+      pts.push([lat / 1e5, lng / 1e5]);
+    }
+    return pts;
+  };
+  async function streetLines(stops) {
+    const key = (a, b) => `path:${a.lat.toFixed(5)},${a.lng.toFixed(5)}>${b.lat.toFixed(5)},${b.lng.toFixed(5)}`,
+      legs = stops.slice(1).map((b, j) => ({ a: stops[j], b })),
+      got = legs.map(({ a, b }) => {
+        try {
+          return JSON.parse(localStorage.getItem(key(a, b)));
+        } catch {
+          return null;
+        }
+      }),
+      ask = legs.filter((_, j) => !got[j]).slice(0, 12);
+    if (ask.length) {
+      const r = await window.Together.streetPaths(ask.map(({ a, b }) => ({ a: { lat: a.lat, lng: a.lng }, b: { lat: b.lat, lng: b.lng } })));
+      ask.forEach((l, j) => {
+        if (!r[j]?.line) return;
+        got[legs.indexOf(l)] = { mode: r[j].mode, line: r[j].line };
+        try {
+          localStorage.setItem(key(l.a, l.b), JSON.stringify(got[legs.indexOf(l)]));
+        } catch {}
+      });
+    }
+    return got.map((v) => v && { mode: v.mode, pts: decodeLine(v.line) });
   }
   // Whole itinerary on paper (or "Save as PDF"): flights, hotels and every day's stops, printed from a temporary #printArea.
   function printPlan() {

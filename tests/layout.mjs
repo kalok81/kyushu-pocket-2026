@@ -63,7 +63,7 @@ await Promise.all([320,390,768,1280].map(async w=>{
   ['stopmenu','#plan?day=1',async()=>{await pg.locator('[data-stop-more]').last().click();await pg.waitForTimeout(200)}],
   ['exploremap','#explore',async()=>{await pg.click('[data-explore-map]');await pg.waitForSelector('#exploreMap .leaflet-interactive');const r=await pg.locator('#exploreMap').boundingBox();await pg.mouse.click(r.x+12,r.y+r.height-40);await pg.waitForSelector('#exploreMapInfo .explore-map-row')}],
   ['newplace','#explore',async()=>{await pg.click('[data-place-new]')}],
-  ['daymap','#plan?day=1',async()=>{await pg.click('.day-more summary');await pg.click('[data-day-map]');await pg.waitForTimeout(600)}],
+  ['daymap','#plan?day=1',async()=>{await pg.click('.plan-tools [data-day-map]');await pg.waitForTimeout(600)}],
   ['menu','#home',async()=>{await pg.click('#menuBtn');await pg.waitForTimeout(300)}],
   ['notesheet','#together?tab=notes',async()=>{await pg.click('[data-tg=newEntry]');await pg.click('[data-note-kind=coupon]')}],
   ['expensesheet','#together?tab=expenses',async()=>{await pg.click('[data-tg=newEntry]')}],

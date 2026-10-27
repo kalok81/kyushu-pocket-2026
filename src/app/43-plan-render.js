@@ -37,7 +37,6 @@
         viewedVariant(day) && { label: "設為主要方案", icon: "check", attrs: { "data-plan-variant-main": true } },
         viewedVariant(day) && { label: "刪除這個方案", icon: "trash", danger: true, attrs: { "data-plan-variant-del": true } },
         { label: "與另一日對調", icon: "calendar", attrs: { "data-day-swap": true } },
-        routeStops(day).length && { label: "當天路線地圖", icon: "map", attrs: { "data-day-map": true } },
         { label: "列印／另存 PDF", icon: "printer", attrs: { "data-plan-print": true } },
         (viewedVariant(day) ? stops.length : edit?.stops?.length) && { label: viewedVariant(day) ? "清空這個方案" : "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
       ],

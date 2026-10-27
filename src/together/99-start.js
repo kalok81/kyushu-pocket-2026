@@ -19,6 +19,7 @@
     setDayLabel,
     lookupPlace,
     placesNear,
+    streetPaths,
     placePhotos,
     shrink,
     suggestRoutes,

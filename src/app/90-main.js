@@ -119,7 +119,9 @@
     if (el.dataset.planPrint !== undefined) printPlan();
     if (el.dataset.dayMap !== undefined) {
       const d = days[selectedDay - 1];
-      window.MapPicker.route({ title: `DAY ${d.n} · ${d.region}`, stops: routeStops(selectedDay), openDialog, esc });
+      const stops = routeStops(selectedDay);
+      if (!stops.length) return toast("這天的站點未有位置，未能顯示地圖。");
+      window.MapPicker.route({ title: `DAY ${d.n} · ${d.region}`, stops, openDialog, esc, lines: streetLines });
     }
     if (el.dataset.dayLabel !== undefined) {
       const day = selectedDay;
