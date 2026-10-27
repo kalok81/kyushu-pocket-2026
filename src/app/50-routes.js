@@ -75,9 +75,11 @@
     return links.length ? `<p class="route-checks">${links.join("")}</p>` : "";
   }
   // The link between two time slots on the plan: a dot on the timeline with the chosen way to get to the next slot.
-  // Trips with hotels also get a link before the first slot, from the hotel.
-  const hotelLink = () => lists().hotels.length > 0;
-  function stopLink(all, n) {
+  // The day starts at last night's hotel (from 住宿) unless its first stop is a hotel: shown above the first stop,
+  // not saved, so it follows 住宿; the way from it is the first stop's transport.
+  const startStop = (h) =>
+    `<div class="stop stop-start"><div class="start-time">出發</div><div class="stop-alts"><div class="card stopcontent"><div class="card-top stop-top"><span class="eyebrow">起點 / 住宿</span></div><p class="start-title">${icon("bed")}<a href="#hotels">${esc(h.name)}</a></p><small class="note">按「住宿」的入住日子自動顯示</small></div></div></div>`;
+  function stopLink(all, n, from = null) {
     const prev = all[n - 1],
       next = all[n],
       multi = next.length > 1;
@@ -88,7 +90,7 @@
       return `${total ? `<b class="route-total">${esc(total.trim())}</b>` : ""}${parts.map((p) => `<span class="route-step">${esc(p.trim())}</span>`).join("")}`;
     };
     const lines = next.filter(({ s }) => s.transport).map(({ s }) => `<span class="route-line">${multi ? `<b class="route-for">${esc(s.title)}</b>` : ""}${legHtml(s.transport)}</span>`);
-    return `<div class="stop-link"><div class="link-side">${Kit.btn("在這裡加入地點", { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "link-add", attrs: { "data-plan-insert": n } })}</div><button type="button" class="route-dot${lines.length ? " has-route" : ""}" data-route-link="${n}" aria-label="${prev ? esc(prev[0].s.title) : "酒店"} 至 ${esc(next[0].s.title)} 的交通"><i aria-hidden="true"></i><span>${lines.length ? lines.join("") : `${icon(prev ? "train" : "bed")}${prev ? "查交通" : "由酒店出發 · 查交通"}`}</span></button>${trainChecks(next.map(({ s }) => s.transport || "").join("\n"), selectedDay)}</div>`;
+    return `<div class="stop-link"><div class="link-side">${Kit.btn("在這裡加入地點", { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "link-add", attrs: { "data-plan-insert": n } })}</div><button type="button" class="route-dot${lines.length ? " has-route" : ""}" data-route-link="${n}" aria-label="${esc(prev ? prev[0].s.title : from.name)} 至 ${esc(next[0].s.title)} 的交通"><i aria-hidden="true"></i><span>${lines.length ? lines.join("") : `${icon("train")}查交通`}</span></button>${trainChecks(next.map(({ s }) => s.transport || "").join("\n"), selectedDay)}</div>`;
   }
   function routeDialog(day, i, fromGroup = null, toGroup = null) {
     const list = stopsFor(day),

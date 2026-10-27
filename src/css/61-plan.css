@@ -28,7 +28,7 @@
 /* timeline: time column, a line with a dot per slot, the stop cards */
 .timeline{position:relative;max-width:820px}
 .stop{position:relative;display:grid;grid-template-columns:125px 1fr;gap:24px;padding-bottom:24px}
-.time{padding-top:18px;font-size:var(--fs-md);font-weight:700;text-align:right;white-space:nowrap}
+.time,.start-time{padding-top:18px;font-size:var(--fs-md);font-weight:700;text-align:right;white-space:nowrap}
 .alt-count{display:block;margin-top:2px;font-size:var(--fs-xs);font-weight:500;color:var(--muted-foreground)}
 .time .alt-add{display:flex;margin:2px 0 0 auto;color:var(--muted-foreground)}
 .alt-add .icon{width:16px;height:16px}
@@ -62,7 +62,7 @@
 .stop.drop-after{box-shadow:0 3px 0 var(--primary)}
 @media(max-width:760px){
   .stop{grid-template-columns:1fr;gap:7px;padding-left:16px}
-  .time{display:flex;align-items:center;gap:8px;min-height:30px;padding:0;font-size:var(--fs-sm);text-align:left}
+  .time,.start-time{display:flex;align-items:center;gap:8px;min-height:30px;padding:0;font-size:var(--fs-sm);text-align:left}
   .time .stop-grip{width:32px;height:30px;margin:0 0 0 auto}
   .time .alt-add+.stop-grip{margin-left:0}
   .stopcontent:after{top:-24px}
@@ -125,3 +125,6 @@
 .ai-plan-leg{margin-left:14px;padding:2px 0 2px 12px;border-left:2px solid var(--border);font-size:var(--fs-md);color:var(--muted-foreground)}
 /* choose another day (與另一日對調, 移去其他日子) */
 .day-pick{margin-top:8px}
+.stop-start .stopcontent{padding-block:12px}
+.start-title{display:flex;align-items:center;gap:8px;margin:4px 0 2px;font-weight:700}
+.start-title a{color:inherit}

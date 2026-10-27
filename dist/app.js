@@ -1556,7 +1556,8 @@ window.startTrip = (meta = {}) => {
       edit = planEdits[day],
       stops = stopsFor(day),
       last = stops.length - 1,
-      first = stops[0];
+      first = stops[0],
+      startHotel = first && !first.hotelId ? dayStartHotel(day) : null;
     return `<div class="dayintro"><div><div class="eyebrow">${esc(d.date)}</div><h2>${esc(d.region)}</h2><p class="weather" data-weather="${day}" hidden></p><p class="day-hotel">${icon("bed")}<span>住宿：${d.hotel ? `<a href="#hotels">${esc(d.hotel)}</a>` : "未設定"}</span></p></div>${Kit.menu(
       [
         { label: "修改這天標題", icon: "edit", attrs: { "data-day-label": true } },
@@ -1570,11 +1571,11 @@ window.startTrip = (meta = {}) => {
         (viewedVariant(day) ? stops.length : edit?.stops?.length) && { label: viewedVariant(day) ? "清空這個方案" : "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
       ],
       { label: "這天的更多操作", cls: "day-more" },
-    )}</div>${variantChips(day)}${stops.length ? planTools(stops) : ""}${first && !hotelLink() && first.transport ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${
+    )}</div>${variantChips(day)}${stops.length ? planTools(stops) : ""}${first?.transport && !startHotel ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${startHotel ? startStop(startHotel) : ""}${
       stopGroups(stops)
         .map(
           (g, n, all) =>
-            `${n || hotelLink() ? stopLink(all, n) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}" data-group="${n}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}${Kit.btn(`在 ${esc(g[0].s.time || "這個時段")} 加入另一個選擇`, { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "alt-add", attrs: { "data-stop-alt": g[g.length - 1].i } })}${all.length > 1 ? `<button type="button" class="stop-grip" aria-label="拖動調整「${esc(g[0].s.title)}」的次序">${icon("grip")}</button>` : ""}</div><div class="stop-alts">${g
+            `${n || startHotel ? stopLink(all, n, startHotel) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}" data-group="${n}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}${Kit.btn(`在 ${esc(g[0].s.time || "這個時段")} 加入另一個選擇`, { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "alt-add", attrs: { "data-stop-alt": g[g.length - 1].i } })}${all.length > 1 ? `<button type="button" class="stop-grip" aria-label="拖動調整「${esc(g[0].s.title)}」的次序">${icon("grip")}</button>` : ""}</div><div class="stop-alts">${g
               .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last))
               .join("")}</div></article>`,
         )
@@ -1753,9 +1754,11 @@ window.startTrip = (meta = {}) => {
     return links.length ? `<p class="route-checks">${links.join("")}</p>` : "";
   }
   // The link between two time slots on the plan: a dot on the timeline with the chosen way to get to the next slot.
-  // Trips with hotels also get a link before the first slot, from the hotel.
-  const hotelLink = () => lists().hotels.length > 0;
-  function stopLink(all, n) {
+  // The day starts at last night's hotel (from 住宿) unless its first stop is a hotel: shown above the first stop,
+  // not saved, so it follows 住宿; the way from it is the first stop's transport.
+  const startStop = (h) =>
+    `<div class="stop stop-start"><div class="start-time">出發</div><div class="stop-alts"><div class="card stopcontent"><div class="card-top stop-top"><span class="eyebrow">起點 / 住宿</span></div><p class="start-title">${icon("bed")}<a href="#hotels">${esc(h.name)}</a></p><small class="note">按「住宿」的入住日子自動顯示</small></div></div></div>`;
+  function stopLink(all, n, from = null) {
     const prev = all[n - 1],
       next = all[n],
       multi = next.length > 1;
@@ -1766,7 +1769,7 @@ window.startTrip = (meta = {}) => {
       return `${total ? `<b class="route-total">${esc(total.trim())}</b>` : ""}${parts.map((p) => `<span class="route-step">${esc(p.trim())}</span>`).join("")}`;
     };
     const lines = next.filter(({ s }) => s.transport).map(({ s }) => `<span class="route-line">${multi ? `<b class="route-for">${esc(s.title)}</b>` : ""}${legHtml(s.transport)}</span>`);
-    return `<div class="stop-link"><div class="link-side">${Kit.btn("在這裡加入地點", { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "link-add", attrs: { "data-plan-insert": n } })}</div><button type="button" class="route-dot${lines.length ? " has-route" : ""}" data-route-link="${n}" aria-label="${prev ? esc(prev[0].s.title) : "酒店"} 至 ${esc(next[0].s.title)} 的交通"><i aria-hidden="true"></i><span>${lines.length ? lines.join("") : `${icon(prev ? "train" : "bed")}${prev ? "查交通" : "由酒店出發 · 查交通"}`}</span></button>${trainChecks(next.map(({ s }) => s.transport || "").join("\n"), selectedDay)}</div>`;
+    return `<div class="stop-link"><div class="link-side">${Kit.btn("在這裡加入地點", { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "link-add", attrs: { "data-plan-insert": n } })}</div><button type="button" class="route-dot${lines.length ? " has-route" : ""}" data-route-link="${n}" aria-label="${esc(prev ? prev[0].s.title : from.name)} 至 ${esc(next[0].s.title)} 的交通"><i aria-hidden="true"></i><span>${lines.length ? lines.join("") : `${icon("train")}查交通`}</span></button>${trainChecks(next.map(({ s }) => s.transport || "").join("\n"), selectedDay)}</div>`;
   }
   function routeDialog(day, i, fromGroup = null, toGroup = null) {
     const list = stopsFor(day),

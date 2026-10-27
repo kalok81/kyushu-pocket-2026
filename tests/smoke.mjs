@@ -106,9 +106,9 @@ try {
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline h3');
   await page.click('[data-plan-pick]'); await page.click('[data-pp-cat=住宿]'); await page.fill('#ppTime', '08:00'); await page.click('[data-pp-hotel]'); await closeSheet();
   await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 2);
-  // one link before the first slot (from the hotel) and one between the two slots
-  assert.equal(await page.locator('[data-route-link]').count(), 2); assert.match(await page.locator('[data-route-link]').first().innerText(), /由酒店出發/);
-  await page.locator('[data-route-link]').nth(1).click();
+  // the day starts at its first stop: one link, between the two slots
+  assert.equal(await page.locator('[data-route-link]').count(), 1); assert.doesNotMatch(await page.locator('.timeline').innerText(), /由酒店出發/);
+  await page.locator('[data-route-link]').first().click();
   assert.match(await page.locator('#routeFrom option:checked').innerText(), /上野酒店/);
   assert.equal(await page.inputValue('#routeTime'), '08:00');
   // one row before any search: 查路線, Google 地圖, Yahoo!乗換 and AI 分析, the links filled in for the current choices
@@ -130,14 +130,14 @@ try {
   await page.selectOption('#routeMode', 'WALK'); await page.click('#routeGo'); await page.waitForSelector('[data-route-pick]');
   await page.click('[data-route-pick]'); await page.waitForFunction(() => document.querySelector('#routeManual textarea').value.includes('步行約 12 分'));
   await page.fill('#routeManual textarea', '🚶 3 分 → 🚇 銀座線 上野 → 淺草（約 10:02–10:07） → 🚌 都バス 淺草 → 雷門一丁目（10:10–10:14）｜約 14 分'); await page.click('#routeManual button[type=submit]');
-  await page.waitForSelector('.route-dot.has-route'); assert.match(await page.locator('[data-route-link]').nth(1).innerText(), /銀座線 上野 → 淺草/);
+  await page.waitForSelector('.route-dot.has-route'); assert.match(await page.locator('[data-route-link]').first().innerText(), /銀座線 上野 → 淺草/);
   // a train with a time: 查班次 opens Yahoo!乗換案内 for that station pair, day and time
   assert.equal(await page.locator('.route-checks a').count(), 1, 'trains only: the bus leg gets no 查班次 link');
   const check = new URL(await page.locator('.route-checks a').first().getAttribute('href'));
   assert.deepEqual([check.hostname, check.searchParams.get('from'), check.searchParams.get('to'), check.searchParams.get('hh'), check.searchParams.get('m1') + check.searchParams.get('m2')], ['transit.yahoo.co.jp', '上野', '淺草', '10', '02']);
   // a second choice at 10:00: the link asks which destination
   assert.equal(await page.locator('[data-stop-alt]:not(.alt-add)').count(), 0, 'not in the ⋯ menu'); await page.locator('.time [data-stop-alt]').nth(1).click(); await page.click('[data-pp-cat=住宿]'); await page.click('[data-pp-hotel]'); await closeSheet();
-  await page.waitForSelector('.stop-group'); await page.locator('[data-route-link]').nth(1).click(); await page.waitForSelector('#routeTo');
+  await page.waitForSelector('.stop-group'); await page.locator('[data-route-link]').first().click(); await page.waitForSelector('#routeTo');
   assert.deepEqual(await page.locator('#routeTo option').allInnerTexts(), ['淺草寺', '上野酒店']);
   await page.selectOption('#routeTo', { label: '上野酒店' }); assert.equal(await page.inputValue('#routeManual textarea'), '');
   await closeSheet();
@@ -620,6 +620,19 @@ try {
   await page.goto(base + '/#shopping'); await page.waitForSelector('#shopSearch');
   await paste('#shopSearch', 'https://shop.example.jp/item/1'); await page.waitForTimeout(300);
   assert.equal(await page.inputValue('#shopSearch'), '', 'the link is not typed into the search box');
+ });
+ await step('plan: the day starts at last night\'s hotel from 住宿', async () => {
+  await page.goto(base + '/#hotels'); await page.click('[data-hotel-new]'); await page.fill('#hotelForm [name=name]', '淺草酒店');
+  await page.fill('#hotelForm [name=checkIn]', '2030-04-02'); await page.fill('#hotelForm [name=checkOut]', '2030-04-03'); await page.click('#hotelForm button[type=submit]');
+  await page.waitForFunction(() => /淺草酒店/.test(document.body.innerText));
+  await page.goto(base + '/#plan?day=3'); await page.waitForSelector('[data-plan-pick]');
+  // D3 starts at a hotel stop already: nothing added; without it, last night's hotel is the start
+  assert.equal(await page.locator('.timeline h3').first().innerText(), '上野酒店'); assert.equal(await page.locator('.stop-start').count(), 0);
+  await page.locator('[data-stop-more]').first().click(); await page.click('[data-stop-delete]:visible');
+  await page.waitForSelector('.stop-start'); if (process.env.SHOTS) await page.locator('.timeline').screenshot({ path: process.env.SHOTS + '/plan-start.png' });
+  assert.match(await page.locator('.stop-start').innerText(), /淺草酒店/);
+  await page.locator('[data-route-link="0"]').click(); assert.match(await page.locator('#routeFrom option:checked').innerText(), /淺草酒店/); await closeSheet();
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('[data-plan-pick]'); assert.equal(await page.locator('.stop-start').count(), 0, 'no hotel the night before D1');
  });
  await step('探索地圖: places as dots; a tap lists Google places to add', async () => {
   await page.goto(base + '/#explore'); await page.click('[data-explore-map]');
