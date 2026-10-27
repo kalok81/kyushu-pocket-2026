@@ -955,7 +955,7 @@ window.startTrip = (meta = {}) => {
       pinned = shown.filter((p) => (coordinates[p.id] || []).length),
       dialog = $("#detail");
     openDialog(
-      `${Kit.sheetHead("探索地圖", `${pinned.length} 個地點`)}<p class="nearby-help">點地圖上的圓點看地點；點地圖其他位置，會列出那裏的 Google 地點，可以直接加入探索。</p><div id="mapLoad" role="status">正在載入地圖…</div><div id="exploreMap" class="pin-map explore-map" role="region" aria-label="探索地點地圖"></div><div id="exploreMapInfo" class="explore-map-info" aria-live="polite"><p class="note">${shown.length > pinned.length ? `另有 ${shown.length - pinned.length} 個地點未有座標，不會顯示。` : "地圖跟隨探索頁的分類、區域及搜尋。"}</p></div><p class="note">地圖由 OpenStreetMap 提供；附近地點由 Google 地圖提供。</p>`,
+      `${Kit.sheetHead("探索地圖", `${pinned.length} 個地點`)}<p class="nearby-help">點地圖上的圓點看地點；點地圖其他位置，會列出那裏的 Google 地點，可以直接加入探索。</p><div id="mapLoad">${Kit.dots("正在載入地圖…")}</div><div id="exploreMap" class="pin-map explore-map" role="region" aria-label="探索地點地圖"></div><div id="exploreMapInfo" class="explore-map-info" aria-live="polite"><p class="note">${shown.length > pinned.length ? `另有 ${shown.length - pinned.length} 個地點未有座標，不會顯示。` : "地圖跟隨探索頁的分類、區域及搜尋。"}</p></div><p class="note">地圖由 OpenStreetMap 提供；附近地點由 Google 地圖提供。</p>`,
     );
     dialog.classList.add("map-picker-dialog");
     let map;
@@ -1034,7 +1034,7 @@ window.startTrip = (meta = {}) => {
       ask = ++mapAsk;
     if (!box) return;
     layer.clearLayers();
-    box.innerHTML = '<p class="note" role="status">正在查詢這個位置附近的 Google 地點…</p>';
+    box.innerHTML = Kit.dots("正在查詢這個位置附近的 Google 地點…");
     let list;
     try {
       list = await window.Together.placesNear(at.lat, at.lng);
@@ -2224,7 +2224,7 @@ window.startTrip = (meta = {}) => {
       first = startMinute(list[0]?.time),
       startAt = first != null ? hm(first) : "09:00";
     openDialog(
-      `${Kit.sheetHead("AI 安排這天", `D${day}`)}<p class="note">AI 會按距離、營業時間、星期幾及用餐時間，排好次序、時間及每段交通，並提示休息日或趕不及的地方。看過結果才決定是否套用。</p><form class="tg-form" id="aiPlanForm" data-day="${day}"><label>出發時間<input name="start" type="time" value="${startAt}" required></label>${timed ? `<label class="tg-check"><input type="checkbox" name="keep"> 保留我已填的時間（例如已預約的餐廳）</label>` : ""}${Kit.btn("開始安排", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form><div id="aiPlanOut"></div>`,
+      `${Kit.sheetHead("AI 安排這天", `D${day}`)}<p class="note">AI 會按距離、營業時間、星期幾及用餐時間，排好次序、時間及每段交通，並提示休息日或趕不及的地方。看過結果才決定是否套用。</p><form class="tg-form" id="aiPlanForm" data-day="${day}"><label>出發時間<input name="start" type="time" value="${startAt}" required></label>${timed ? Kit.toggle("保留我已填的時間（例如已預約的餐廳）", { name: "keep" }) : ""}${Kit.btn("開始安排", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form><div id="aiPlanOut"></div>`,
     );
   }
   async function aiArrange(day, keep, startTime = "") {
@@ -2813,7 +2813,7 @@ window.startTrip = (meta = {}) => {
       .map(
         (m) =>
           `<div class="ask-msg me"><p>${esc(m.q)}</p></div><div class="ask-msg ai">${
-            m.busy ? Kit.progress({ text: "AI 正在參考你的行程…", seconds: 15 }) : m.error ? `<p class="tg-warn">${esc(m.error)}</p>` : `<p>${esc(m.a)}</p>${askPlaces(m.places)}`
+            m.busy ? Kit.dots("AI 正在參考你的行程…") : m.error ? `<p class="tg-warn">${esc(m.error)}</p>` : `<p>${esc(m.a)}</p>${askPlaces(m.places)}`
           }</div>`,
       )
       .join("");
@@ -2821,7 +2821,7 @@ window.startTrip = (meta = {}) => {
   function renderAsk() {
     const pick = (label, ic, variant, capture) =>
       Kit.fileBtn(label, { variant, icon: ic, capture: capture ? "environment" : null, input: { "data-ask-photo": true } });
-    return `${header("AI 助手", "影相翻譯菜單及告示，或問旅程問題")}${Kit.sectionHead("影相翻譯", askState.translations.length ? Kit.btn("清除", { size: "sm", icon: "trash", attrs: { "data-ask-clear": "tr" } }) : "")}<div class="ask-pick">${pick("影相", "camera", "secondary", true)}${pick("選相片", "image", "outline", false)}</div><p class="note">菜單、告示、標籤、售票機都可以；電腦上可以直接貼上圖片。</p><div id="askTranslations" class="ask-list">${askTranslations()}</div>${Kit.sectionHead("問 AI", askState.chat.length ? Kit.btn("清除", { size: "sm", icon: "trash", attrs: { "data-ask-clear": "chat" } }) : "")}<div id="askChat" class="ask-chat" aria-live="polite">${askChat()}</div><form id="askForm" class="tg-form ask-form"><textarea name="q" rows="2" maxlength="500" required placeholder="例如：今晚附近有咩好食？"></textarea><label class="tg-check"><input type="checkbox" name="here" data-ask-here${askState.here ? " checked" : ""}> 附上我現在的位置</label>${Kit.btn("發問", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form>`;
+    return `${header("AI 助手", "影相翻譯菜單及告示，或問旅程問題")}${Kit.sectionHead("影相翻譯", askState.translations.length ? Kit.btn("清除", { size: "sm", icon: "trash", attrs: { "data-ask-clear": "tr" } }) : "")}<div class="ask-pick">${pick("影相", "camera", "secondary", true)}${pick("選相片", "image", "outline", false)}</div><p class="note">菜單、告示、標籤、售票機都可以；電腦上可以直接貼上圖片。</p><div id="askTranslations" class="ask-list">${askTranslations()}</div>${Kit.sectionHead("問 AI", askState.chat.length ? Kit.btn("清除", { size: "sm", icon: "trash", attrs: { "data-ask-clear": "chat" } }) : "")}<div id="askChat" class="ask-chat" aria-live="polite">${askChat()}</div><form id="askForm" class="tg-form ask-form"><textarea name="q" rows="2" maxlength="500" required placeholder="例如：今晚附近有咩好食？"></textarea>${Kit.toggle("附上我現在的位置", { name: "here", checked: askState.here, attrs: { "data-ask-here": true } })}${Kit.btn("發問", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form>`;
   }
   const paintAsk = () => {
     if (current !== "ask") return;

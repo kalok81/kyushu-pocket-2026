@@ -9,7 +9,7 @@
       pinned = shown.filter((p) => (coordinates[p.id] || []).length),
       dialog = $("#detail");
     openDialog(
-      `${Kit.sheetHead("探索地圖", `${pinned.length} 個地點`)}<p class="nearby-help">點地圖上的圓點看地點；點地圖其他位置，會列出那裏的 Google 地點，可以直接加入探索。</p><div id="mapLoad" role="status">正在載入地圖…</div><div id="exploreMap" class="pin-map explore-map" role="region" aria-label="探索地點地圖"></div><div id="exploreMapInfo" class="explore-map-info" aria-live="polite"><p class="note">${shown.length > pinned.length ? `另有 ${shown.length - pinned.length} 個地點未有座標，不會顯示。` : "地圖跟隨探索頁的分類、區域及搜尋。"}</p></div><p class="note">地圖由 OpenStreetMap 提供；附近地點由 Google 地圖提供。</p>`,
+      `${Kit.sheetHead("探索地圖", `${pinned.length} 個地點`)}<p class="nearby-help">點地圖上的圓點看地點；點地圖其他位置，會列出那裏的 Google 地點，可以直接加入探索。</p><div id="mapLoad">${Kit.dots("正在載入地圖…")}</div><div id="exploreMap" class="pin-map explore-map" role="region" aria-label="探索地點地圖"></div><div id="exploreMapInfo" class="explore-map-info" aria-live="polite"><p class="note">${shown.length > pinned.length ? `另有 ${shown.length - pinned.length} 個地點未有座標，不會顯示。` : "地圖跟隨探索頁的分類、區域及搜尋。"}</p></div><p class="note">地圖由 OpenStreetMap 提供；附近地點由 Google 地圖提供。</p>`,
     );
     dialog.classList.add("map-picker-dialog");
     let map;
@@ -88,7 +88,7 @@
       ask = ++mapAsk;
     if (!box) return;
     layer.clearLayers();
-    box.innerHTML = '<p class="note" role="status">正在查詢這個位置附近的 Google 地點…</p>';
+    box.innerHTML = Kit.dots("正在查詢這個位置附近的 Google 地點…");
     let list;
     try {
       list = await window.Together.placesNear(at.lat, at.lng);

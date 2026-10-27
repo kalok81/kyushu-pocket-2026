@@ -1231,7 +1231,7 @@ window.Together = (() => {
   function page() {
     const s = state.status;
     if (["idle", "loading", "checking"].includes(s))
-      return { sig: s, shell: Kit.empty("正在連接…", "第一次載入需要數秒。") };
+      return { sig: s, shell: Kit.loading("正在連接…", "第一次載入需要數秒。") };
     if (s === "error")
       return {
         sig: s + state.error,
@@ -1252,7 +1252,7 @@ window.Together = (() => {
         sig: s + state.user?.uid,
         shell: `<section class="panel tg-login"><h2>這個帳戶未加入任何旅程</h2><p>你已用 <b>${esc(state.user?.email)}</b> 登入，但未加入任何旅程。請旅程負責人把你加入旅伴名單，然後按再試。</p><div class="links">${Kit.btn("再試", { variant: "primary", icon: "redo", attrs: { "data-tg": "retry" } })}${Kit.btn("登出／換帳戶", { icon: "logout", attrs: { "data-tg": "logout" } })}</div></section>`,
       };
-    if (!started) return { sig: "trip", shell: Kit.empty("正在載入旅程資料…") };
+    if (!started) return { sig: "trip", shell: Kit.loading("正在載入旅程資料…") };
     const sig = [
       "ready",
       state.tab,
@@ -1858,7 +1858,7 @@ window.Together = (() => {
   }
   // ---- 購物: the page (list and grid) and duplicate names ----
   function shopPage() {
-    if (state.status !== "ready") return { sig: "wait", shell: Kit.empty("正在連接…") };
+    if (state.status !== "ready") return { sig: "wait", shell: Kit.loading("正在連接…") };
     const todo = state.shopping.filter((x) => !x.bought),
       q = norm(state.shopSearch),
       match = (x) => !q || norm([x.name, zhName(x, x.name), x.qty, x.forWhom, x.detail, x.place].join(" ")).includes(q);
@@ -2252,7 +2252,7 @@ window.Together = (() => {
   function tripsPage() {
     const t = state.meta;
     if (!["ready", "notrip"].includes(state.status) || (t && !started))
-      return { sig: "wait", shell: Kit.empty("正在連接…") };
+      return { sig: "wait", shell: Kit.loading("正在連接…") };
     const members = (t?.members || [])
       .map(
         (e) =>

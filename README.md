@@ -135,3 +135,7 @@ cd tests && npm ci && npx playwright install chromium && npm test
 - `tests/layout.mjs`：用資料很多、名稱很長的虛構旅程，在 320／390／768／1280px 寬度檢查所有頁面及主要視窗有沒有溢出、截斷或按鈕高度不一（`SHOTS=資料夾` 可儲存截圖）。
 
 GitHub Actions 每次 push 先執行以上檢查，通過才發佈網站。`dist/` 只可包含網站程式；旅程資料不要加入乘客姓名、座位、訂單編號、付款明細或任何登入憑證。
+
+## 鳴謝
+
+部分介面組件改自 [Uiverse.io](https://uiverse.io/)（[galaxy](https://github.com/uiverse-io/galaxy)，MIT），已改用網站本身的顏色：剔選格及單選掣（IndexOC「moody-mouse-53」）、開關（AbanoubMagdy1「pink-panda-32」，`Kit.toggle`）、等候圓點（Cornerstone-04「little-mouse-69」，`Kit.dots`／`Kit.loading`）。

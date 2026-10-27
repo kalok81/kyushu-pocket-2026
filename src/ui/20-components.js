@@ -32,6 +32,12 @@
   const sectionHead = (title, aside = "") => `<div class="sectionhead"><h2>${title}</h2>${aside}</div>`;
   const empty = (title, text = "", action = "") =>
     `<div class="empty"><h2>${title}</h2>${text ? `<p>${text}</p>` : ""}${action}</div>`;
+  // A short wait: three swelling dots, with an optional text beside them; loading is the same as a page's empty state.
+  const dots = (text = "") => `<span class="dots" role="status"><b aria-hidden="true"><i></i><i></i><i></i></b>${text ? `<span>${text}</span>` : '<span class="sr-only">載入中</span>'}</span>`;
+  const loading = (title, text = "") => `<div class="empty loading">${dots()}<h2>${title}</h2>${text ? `<p>${text}</p>` : ""}</div>`;
+  // An on/off option (o.name, o.checked, o.attrs on the input) as a switch with its label in front.
+  const toggle = (label, o = {}) =>
+    `<label class="switch-row"><span>${label}</span><input type="checkbox" class="switch" role="switch"${attrs({ name: o.name, checked: o.checked, ...o.attrs })}></label>`;
   const badge = (label, cls = "") => `<span class="badge${cls ? " " + cls : ""}">${label}</span>`;
   // Card: the one surface for list items (住宿, 活動, 資料簿…). top: the small line above the title (date, badges, ⋯ menu);
   // title and body are HTML; links: the row of small buttons at the bottom.

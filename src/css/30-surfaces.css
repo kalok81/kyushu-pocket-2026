@@ -93,5 +93,14 @@
 .ai-progress.done .ai-progress-bar i{width:100%;animation:none;transition:width .3s}
 @keyframes ai-fill{to{width:92%}}
 @media(prefers-reduced-motion:reduce){.ai-progress-bar i{animation-duration:.01s}}
+/* Short waits (Kit.dots, Kit.loading): three dots that swell in turn, after "little-mouse-69" by Cornerstone-04 (Uiverse.io, MIT) */
+.dots{display:inline-flex;align-items:center;gap:10px;color:var(--muted-foreground);font-size:var(--fs-md)}
+.dots>b{display:inline-flex;gap:6px;padding:4px}
+.dots>b i{width:6px;height:6px;border-radius:50%;background:var(--primary);animation:dots-swell .5s ease-in-out infinite alternate}
+.dots>b i:nth-child(2){animation-delay:.17s}
+.dots>b i:nth-child(3){animation-delay:.34s}
+@keyframes dots-swell{from{transform:scale(1.6)}to{transform:scale(.8);opacity:.5}}
+.empty.loading .dots{margin-bottom:10px}
+@media(prefers-reduced-motion:reduce){.dots>b i{animation:none}}
 .tg-progress{height:8px;border-radius:999px;background:var(--border);overflow:hidden}
 .tg-progress>div{width:0;height:100%;border-radius:999px;background:var(--foreground);transition:width .2s linear}

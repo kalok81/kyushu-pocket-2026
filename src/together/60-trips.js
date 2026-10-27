@@ -18,7 +18,7 @@
   function tripsPage() {
     const t = state.meta;
     if (!["ready", "notrip"].includes(state.status) || (t && !started))
-      return { sig: "wait", shell: Kit.empty("正在連接…") };
+      return { sig: "wait", shell: Kit.loading("正在連接…") };
     const members = (t?.members || [])
       .map(
         (e) =>

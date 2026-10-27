@@ -64,7 +64,7 @@
       first = startMinute(list[0]?.time),
       startAt = first != null ? hm(first) : "09:00";
     openDialog(
-      `${Kit.sheetHead("AI 安排這天", `D${day}`)}<p class="note">AI 會按距離、營業時間、星期幾及用餐時間，排好次序、時間及每段交通，並提示休息日或趕不及的地方。看過結果才決定是否套用。</p><form class="tg-form" id="aiPlanForm" data-day="${day}"><label>出發時間<input name="start" type="time" value="${startAt}" required></label>${timed ? `<label class="tg-check"><input type="checkbox" name="keep"> 保留我已填的時間（例如已預約的餐廳）</label>` : ""}${Kit.btn("開始安排", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form><div id="aiPlanOut"></div>`,
+      `${Kit.sheetHead("AI 安排這天", `D${day}`)}<p class="note">AI 會按距離、營業時間、星期幾及用餐時間，排好次序、時間及每段交通，並提示休息日或趕不及的地方。看過結果才決定是否套用。</p><form class="tg-form" id="aiPlanForm" data-day="${day}"><label>出發時間<input name="start" type="time" value="${startAt}" required></label>${timed ? Kit.toggle("保留我已填的時間（例如已預約的餐廳）", { name: "keep" }) : ""}${Kit.btn("開始安排", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form><div id="aiPlanOut"></div>`,
     );
   }
   async function aiArrange(day, keep, startTime = "") {

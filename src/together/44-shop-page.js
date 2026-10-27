@@ -1,6 +1,6 @@
   // ---- 購物: the page (list and grid) and duplicate names ----
   function shopPage() {
-    if (state.status !== "ready") return { sig: "wait", shell: Kit.empty("正在連接…") };
+    if (state.status !== "ready") return { sig: "wait", shell: Kit.loading("正在連接…") };
     const todo = state.shopping.filter((x) => !x.bought),
       q = norm(state.shopSearch),
       match = (x) => !q || norm([x.name, zhName(x, x.name), x.qty, x.forWhom, x.detail, x.place].join(" ")).includes(q);
