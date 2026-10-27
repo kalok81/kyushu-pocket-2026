@@ -90,7 +90,7 @@
 | `planDay` | 行程工具：全日交通、AI 安排、推算時間、AI 推薦地點 | DeepSeek、Routes API（步行） |
 | `findBuyPlaces` | 購物「AI 填寫」：上網搜尋物品資料及售賣地點，售賣地點用 Google 地圖核實 | DeepSeek Search、DeepSeek、Places API |
 | `manageTrip` | 建立及修改旅程、管理旅伴 | — |
-| `translateNames` | 探索地點、購物物品及開支（連收據物品）名稱不是繁中時，加上繁中譯名（`zh`、`zhFor`、開支物品 `itemsZh`），原名不變（Firestore 觸發） | DeepSeek |
+| `translateNames` | 探索地點、購物物品及開支（連收據物品）名稱不是繁中時，加上繁中譯名（`zh`、`zhFor`、開支物品 `itemsZh`），原名不變（Firestore 觸發）；探索地點先用 Google 地圖的香港中文名（按名稱在地點 300 米內搜尋，有中文字、沒有假名才用），沒有才由 AI 翻譯（Google 的拼音名作參考；假名及只有英文的店名都要有中文） | Places API、DeepSeek |
 
 API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`、`rapidapi-key`、`maps-embed-key`）。`maps-embed-key` 是瀏覽器用的 key（只限 `https://kalok81.github.io/*`，只可用 Maps Embed API 及 Map Tiles API；所有地圖的底圖用 Google 的 2D 地圖圖塊（`map-picker.js` 的 `base`，session 存在手機到期為止），未能載入時改用 OpenStreetMap），由 `lookupPlace` 的 `embedKey` 交給已登入的旅伴，用來在 App 內顯示 Google 的大眾運輸路線（Embed API 的 directions，`mode=transit`；日本的公共交通 Google 只在這裏及 Google 地圖本身提供，Routes／Directions API 沒有）。新加的密鑰要給 Cloud Functions 的服務帳戶 `secretmanager.secretAccessor` 權限。
 
