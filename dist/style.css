@@ -61,6 +61,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .zh-name{display:block;margin-top:1px;font-size:var(--fs-md);font-weight:500;line-height:1.45;color:var(--muted-foreground)}
 .detailtitle .zh-name{margin-top:2px;font-size:var(--fs-body)}
 .tg-lines .zh-name{font-size:var(--fs-sm)}
+.pp-row .zh-name{font-size:var(--fs-sm)}
 /* ---- Buttons (Kit.btn): one size scale and five variants. Toolbars and card actions use outline (the default),
    in-form helpers (AI 填寫, 自動填寫, 選用這個) secondary, the one main action of a form primary. ---- */
 button{min-height:44px;padding:9px 14px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--card);color:var(--foreground);font-weight:550;cursor:pointer;transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,opacity .15s}

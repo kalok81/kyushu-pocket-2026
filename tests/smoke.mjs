@@ -352,7 +352,10 @@ try {
   assert.match(await page.locator('#results .card.place', { hasText: '仲見世通り' }).innerText(), /仲見世商店街/);
   await page.fill('#search', '商店街'); await page.waitForTimeout(400);
   assert.equal(await page.locator('#results .card.place').count(), 1);
-  await page.fill('#search', '');
+  await page.fill('#search', '');  // and in the plan's 加入地點 picker (also used for 加入同一時間的選擇)
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('[data-plan-pick]'); await page.click('[data-plan-pick]');
+  await page.fill('#ppSearch', '仲見世'); await page.waitForFunction(() => /仲見世通り\s*仲見世商店街/.test(document.querySelector('#ppList')?.innerText || ''));
+  await closeSheet();
  });
  await step('a place keeps its Google Maps link when edited; AI fills 必吃・必買・特色', async () => {
   const link = 'https://maps.app.goo.gl/abc123';

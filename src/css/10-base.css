@@ -27,3 +27,4 @@ button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,te
 .zh-name{display:block;margin-top:1px;font-size:var(--fs-md);font-weight:500;line-height:1.45;color:var(--muted-foreground)}
 .detailtitle .zh-name{margin-top:2px;font-size:var(--fs-body)}
 .tg-lines .zh-name{font-size:var(--fs-sm)}
+.pp-row .zh-name{font-size:var(--fs-sm)}
