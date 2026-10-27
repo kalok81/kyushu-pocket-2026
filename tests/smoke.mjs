@@ -128,6 +128,11 @@ try {
   const req = await page.evaluate(() => window.aiRequest); assert.equal(req.origin.name, '上野酒店'); assert.equal(req.destination.name, '淺草寺'); assert.equal(req.currency, 'JPY');
   await page.locator('[data-route-ai-pick]').first().click();
   await page.waitForFunction(() => /最快：.*銀座線 上野 → 淺草.*（AI 估算）/.test(document.querySelector('#routeManual textarea').value));
+  // 截圖讀取: a screenshot (here any picture) read by the AI, its route written in as read
+  await page.setInputFiles('[data-route-shot]', root + 'icon-192.png'); await page.waitForFunction(() => /截圖中的路線/.test(document.querySelector('#routeAi')?.innerText || ''));
+  assert.ok((await page.evaluate(() => window.shotRequest.image.length)) > 100);
+  await page.locator('[data-route-ai-pick]').first().click();
+  await page.waitForFunction(() => /08:52 發：.*JR日豊本線 別府 08:52 → 大分 09:06.*JR久大本線 大分 09:22 → 由布院 10:29（8番線）.*（截圖）/.test(document.querySelector('#routeManual textarea').value));
   // 方式 are checkboxes: several at once are asked for in turn, each under its own heading
   await page.check('[name=routeMode][value=WALK]'); await page.click('#routeGo'); await page.waitForSelector('.route-mode-head >> nth=1');
   assert.deepEqual(await page.locator('.route-mode-head').allInnerTexts(), ['公共交通', '步行']);

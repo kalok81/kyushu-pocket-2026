@@ -593,6 +593,8 @@ details.more:not([open]) .menu{display:none}
 .route-modes{display:flex;flex-wrap:wrap;gap:6px 16px;margin:0;padding:0;border:0}
 .route-modes legend{margin-bottom:6px;padding:0;font-weight:600}
 .route-mode-head{margin:14px 0 6px;font-size:var(--fs-md)}
+.route-shot{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin:8px 0 0}
+.route-shot small{color:var(--muted-foreground)}
 /* ---- 探索 and 附近: place cards, place form and details, AI 推薦, map picker ---- */
 .card.place{display:flex;flex-direction:column;gap:0;padding:12px 14px 14px;cursor:pointer}
 .place .feature{display:-webkit-box;margin:0 0 4px;overflow:hidden;font-size:var(--fs-lg);line-height:1.6;-webkit-line-clamp:2;-webkit-box-orient:vertical}
