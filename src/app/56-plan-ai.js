@@ -5,7 +5,9 @@
     return { name: s.title || s.name, address: s.target || s.address || "", ...(p ? { lat: p.lat, lng: p.lng } : {}) };
   };
   const legText = (l) =>
-    l.source === "navitime"
+    l.source === "yahoo"
+      ? `${routeText(l, "TRANSIT")}（Yahoo!乗換案内）`
+      : l.source === "navitime"
       ? `${routeText(l, "TRANSIT")}（NAVITIME，時間為估算）`
       : l.source === "google"
       ? `🚶 步行 ${l.minutes} 分（${l.meters >= 1000 ? `${(l.meters / 1000).toFixed(1)} 公里` : `${l.meters} 米`}）｜約 ${l.minutes} 分（Google 地圖）`

@@ -25,6 +25,41 @@ const ROUTE_FIELDS = ['duration', 'distanceMeters', 'travelAdvisory.transitFare'
 // from average running times, so each step says approx and has no train number.
 // The marketplace plan has trains only (local buses need a separate contract), so routes that are mostly walking —
 // where a bus is likely the way — are dropped and the AI (which knows the buses) is asked instead.
+// Japan by public transport from Yahoo!乗換案内, as the traveller would look it up (one search per tap, for this small
+// group): real timetables door to door, trains with their names and numbers, buses and ferries, platforms and fares.
+// Read from the result page's own data (__NEXT_DATA__); if Yahoo refuses or changes it, nothing (NAVITIME is next).
+// A place goes by its Japanese address when it has one (Yahoo finds the door), else by its name.
+const half = t => String(t || '').replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xfee0)).replace(/　/g, ' ');
+export function yahooPlace(p) {
+ const t = String(p?.address || '').trim(), m = t.match(/(北海道|東京都|京都府|大阪府|.{2,3}県).+?\d[\d０-９\-－丁目番地号の]*/);
+ return (m ? m[0] : String(p?.name || t).trim()).slice(0, 80);
+}
+const YAHOO_VEHICLE = n => (/新幹線/.test(n) ? 'HIGH_SPEED_TRAIN' : /汽船|フェリー|旅客船|渡船/.test(n) ? 'FERRY' : /バス|交通・|ライナー/.test(n) ? 'BUS' : /地下鉄|空港線|七隈線|箱崎線/.test(n) ? 'SUBWAY' : /モノレール/.test(n) ? 'MONORAIL' : /ロープウェイ|ケーブル/.test(n) ? 'CABLE_CAR' : 'HEAVY_RAIL');
+export async function yahooRoutes(uid, a, b, when, limit = 3) {
+ const from = yahooPlace(a), to = yahooPlace(b), w = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d)(\d)$/.exec(when || '');
+ if (!from || !to || !w) return null;
+ await useQuota(uid, 'navi');
+ const q = new URLSearchParams({ from, to, y: w[1], m: w[2], d: w[3], hh: w[4], m1: w[5], m2: w[6], type: '1', ticket: 'ic', expkind: '1', shin: '1', ex: '1', hb: '1', al: '1', lb: '1', sr: '1', s: '0' });
+ const res = await fetch(`https://transit.yahoo.co.jp/search/result?${q}`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PocketTravel/1.0)', 'Accept-Language': 'ja' }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
+ if (!res?.ok) return console.error('Yahoo transit', res?.status), null;
+ let list;
+ try { list = JSON.parse((await res.text()).match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)[1]).props.pageProps.naviSearchParam?.featureInfoList || []; } catch { return console.error('Yahoo transit: page changed'), null; }
+ const clock = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; };
+ const span = (x, y) => (x != null && y != null ? (y - x + 1440) % 1440 : 0);
+ return list.slice(0, limit).map(f => {
+  const e = f.edgeInfoList || [], steps = [];
+  for (let i = 0; i < e.length - 1; i++) {
+   const here = e[i], next = e[i + 1], name = half(here.railNameExcludingDestination || here.railName || '');
+   const depart = (here.timeInfo || []).at(-1)?.time || '', arrive = (next.timeInfo || [])[0]?.time || '', min = span(clock(depart), clock(arrive));
+   const station = x => half(x.stationName || x.pointName || '').replace(/\/.*$/, '').replace(/\((?:福岡|大分|山口|熊本|佐賀|長崎)県\)$/, '').slice(0, 60);
+   if (!name || /^徒歩/.test(name) || /徒歩/.test(here.railName || '')) { const last = steps.at(-1); if (last?.mode === 'WALK') last.minutes += min; else steps.push({ mode: 'WALK', minutes: min, meters: 0 }); continue; }
+   const plat = (here.ridingPositionInfo?.departure || []).filter(Boolean).join('');
+   steps.push({ mode: 'TRANSIT', vehicle: YAHOO_VEHICLE(name), line: name.replace(/^JR/, 'JR ').slice(0, 60), headsign: half(here.destination || '').replace(/行$/, '').slice(0, 40), from: station(here), to: station(next), stops: (here.stopStationList || []).length + 1, depart, arrive, minutes: min, ...(/番線|のりば/.test(plat) ? { platform: plat.slice(0, 20) } : {}) });
+  }
+  const sum = f.summaryInfo || {}, t = /(?:(\d+)時間)?(\d+)分/.exec(sum.totalTime || ''), yen = Number(String(sum.totalPrice || '').replace(/[^\d]/g, ''));
+  return { minutes: t ? (+t[1] || 0) * 60 + +t[2] : steps.reduce((x, s) => x + s.minutes, 0), meters: 0, fare: yen ? { currency: 'JPY', amount: yen } : null, steps: steps.filter(x => x.mode === 'TRANSIT' || x.minutes > 0) };
+ }).filter(o => o.steps.some(x => x.mode === 'TRANSIT'));
+}
 const NAVI_VEHICLE = { superexpress_train: 'HIGH_SPEED_TRAIN', bus: 'BUS', highway_bus: 'INTERCITY_BUS', ferry: 'FERRY' };
 export async function naviRoutes(uid, a, b, when, limit = 3) {
  if (![a?.lat, a?.lng, b?.lat, b?.lng].every(Number.isFinite) || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(when)) return null;
@@ -59,7 +94,11 @@ export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck
  const mode = ['TRANSIT', 'WALK', 'DRIVE'].includes(d.mode) ? d.mode : 'TRANSIT';
  const country = typeof d.country === 'string' && /^[A-Z]{2}$/.test(d.country) ? d.country : '';
  const zone = ZONES[country] || 'UTC';
- // Japan by public transport: NAVITIME timetables (falls through to Google, which has none, if NAVITIME fails)
+ // Japan by public transport: Yahoo!乗換案内 (real timetables, buses), then NAVITIME (trains, estimated times), then Google (none)
+ if (mode === 'TRANSIT' && country === 'JP') {
+  const ya = await yahooRoutes(req.auth.uid, { ...d.origin, ...(typeof d.originText === 'string' ? { address: d.originText.slice(0, 200) } : {}), name: String(d.originName || '').slice(0, 80) }, { ...d.destination, ...(typeof d.destinationText === 'string' ? { address: d.destinationText.slice(0, 200) } : {}), name: String(d.destinationName || '').slice(0, 80) }, String(d.time || ''), 4).catch(e => (console.error('yahoo', e?.message), null));
+  if (ya?.length) return { options: ya, estimated: false, source: 'yahoo' };
+ }
  if (mode === 'TRANSIT' && country === 'JP' && d.origin?.lat != null && d.destination?.lat != null) {
   const options = await naviRoutes(req.auth.uid, d.origin, d.destination, String(d.time || ''), 4).catch(e => (console.error('navi', e?.message), null));
   if (options?.length) return { options, estimated: false, source: 'navitime' };

@@ -137,6 +137,10 @@ try {
   // no train or bus found (Google's walk-only answer is not public transport): a note, and Google's directions open
   await page.evaluate(() => { window.noTransitNext = true; document.querySelector('#routeEmbed').innerHTML = ''; }); await page.uncheck('[name=routeMode][value=WALK]'); await page.click('#routeGo');
   await page.waitForSelector('#routeEmbed iframe'); assert.match(await page.locator('#routeResults').innerText(), /沒有方便的火車，多數要搭巴士/);
+  // Yahoo!乗換案内: real timetables with platforms; the names and addresses go with the request
+  await page.evaluate(() => { window.yahooNext = true; }); await page.click('#routeGo'); await page.waitForFunction(() => /Yahoo!乗換案内 提供/.test(document.querySelector('#routeResults')?.innerText || ''));
+  assert.match(await page.locator('#routeResults').innerText(), /08:10–08:15 · 1番線/);
+  const yreq = await page.evaluate(() => window.routeRequest); assert.equal(yreq.originName, '上野酒店'); assert.match(yreq.originText, /東京都台東區上野/); assert.equal(yreq.destinationName, '淺草寺');
   await page.check('[name=routeMode][value=WALK]');
   await page.uncheck('[name=routeMode][value=TRANSIT]'); assert.equal(await page.locator('#routeYahoo').isHidden(), true, 'Yahoo is for public transport');
   await page.click('#routeGo'); await page.waitForFunction(() => !document.querySelector('.route-mode-head') && document.querySelector('[data-route-pick]'));

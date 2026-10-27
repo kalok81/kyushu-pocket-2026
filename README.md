@@ -80,6 +80,8 @@
 
 ## Cloud Functions
 
+日本的公共交通（`suggestRoutes` 的 `TRANSIT`、`planDay` 的火車／巴士段）先查 Yahoo!乗換案内（`yahooRoutes`：只在旅伴按下查詢時查一次，讀結果頁的 `__NEXT_DATA__`；地點用日文地址，沒有才用名稱；有實際時刻、列車名及號數、月台、巴士、渡輪及車費），查不到才用 NAVITIME，再沒有就是 Google 地圖交通指引及 AI。Yahoo 拒絕或改版時不會嘗試繞過。
+
 | 名稱 | 用途 | 服務 |
 |---|---|---|
 | `processReceipt` | 背景讀取收據及物品相片，以及 AI 助手的相片翻譯及問答（Firestore `receiptJobs` 觸發） | DeepSeek `deepseek-flash` |

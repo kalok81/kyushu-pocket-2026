@@ -2,7 +2,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { getFirestore } from 'firebase-admin/firestore';
 import { DEEPSEEK_API_KEY, PLACES_API_KEY, RAPIDAPI_KEY, askDeepSeek, requireMember, useQuota } from './base.js';
-import { mins, naviRoutes, placeText } from './routes.js';
+import { mins, naviRoutes, placeText, yahooRoutes } from './routes.js';
 
 // A whole day of the plan in one AI request (DeepSeek), for the plan page's tools:
 // - routes: the way to go for every leg (stop to stop), as aiRoutes' first option;
@@ -59,7 +59,9 @@ export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true
   if (trip?.country && trip.country !== 'JP' && d.country !== 'JP') return {};
   const got = {};
   for (const [k, a, b, time] of list.filter(([, a, b, time]) => a?.lat != null && b?.lat != null && time).slice(0, 10)) {
-   const o = await naviRoutes(req.auth.uid, a, b, `${date}T${time.padStart(5, '0')}`, 1).catch(() => null);
+   const when = `${date}T${time.padStart(5, '0')}`, y = await yahooRoutes(req.auth.uid, a, b, when, 1).catch(() => null);
+   if (y?.[0]) { got[k] = { k, ...y[0], confidence: 'high', source: 'yahoo' }; continue; }
+   const o = await naviRoutes(req.auth.uid, a, b, when, 1).catch(() => null);
    if (o?.[0]) got[k] = { k, ...o[0], confidence: 'high', source: 'navitime' };
   }
   return got;
