@@ -121,7 +121,7 @@
       const d = days[selectedDay - 1];
       const stops = routeStops(selectedDay);
       if (!stops.length) return toast("這天的站點未有位置，未能顯示地圖。");
-      window.MapPicker.route({ title: `DAY ${d.n} · ${d.region}`, stops, openDialog, esc, lines: streetLines });
+      window.MapPicker.route({ title: `DAY ${d.n} · ${d.region}`, stops, openDialog, esc, lines: streetLines, transit: (a, b, box) => transitFrame(box, a, b) });
     }
     if (el.dataset.dayLabel !== undefined) {
       const day = selectedDay;

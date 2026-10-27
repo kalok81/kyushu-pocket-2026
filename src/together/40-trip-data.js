@@ -38,6 +38,19 @@
     if (!navigator.onLine) throw new Error("offline");
     return (await (await callable("lookupPlace", 30000))({ paths: legs })).data.paths || [];
   }
+  // The browser key for Google's embedded transit directions, asked for once per visit (signed-in travellers only)
+  let embedKeyAsk = null;
+  function embedKey() {
+    if (!navigator.onLine) return Promise.reject(new Error("offline"));
+    embedKeyAsk ||= callable("lookupPlace", 20000)
+      .then((f) => f({ embedKey: true }))
+      .then((r) => r.data.key || "")
+      .catch((e) => {
+        embedKeyAsk = null;
+        throw e;
+      });
+    return embedKeyAsk;
+  }
   // Places: trips/{t}/places documents. A new one gets its id here so a plan stop can point at it straight away.
   function savePlace({ place, fields, cats, lat, lng, points = [], mapsUrl, photo = null, photoBy = "" }) {
     const { fs, db } = fb,

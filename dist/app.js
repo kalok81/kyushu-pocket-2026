@@ -1803,6 +1803,26 @@ window.startTrip = (meta = {}) => {
       );
     return links.length ? `<p class="route-checks">${links.join("")}</p>` : "";
   }
+  // Google's own directions by public transport, in an embedded map (Maps Embed API: Japan's trains and buses are only
+  // there and in Google Maps itself, not in the routes APIs). No departure time can be set, so Google shows its usual way.
+  const placeArg = (p) => (p ? (Number.isFinite(p.lat) && Number.isFinite(p.lng) ? `${p.lat},${p.lng}` : p.address || p.name || "") : "");
+  async function transitFrame(box, from, to) {
+    if (!box) return;
+    box.innerHTML = Kit.dots("正在載入 Google 交通指引…");
+    let key;
+    try {
+      key = await window.Together.embedKey();
+    } catch (e) {
+      box.innerHTML = `<p class="note">${esc(e.message === "offline" ? "離線中，有網絡時再試。" : fnError(e, "暫時未能載入 Google 交通指引，請稍後再試。"))}</p>`;
+      return;
+    }
+    if (!box.isConnected) return;
+    const o = placeArg(from),
+      d = placeArg(to),
+      q = new URLSearchParams({ key, origin: o, destination: d, mode: "transit", language: "zh-TW", ...(meta.country ? { region: meta.country } : {}) }),
+      gm = `https://www.google.com/maps/dir/?${new URLSearchParams({ api: "1", origin: o, destination: d, travelmode: "transit" })}`;
+    box.innerHTML = `<iframe class="transit-frame" title="Google 交通指引" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen src="https://www.google.com/maps/embed/v1/directions?${q}"></iframe><p class="note transit-note">Google 地圖建議的大眾運輸路線，按 Google 預設的出發時間，未必是行程的時間。${Kit.btn("在 Google 地圖看班次", { href: gm, external: true, size: "sm", variant: "ghost", icon: "map" })}</p>`;
+  }
   // The link between two time slots on the plan: a dot on the timeline with the chosen way to get to the next slot.
   // The day starts at last night's hotel (from 住宿) unless its first stop is a hotel: shown above the first stop,
   // not saved, so it follows 住宿; the way from it is the first stop's transport.
@@ -1867,7 +1887,7 @@ window.startTrip = (meta = {}) => {
               .map(([k, [v]]) => `<option value="${k}">${v}</option>`)
               .join(
                 "",
-              )}</select></label></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { href: "#", external: true, size: "sm", icon: "map", attrs: { id: "routeGm", title: "在 Google 地圖查看" } })}${meta.country === "JP" ? Kit.btn("Yahoo", { href: "#", external: true, size: "sm", icon: "train", attrs: { id: "routeYahoo", title: "Yahoo!乗換案内：實際班次" } }) : ""}${Kit.btn("AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
+              )}</select></label></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { href: "#", external: true, size: "sm", icon: "map", attrs: { id: "routeGm", title: "在 Google 地圖查看" } })}${meta.country === "JP" ? Kit.btn("Yahoo", { href: "#", external: true, size: "sm", icon: "train", attrs: { id: "routeYahoo", title: "Yahoo!乗換案内：實際班次" } }) : ""}${Kit.btn("AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div>${Kit.btn("Google 交通指引", { size: "sm", variant: "ghost", icon: "train", cls: "route-embed-btn", attrs: { "data-route-embed": true } })}<div id="routeEmbed"></div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
           : '<p class="note">這天前面沒有站點，亦未有住宿資料，未能查詢路線；可以自行填寫。</p>'
       }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label>${Kit.btn("儲存交通", { type: "submit", variant: "secondary" })}</form>`,
     );
@@ -1905,6 +1925,11 @@ window.startTrip = (meta = {}) => {
       y.hidden = r.mode !== "TRANSIT";
     }
   }
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-route-embed]")) return;
+    const r = routeInputs();
+    if (r) transitFrame($("#routeEmbed"), { ...r.from.point, name: r.from.name }, r.dest);
+  });
   document.addEventListener("change", (e) => {
     if (["routeFrom", "routeTime", "routeMode", "routeTo"].includes(e.target.id)) routeLinks();
   });
@@ -2499,9 +2524,11 @@ window.startTrip = (meta = {}) => {
       body = `<p class="now-next">下一站：<b>${esc(next.s.title)}</b><span>${esc(next.s.time)}</span></p><p class="now-leave${left < 0 ? " late" : left <= 15 ? " soon" : ""}">${icon("clock")}<span>最遲 <b>${hm(Math.max(0, lv.at))}</b> 出發${lv.ride ? `，搭 ${esc(lv.ride)}` : ""} · ${left < 0 ? `已過 ${span(-left)}` : left === 0 ? "現在出發" : `還有 ${span(left)}`}</span></p>`;
     } else body = `<p class="now-next">今天的行程已完成${end ? `，回「<b>${esc(end.name)}</b>」` : ""}。</p>`;
     const goTo = next ? next.s.target || next.s.title : end ? `${end.name} ${end.address || ""}`.trim() : "";
+    nowLeg = { [day]: next && prev ? { from: !prev.title ? { ...hotelPoint(prev), name: prev.name } : { ...stopPoint(prev), name: prev.title }, to: { ...stopPoint(next.s), name: next.s.title }, title: `${prev.title || prev.name} → ${next.s.title}` } : null };
     const rest = slots.filter((x) => x.a == null || x.a > m).length;
-    return `<section class="now-card" data-now="${day}" aria-live="polite"><p class="now-head"><b>而家 ${hm(m)}</b>${here ? `<span>在「${esc(here.s.title)}」，到 ${hm(here.e)}</span>` : ""}</p>${body}<div class="now-actions">${goTo ? Kit.btn("導航", { href: route(goTo), external: true, size: "sm", variant: "secondary", icon: "route" }) : ""}${rest ? Kit.btn("AI 調整餘下行程", { size: "sm", icon: "sparkles", attrs: { "data-now-replan": day } }) : ""}</div></section>`;
+    return `<section class="now-card" data-now="${day}" aria-live="polite"><p class="now-head"><b>而家 ${hm(m)}</b>${here ? `<span>在「${esc(here.s.title)}」，到 ${hm(here.e)}</span>` : ""}</p>${body}<div class="now-actions">${goTo ? Kit.btn("導航", { href: `https://www.google.com/maps/dir/?${new URLSearchParams({ api: "1", destination: goTo, travelmode: "transit" })}`, external: true, size: "sm", variant: "secondary", icon: "route" }) : ""}${nowLeg[day] ? Kit.btn("交通指引", { size: "sm", icon: "train", attrs: { "data-now-transit": day } }) : ""}${rest ? Kit.btn("AI 調整餘下行程", { size: "sm", icon: "sparkles", attrs: { "data-now-replan": day } }) : ""}</div></section>`;
   }
+  let nowLeg = {};
   // On 總覽 and on the plan of today (the main 方案 or the one on screen)
   const nowFor = (day) => (day && day === todayDay() ? nowCard(day) : "");
   setInterval(() => {
@@ -2604,6 +2631,11 @@ window.startTrip = (meta = {}) => {
     const el = e.target.closest("button");
     if (!el) return;
     if (el.dataset.nowReplan) replanForm(Number(el.dataset.nowReplan));
+    const leg = el.dataset.nowTransit && nowLeg[el.dataset.nowTransit];
+    if (leg) {
+      openDialog(`${Kit.sheetHead("交通指引", esc(leg.title))}<div id="nowTransit"></div>`);
+      transitFrame($("#nowTransit"), leg.from, leg.to);
+    }
     if (el.dataset.replanApply !== undefined) applyReplan();
     if (el.dataset.replanAgain !== undefined && replan) {
       const form = $("#replanForm");
@@ -3328,7 +3360,7 @@ window.startTrip = (meta = {}) => {
       const d = days[selectedDay - 1];
       const stops = routeStops(selectedDay);
       if (!stops.length) return toast("這天的站點未有位置，未能顯示地圖。");
-      window.MapPicker.route({ title: `DAY ${d.n} · ${d.region}`, stops, openDialog, esc, lines: streetLines });
+      window.MapPicker.route({ title: `DAY ${d.n} · ${d.region}`, stops, openDialog, esc, lines: streetLines, transit: (a, b, box) => transitFrame(box, a, b) });
     }
     if (el.dataset.dayLabel !== undefined) {
       const day = selectedDay;

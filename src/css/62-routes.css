@@ -35,3 +35,7 @@
 .route-key i{display:inline-block;width:22px;height:0;border-top:4px solid var(--primary)}
 .route-key i.walk{border-top:4px dotted #2f7d4f}
 .route-key i.none{border-top:3px dashed var(--primary);opacity:.6}
+/* Google's directions by public transport (embedded map) */
+.route-embed-btn{margin-top:8px}
+.transit-frame{display:block;width:100%;height:min(56vh,440px);margin-top:10px;border:0;border-radius:var(--r-md);background:var(--muted-bg)}
+.transit-note{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}

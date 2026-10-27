@@ -8,6 +8,9 @@ initializeApp();
 export const DEEPSEEK_API_KEY = defineSecret('DEEPSEEK_API_KEY');
 export const PLACES_API_KEY = defineSecret('PLACES_API_KEY');
 export const RAPIDAPI_KEY = defineSecret('RAPIDAPI_KEY');
+// The browser key for Google's embedded maps (directions by public transport): only usable from the site and only for
+// the Maps Embed API, handed to signed-in travellers so it is not in the public repository.
+export const MAPS_EMBED_KEY = defineSecret('MAPS_EMBED_KEY');
 export const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 // Daily limits per companion, so a leaked login cannot run up the AI or Google Maps bill.
 const DAILY = { ai: 200, maps: 300, tr: 300, navi: 40 };

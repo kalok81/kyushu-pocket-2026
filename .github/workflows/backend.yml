@@ -55,7 +55,7 @@ jobs:
           F=$PWD/functions
           COMMON="--project=kyushu-2e307 --gen2 --region=asia-northeast1 --runtime=nodejs22 --source=$F --memory=256Mi --max-instances=3 --quiet"
           FIRESTORE="--trigger-location=asia-northeast1 --trigger-event-filters=type=google.cloud.firestore.document.v1.written --trigger-event-filters=database=(default)"
-          DS=DEEPSEEK_API_KEY=deepseek-api-key:latest PL=PLACES_API_KEY=places-api-key:latest RA=RAPIDAPI_KEY=rapidapi-key:latest
+          DS=DEEPSEEK_API_KEY=deepseek-api-key:latest PL=PLACES_API_KEY=places-api-key:latest RA=RAPIDAPI_KEY=rapidapi-key:latest ME=MAPS_EMBED_KEY=maps-embed-key:latest
           # All functions deploy at the same time (each one's log is printed when it ends); the step fails if any failed.
           mkdir -p /tmp/deploy
           deploy() { (gcloud functions deploy "$1" $COMMON --entry-point="$1" "${@:2}" >"/tmp/deploy/$1.log" 2>&1 && echo ok >"/tmp/deploy/$1.ok") & }
@@ -65,7 +65,7 @@ jobs:
           deploy aiRoutes --trigger-http --set-secrets=$DS --timeout=120s
           deploy planDay --trigger-http --set-secrets=$DS,$PL,$RA --timeout=120s
           deploy discoverPlaces --trigger-http --set-secrets=$DS,$PL --timeout=120s
-          deploy lookupPlace --trigger-http --set-secrets=$PL,$DS --timeout=60s
+          deploy lookupPlace --trigger-http --set-secrets=$PL,$DS,$ME --timeout=60s
           deploy suggestRoutes --trigger-http --set-secrets=$PL,$RA --timeout=40s
           deploy manageTrip --trigger-http --set-secrets=$PL --timeout=40s
           wait

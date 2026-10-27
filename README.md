@@ -92,7 +92,7 @@
 | `manageTrip` | 建立及修改旅程、管理旅伴 | — |
 | `translateNames` | 探索地點、購物物品及開支（連收據物品）名稱不是繁中時，加上繁中譯名（`zh`、`zhFor`、開支物品 `itemsZh`），原名不變（Firestore 觸發） | DeepSeek |
 
-API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`、`rapidapi-key`）。新加的密鑰要給 Cloud Functions 的服務帳戶 `secretmanager.secretAccessor` 權限。
+API key 存放在 Secret Manager（`deepseek-api-key`、`places-api-key`、`rapidapi-key`、`maps-embed-key`）。`maps-embed-key` 是瀏覽器用的 key（只限 `https://kalok81.github.io/*`，只可用 Maps Embed API），由 `lookupPlace` 的 `embedKey` 交給已登入的旅伴，用來在 App 內顯示 Google 的大眾運輸路線（Embed API 的 directions，`mode=transit`；日本的公共交通 Google 只在這裏及 Google 地圖本身提供，Routes／Directions API 沒有）。新加的密鑰要給 Cloud Functions 的服務帳戶 `secretmanager.secretAccessor` 權限。
 
 費用保護：網頁呼叫的 function 要求 Firebase App Check（reCAPTCHA Enterprise，網站金鑰在 `src/together/00-core.js` 的 `APP_CHECK_KEY`）；每位旅伴每日最多 200 次 AI 分析、300 次地圖查詢及 300 次名稱翻譯（`usage/{uid}_{日期}`，網頁不可讀寫）；Google Cloud 預算「口袋旅伴 每月預算」HK$80，用量達 50%、90%、100% 時電郵通知帳單帳戶管理員。
 

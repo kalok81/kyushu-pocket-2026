@@ -119,6 +119,8 @@ try {
   assert.match(await page.getAttribute('#routeYahoo', 'href'), /transit\.yahoo\.co\.jp.*from=%E4%B8%8A%E9%87%8E%E9%85%92%E5%BA%97.*hh=08/);
   await page.fill('#routeTime', '09:30'); await page.dispatchEvent('#routeTime', 'change'); assert.match(await page.getAttribute('#routeYahoo', 'href'), /hh=09&m1=3&m2=0/);
   await page.fill('#routeTime', '08:00'); await page.dispatchEvent('#routeTime', 'change');
+  await page.click('[data-route-embed]'); await page.waitForSelector('#routeEmbed iframe'); assert.match(await page.getAttribute('#routeEmbed iframe', 'src'), /mode=transit/);
+  assert.match(await page.getAttribute('#routeEmbed a', 'href'), /travelmode=transit/);
   // Japan by public transport: NAVITIME
   await page.click('#routeGo'); await page.waitForSelector('#routeResults [data-route-pick]');
   assert.match(await page.locator('#routeResults').innerText(), /NAVITIME/);
@@ -705,6 +707,9 @@ try {
   await page.waitForFunction(() => window.pathsRequest && document.querySelectorAll('#routeMap path.leaflet-interactive').length > 0);
   const legs = await page.evaluate(() => window.pathsRequest.paths.length); assert.equal(legs, (await page.locator('.route-list button').count()) - 1);
   await page.locator('.route-list button').nth(1).click(); assert.match(await page.locator('#routeInfo').innerText(), /由「/);
+  // Google's directions by public transport for that leg, in an embedded map (the key comes from lookupPlace)
+  await page.click('[data-route-transit]'); await page.waitForSelector('#routeTransit iframe.transit-frame');
+  assert.match(await page.getAttribute('#routeTransit iframe', 'src'), /maps\/embed\/v1\/directions\?key=test-embed-key&origin=35\.\d+%2C139\.\d+&destination=.*mode=transit/);
   assert.match(await page.locator('#routeMap path.leaflet-interactive').first().getAttribute('d'), /L.*L/, 'a street line has a bend');
   await closeSheet();
   // kept on the phone: the same day asks again for nothing
@@ -717,6 +722,8 @@ try {
   assert.match(await page.locator('.now-card').innerText(), /而家 09:30[\s\S]*下一站：\s*RINGO 上野店[\s\S]*最遲 09:40 出發 · 還有 10 分鐘/);
   if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/now-home.png' });
   await page.goto(base + '/#plan?day=3'); await page.waitForSelector('.now-card'); assert.equal(await page.locator('.now-leave.soon').count(), 1);
+  assert.match(await page.locator('.now-card a', { hasText: '導航' }).getAttribute('href'), /travelmode=transit/);
+  await page.click('[data-now-transit]'); await page.waitForSelector('#nowTransit iframe'); assert.match(await page.locator('#detail .sheet-head, #detail h2').first().innerText(), /淺草酒店|交通指引/); await closeSheet();
   if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/now-plan.png' });
   await page.click('[data-now-replan]'); await page.waitForSelector('#replanForm');
   await page.locator('#replanForm label', { hasText: '落雨' }).click(); await page.locator('#replanForm .switch-row').click();

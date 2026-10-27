@@ -2,7 +2,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import sharp from 'sharp';
 import { getFirestore } from 'firebase-admin/firestore';
-import { DEEPSEEK_API_KEY, PLACES_API_KEY, askDeepSeek, deepseekTool, requireMember, tripInfo, useQuota } from './base.js';
+import { DEEPSEEK_API_KEY, MAPS_EMBED_KEY, PLACES_API_KEY, askDeepSeek, deepseekTool, requireMember, tripInfo, useQuota } from './base.js';
 
 // Place lookup: a companion pastes a Google Maps link on 探索; we resolve it (short links included),
 // then ask the Places API for the details that pre-fill the place form.
@@ -133,8 +133,10 @@ async function placePhotoJpeg(ph) {
  const photo = (await sharp(buf, { failOn: 'none' }).rotate().resize(640, 640, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 70 }).toBuffer()).toString('base64');
  return photo.length <= 300000 ? { photo, photoBy: String(ph.authorAttributions?.[0]?.displayName || '').slice(0, 60) } : null;
 }
-export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY, DEEPSEEK_API_KEY], memory: '256MiB', timeoutSeconds: 60, maxInstances: 3 }, async req => {
+export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: true, secrets: [PLACES_API_KEY, DEEPSEEK_API_KEY, MAPS_EMBED_KEY], memory: '256MiB', timeoutSeconds: 60, maxInstances: 3 }, async req => {
  await requireMember(req);
+ // embedKey: the browser key for Google's embedded transit directions (no Google request here, so no quota)
+ if (req.data?.embedKey === true) return { key: MAPS_EMBED_KEY.value().trim() };
  await useQuota(req.auth.uid, 'maps');
  // Either a Google Maps link, or plain text (a shop name and/or address, e.g. a shopping item's 購買地點).
  const text = req.data?.query, country = typeof req.data?.country === 'string' && /^[A-Z]{2}$/.test(req.data.country) ? req.data.country : '';

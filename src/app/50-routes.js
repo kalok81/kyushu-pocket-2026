@@ -74,6 +74,26 @@
       );
     return links.length ? `<p class="route-checks">${links.join("")}</p>` : "";
   }
+  // Google's own directions by public transport, in an embedded map (Maps Embed API: Japan's trains and buses are only
+  // there and in Google Maps itself, not in the routes APIs). No departure time can be set, so Google shows its usual way.
+  const placeArg = (p) => (p ? (Number.isFinite(p.lat) && Number.isFinite(p.lng) ? `${p.lat},${p.lng}` : p.address || p.name || "") : "");
+  async function transitFrame(box, from, to) {
+    if (!box) return;
+    box.innerHTML = Kit.dots("正在載入 Google 交通指引…");
+    let key;
+    try {
+      key = await window.Together.embedKey();
+    } catch (e) {
+      box.innerHTML = `<p class="note">${esc(e.message === "offline" ? "離線中，有網絡時再試。" : fnError(e, "暫時未能載入 Google 交通指引，請稍後再試。"))}</p>`;
+      return;
+    }
+    if (!box.isConnected) return;
+    const o = placeArg(from),
+      d = placeArg(to),
+      q = new URLSearchParams({ key, origin: o, destination: d, mode: "transit", language: "zh-TW", ...(meta.country ? { region: meta.country } : {}) }),
+      gm = `https://www.google.com/maps/dir/?${new URLSearchParams({ api: "1", origin: o, destination: d, travelmode: "transit" })}`;
+    box.innerHTML = `<iframe class="transit-frame" title="Google 交通指引" loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen src="https://www.google.com/maps/embed/v1/directions?${q}"></iframe><p class="note transit-note">Google 地圖建議的大眾運輸路線，按 Google 預設的出發時間，未必是行程的時間。${Kit.btn("在 Google 地圖看班次", { href: gm, external: true, size: "sm", variant: "ghost", icon: "map" })}</p>`;
+  }
   // The link between two time slots on the plan: a dot on the timeline with the chosen way to get to the next slot.
   // The day starts at last night's hotel (from 住宿) unless its first stop is a hotel: shown above the first stop,
   // not saved, so it follows 住宿; the way from it is the first stop's transport.
@@ -138,7 +158,7 @@
               .map(([k, [v]]) => `<option value="${k}">${v}</option>`)
               .join(
                 "",
-              )}</select></label></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { href: "#", external: true, size: "sm", icon: "map", attrs: { id: "routeGm", title: "在 Google 地圖查看" } })}${meta.country === "JP" ? Kit.btn("Yahoo", { href: "#", external: true, size: "sm", icon: "train", attrs: { id: "routeYahoo", title: "Yahoo!乗換案内：實際班次" } }) : ""}${Kit.btn("AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
+              )}</select></label></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { href: "#", external: true, size: "sm", icon: "map", attrs: { id: "routeGm", title: "在 Google 地圖查看" } })}${meta.country === "JP" ? Kit.btn("Yahoo", { href: "#", external: true, size: "sm", icon: "train", attrs: { id: "routeYahoo", title: "Yahoo!乗換案内：實際班次" } }) : ""}${Kit.btn("AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div>${Kit.btn("Google 交通指引", { size: "sm", variant: "ghost", icon: "train", cls: "route-embed-btn", attrs: { "data-route-embed": true } })}<div id="routeEmbed"></div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
           : '<p class="note">這天前面沒有站點，亦未有住宿資料，未能查詢路線；可以自行填寫。</p>'
       }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label>${Kit.btn("儲存交通", { type: "submit", variant: "secondary" })}</form>`,
     );
@@ -176,6 +196,11 @@
       y.hidden = r.mode !== "TRANSIT";
     }
   }
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("[data-route-embed]")) return;
+    const r = routeInputs();
+    if (r) transitFrame($("#routeEmbed"), { ...r.from.point, name: r.from.name }, r.dest);
+  });
   document.addEventListener("change", (e) => {
     if (["routeFrom", "routeTime", "routeMode", "routeTo"].includes(e.target.id)) routeLinks();
   });

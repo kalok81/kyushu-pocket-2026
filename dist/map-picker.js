@@ -21,13 +21,14 @@ window.MapPicker=(()=>{
  }
  // The day's route: numbered stops in order with the way between them along the streets (lines(stops) gives one
  // [mode, points] per leg: walking dotted, by road solid; a straight dashed line until then, or where there is none,
- // e.g. a train), a Google Maps link for directions. Tapping a stop (pin or list) shows how to get there.
- async function route({title,stops,openDialog,esc,lines}){
+ // e.g. a train), a Google Maps link for directions. Tapping a stop (pin or list) shows how to get there, and
+ // transit(from, to, box) puts Google's directions by public transport for that leg in the box.
+ async function route({title,stops,openDialog,esc,lines,transit}){
   const dialog=document.querySelector('#detail'),pts=stops.slice(0,10);
   const gmaps=pts.length>1?`https://www.google.com/maps/dir/${pts.map(s=>`${s.lat},${s.lng}`).join('/')}`:`https://www.google.com/maps/search/?api=1&query=${pts[0].lat},${pts[0].lng}`;
-  openDialog(`${window.Kit.sheetHead(esc(title), "當天路線")}<div id="mapLoad">${window.Kit.dots("正在載入地圖…")}</div><div id="routeMap" class="pin-map route-map" role="region" aria-label="當天路線地圖"></div><p id="routeInfo" class="route-info" aria-live="polite">點地圖上的號碼或下面的站點，看怎樣去。</p><ol class="route-list">${stops.map((s,k)=>`<li><button type="button" data-route-stop="${k}"><b>${s.n}</b><span>${esc(s.time)}</span>${esc(s.title)}</button></li>`).join('')}</ol>${window.Kit.btn("在 Google 地圖查看路線", { variant: "primary", cls: "btn-block route-go", href: gmaps, external: true })}<p class="note">${stops.length>10?'Google 地圖連結最多包括頭 10 個站點。':''}<span class="route-key"><i class="road"></i>道路（巴士、的士）<i class="walk"></i>步行<i class="none"></i>直線（火車或未有路線）</span>同一時間有多個選擇時，只顯示第一個；沒有座標的站點不會顯示。地圖由 OpenStreetMap 提供，路線由 Google 地圖提供。</p>`);
+  openDialog(`${window.Kit.sheetHead(esc(title), "當天路線")}<div id="mapLoad">${window.Kit.dots("正在載入地圖…")}</div><div id="routeMap" class="pin-map route-map" role="region" aria-label="當天路線地圖"></div><div id="routeInfo" class="route-info" aria-live="polite">點地圖上的號碼或下面的站點，看怎樣去。</div><div id="routeTransit"></div><ol class="route-list">${stops.map((s,k)=>`<li><button type="button" data-route-stop="${k}"><b>${s.n}</b><span>${esc(s.time)}</span>${esc(s.title)}</button></li>`).join('')}</ol>${window.Kit.btn("在 Google 地圖查看路線", { variant: "primary", cls: "btn-block route-go", href: gmaps, external: true })}<p class="note">${stops.length>10?'Google 地圖連結最多包括頭 10 個站點。':''}<span class="route-key"><i class="road"></i>道路（巴士、的士）<i class="walk"></i>步行<i class="none"></i>直線（火車或未有路線）</span>同一時間有多個選擇時，只顯示第一個；沒有座標的站點不會顯示。地圖由 OpenStreetMap 提供，路線由 Google 地圖提供。</p>`);
   dialog.classList.add('map-picker-dialog');let map;const end=()=>{if(map)map.remove();map=null;dialog.classList.remove('map-picker-dialog');dialog.removeEventListener('click',pick)};dialog.addEventListener('close',end,{once:true});
-  let show=()=>{};const pick=e=>{const b=e.target.closest('[data-route-stop]');if(b)show(Number(b.dataset.routeStop),true)};dialog.addEventListener('click',pick);
+  let show=()=>{};const pick=e=>{const b=e.target.closest('[data-route-stop]');if(b)show(Number(b.dataset.routeStop),true);const t=e.target.closest('[data-route-transit]');if(t&&transit){const k=Number(t.dataset.routeTransit);t.remove();transit(stops[k-1],stops[k],document.querySelector('#routeTransit'))}};dialog.addEventListener('click',pick);
   try{await load();const el=document.querySelector('#routeMap');if(!dialog.open||!el)return;document.querySelector('#mapLoad').remove();
    const L=window.L;map=L.map(el,{scrollWheelZoom:false});
    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors'}).addTo(map);
@@ -35,7 +36,7 @@ window.MapPicker=(()=>{
    const legs=ll.slice(1).map((b,k)=>L.polyline([ll[k],b],style.none).addTo(map));
    const marks=stops.map((s,k)=>L.marker([s.lat,s.lng],{icon:L.divIcon({className:'route-pin'+(typeof s.n==='number'?'':' route-pin-start'),html:`<span>${s.n}</span>`,iconSize:[28,28],iconAnchor:[14,14]}),title:s.title,alt:`${s.n} ${s.title}`}).addTo(map).bindTooltip(esc(`${s.n}. ${s.title}`)).on('click',()=>show(k)));
    show=(k,pan)=>{const s=stops[k],info=document.querySelector('#routeInfo');if(!s||!info)return;legs.forEach((l,j)=>l.setStyle({weight:j===k-1?7:4}));document.querySelectorAll('[data-route-stop]').forEach(b=>b.classList.toggle('on',Number(b.dataset.routeStop)===k));
-    info.innerHTML=`<b>${esc(String(s.n))}. ${esc(s.title)}</b>${s.time?` <small>${esc(s.time)}</small>`:''}<br>${k?`由「${esc(stops[k-1].title)}」：${s.leg?esc(s.leg):'未有交通，可在行程按「查交通」。'}`:'這天由這裏出發。'}`;if(pan){map.panTo(ll[k]);marks[k].openTooltip()}};
+    info.innerHTML=`<b>${esc(String(s.n))}. ${esc(s.title)}</b>${s.time?` <small>${esc(s.time)}</small>`:''}<br>${k?`由「${esc(stops[k-1].title)}」：${s.leg?esc(s.leg):'未有交通，可在行程按「查交通」。'}`:'這天由這裏出發。'}${k&&transit?window.Kit.btn('Google 交通指引',{size:'sm',variant:'ghost',icon:'train',attrs:{'data-route-transit':k}}):''}`;const tb=document.querySelector('#routeTransit');if(tb)tb.innerHTML='';if(pan){map.panTo(ll[k]);marks[k].openTooltip()}};
    if(ll.length>1)map.fitBounds(ll,{padding:[30,30],maxZoom:16});else map.setView(ll[0],15);
    map.invalidateSize();
    if(lines&&ll.length>1)lines(stops).then(got=>{if(!map)return;got.forEach((g,k)=>{if(g&&g.pts.length>1)legs[k].setLatLngs(g.pts).setStyle(style[g.mode]||style.DRIVE)})}).catch(()=>{});

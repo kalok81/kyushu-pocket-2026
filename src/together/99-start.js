@@ -20,6 +20,7 @@
     lookupPlace,
     placesNear,
     streetPaths,
+    embedKey,
     placePhotos,
     shrink,
     suggestRoutes,

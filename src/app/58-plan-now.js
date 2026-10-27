@@ -50,9 +50,11 @@
       body = `<p class="now-next">下一站：<b>${esc(next.s.title)}</b><span>${esc(next.s.time)}</span></p><p class="now-leave${left < 0 ? " late" : left <= 15 ? " soon" : ""}">${icon("clock")}<span>最遲 <b>${hm(Math.max(0, lv.at))}</b> 出發${lv.ride ? `，搭 ${esc(lv.ride)}` : ""} · ${left < 0 ? `已過 ${span(-left)}` : left === 0 ? "現在出發" : `還有 ${span(left)}`}</span></p>`;
     } else body = `<p class="now-next">今天的行程已完成${end ? `，回「<b>${esc(end.name)}</b>」` : ""}。</p>`;
     const goTo = next ? next.s.target || next.s.title : end ? `${end.name} ${end.address || ""}`.trim() : "";
+    nowLeg = { [day]: next && prev ? { from: !prev.title ? { ...hotelPoint(prev), name: prev.name } : { ...stopPoint(prev), name: prev.title }, to: { ...stopPoint(next.s), name: next.s.title }, title: `${prev.title || prev.name} → ${next.s.title}` } : null };
     const rest = slots.filter((x) => x.a == null || x.a > m).length;
-    return `<section class="now-card" data-now="${day}" aria-live="polite"><p class="now-head"><b>而家 ${hm(m)}</b>${here ? `<span>在「${esc(here.s.title)}」，到 ${hm(here.e)}</span>` : ""}</p>${body}<div class="now-actions">${goTo ? Kit.btn("導航", { href: route(goTo), external: true, size: "sm", variant: "secondary", icon: "route" }) : ""}${rest ? Kit.btn("AI 調整餘下行程", { size: "sm", icon: "sparkles", attrs: { "data-now-replan": day } }) : ""}</div></section>`;
+    return `<section class="now-card" data-now="${day}" aria-live="polite"><p class="now-head"><b>而家 ${hm(m)}</b>${here ? `<span>在「${esc(here.s.title)}」，到 ${hm(here.e)}</span>` : ""}</p>${body}<div class="now-actions">${goTo ? Kit.btn("導航", { href: `https://www.google.com/maps/dir/?${new URLSearchParams({ api: "1", destination: goTo, travelmode: "transit" })}`, external: true, size: "sm", variant: "secondary", icon: "route" }) : ""}${nowLeg[day] ? Kit.btn("交通指引", { size: "sm", icon: "train", attrs: { "data-now-transit": day } }) : ""}${rest ? Kit.btn("AI 調整餘下行程", { size: "sm", icon: "sparkles", attrs: { "data-now-replan": day } }) : ""}</div></section>`;
   }
+  let nowLeg = {};
   // On 總覽 and on the plan of today (the main 方案 or the one on screen)
   const nowFor = (day) => (day && day === todayDay() ? nowCard(day) : "");
   setInterval(() => {
@@ -155,6 +157,11 @@
     const el = e.target.closest("button");
     if (!el) return;
     if (el.dataset.nowReplan) replanForm(Number(el.dataset.nowReplan));
+    const leg = el.dataset.nowTransit && nowLeg[el.dataset.nowTransit];
+    if (leg) {
+      openDialog(`${Kit.sheetHead("交通指引", esc(leg.title))}<div id="nowTransit"></div>`);
+      transitFrame($("#nowTransit"), leg.from, leg.to);
+    }
     if (el.dataset.replanApply !== undefined) applyReplan();
     if (el.dataset.replanAgain !== undefined && replan) {
       const form = $("#replanForm");
