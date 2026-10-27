@@ -112,15 +112,10 @@ try {
   await page.locator('[data-route-link]').first().click();
   assert.match(await page.locator('#routeFrom option:checked').innerText(), /上野酒店/);
   assert.equal(await page.inputValue('#routeTime'), '08:00');
-  // one row before any search: 查路線, Google 地圖, Yahoo!乗換 and AI 分析, the links filled in for the current choices
-  assert.deepEqual(await page.locator('.route-actions > .btn:visible').allInnerTexts(), ['查路線', 'Google', 'Yahoo', 'AI 分析']);
-  assert.equal(new Set(await page.locator('.route-actions > .btn:visible').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)))).size, 1, 'all four on one line');
-  assert.match(await page.getAttribute('#routeGm', 'href'), /travelmode=transit/);
-  assert.match(await page.getAttribute('#routeYahoo', 'href'), /transit\.yahoo\.co\.jp.*from=%E4%B8%8A%E9%87%8E%E9%85%92%E5%BA%97.*hh=08/);
-  await page.fill('#routeTime', '09:30'); await page.dispatchEvent('#routeTime', 'change'); assert.match(await page.getAttribute('#routeYahoo', 'href'), /hh=09&m1=3&m2=0/);
-  await page.fill('#routeTime', '08:00'); await page.dispatchEvent('#routeTime', 'change');
-  await page.click('[data-route-embed]'); await page.waitForSelector('#routeEmbed iframe'); assert.match(await page.getAttribute('#routeEmbed iframe', 'src'), /mode=transit/);
-  assert.match(await page.getAttribute('#routeEmbed a', 'href'), /travelmode=transit/);
+  // one row: 查路線 (Yahoo!乗換案内's timetables in Japan), one Google (Google Maps by names, public transport) and AI 分析
+  assert.deepEqual(await page.locator('.route-actions > .btn:visible').allInnerTexts(), ['查路線', 'Google', 'AI 分析']);
+  assert.equal(new Set(await page.locator('.route-actions > .btn:visible').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)))).size, 1, 'all on one line');
+  assert.match(await page.getAttribute('#routeGm', 'href'), /travelmode=transit/); assert.match(decodeURIComponent(await page.getAttribute('#routeGm', 'href')), /origin=上野酒店/);
   // Japan by public transport: NAVITIME
   await page.click('#routeGo'); await page.waitForSelector('#routeResults [data-route-pick]');
   assert.match(await page.locator('#routeResults').innerText(), /NAVITIME/);
@@ -137,12 +132,13 @@ try {
   // no train or bus found (Google's walk-only answer is not public transport): a note, and Google's directions open
   await page.evaluate(() => { window.noTransitNext = true; document.querySelector('#routeEmbed').innerHTML = ''; }); await page.uncheck('[name=routeMode][value=WALK]'); await page.click('#routeGo');
   await page.waitForSelector('#routeEmbed iframe'); assert.match(await page.locator('#routeResults').innerText(), /沒有方便的火車，多數要搭巴士/);
+  assert.match(await page.getAttribute('#routeEmbed a.transit-go', 'href'), /travelmode=transit/);
   // Yahoo!乗換案内: real timetables with platforms; the names and addresses go with the request
   await page.evaluate(() => { window.yahooNext = true; }); await page.click('#routeGo'); await page.waitForFunction(() => /Yahoo!乗換案内 提供/.test(document.querySelector('#routeResults')?.innerText || ''));
   assert.match(await page.locator('#routeResults').innerText(), /08:10–08:15 · 1番線/);
   const yreq = await page.evaluate(() => window.routeRequest); assert.equal(yreq.originName, '上野酒店'); assert.match(yreq.originText, /東京都台東區上野/); assert.equal(yreq.destinationName, '淺草寺');
   await page.check('[name=routeMode][value=WALK]');
-  await page.uncheck('[name=routeMode][value=TRANSIT]'); assert.equal(await page.locator('#routeYahoo').isHidden(), true, 'Yahoo is for public transport');
+  await page.uncheck('[name=routeMode][value=TRANSIT]');
   await page.click('#routeGo'); await page.waitForFunction(() => !document.querySelector('.route-mode-head') && document.querySelector('[data-route-pick]'));
   await page.click('[data-route-pick]'); await page.waitForFunction(() => document.querySelector('#routeManual textarea').value.includes('步行約 12 分'));
   await page.fill('#routeManual textarea', '🚶 3 分 → 🚇 銀座線 上野 → 淺草（約 10:02–10:07） → 🚌 都バス 淺草 → 雷門一丁目（10:10–10:14）｜約 14 分'); await page.click('#routeManual button[type=submit]');

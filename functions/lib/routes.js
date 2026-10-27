@@ -151,6 +151,12 @@ export const aiRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: tru
  await useQuota(req.auth.uid, 'ai');
  const where = String(d.destination?.region || d.place || '').slice(0, 80), when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.time || '') ? d.time.replace('T', ' ') : '';
  const cur = typeof d.currency === 'string' && /^[A-Z]{3}$/.test(d.currency) ? d.currency : 'JPY';
+ // Japan: the AI weighs Yahoo!乗換案内's real routes (times, train numbers, platforms, fares stay Yahoo's) and adds
+ // its advice; it estimates the ways only where Yahoo has none.
+ if (d.country === 'JP') {
+  const real = await yahooRoutes(req.auth.uid, d.origin, d.destination, String(d.time || ''), 4).catch(() => null);
+  if (real?.length) return aiOnReal(real, from, to, when, cur);
+ }
  const prompt = `You are a local transport expert helping Hong Kong travellers${where ? ` in ${where}` : ''}.
 Suggest the practical ways to get from A to B${when ? ` leaving around ${when} local time` : ''}.
 A: ${from}
@@ -175,3 +181,25 @@ Reply with JSON only:
  })).filter(o => o.steps.length);
  return { options, advice: text(r?.advice, 300) };
 });
+// The real routes in a line each for the model: "0: 08:53–09:43, 50 min, ¥2430, 1 change: 博多 08:53 JR 新幹線みずほ602号 → 小倉 09:09; 小倉 09:30 JR 山陽本線 → 下関 09:43"
+async function aiOnReal(real, from, to, when, cur) {
+ const line = (o, i) => `${i}: ${o.minutes} min${o.fare ? `, ¥${o.fare.amount}` : ''}: ${o.steps.map(s => (s.mode === 'WALK' ? `walk ${s.minutes} min` : `${s.from} ${s.depart} ${s.line} → ${s.to} ${s.arrive}`)).join('; ')}`;
+ const prompt = `You help Hong Kong travellers in Japan choose how to get from A to B${when ? ` leaving around ${when}` : ''}. These are the real routes from a Japanese timetable service:
+A: ${from}
+B: ${to}
+${real.map(line).join('\n')}
+Reply with JSON only: {"picks": [{"i": number, "title": string, "note": string}], "advice": string}
+- picks: the routes worth taking, best first (at most 4), each once. title: a short label (e.g. 最快, 最平, 唔使轉車, 少行路). note: what to watch out for: transfer time, which trains a JR Pass covers (JR lines yes; buses, subways, private railways and ferries no), seat reservation, luggage, last trains.
+- advice: one or two sentences comparing them.
+- All text in Traditional Chinese as used in Hong Kong. Do not change any time, train, platform or fare.`;
+ let r = null;
+ try { r = await askDeepSeek(prompt, [], { think: false }); } catch (e) { console.error('aiRoutes real', e?.message); }
+ const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ const picks = (Array.isArray(r?.picks) ? r.picks : []).filter(p => Number.isInteger(p?.i) && real[p.i]).filter((p, k, all) => all.findIndex(x => x.i === p.i) === k);
+ const order = picks.length ? picks : real.map((_, i) => ({ i }));
+ return {
+  source: 'yahoo',
+  options: order.slice(0, 4).map(p => ({ ...real[p.i], title: text(p.title, 40), note: text(p.note, 200), confidence: 'high', source: 'yahoo' })),
+  advice: text(r?.advice, 300),
+ };
+}
