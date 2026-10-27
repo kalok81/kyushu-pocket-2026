@@ -56,6 +56,67 @@
     changeDay(day, list.map((s, i) => (found[i] ? { ...s, transport: found[i].slice(0, 500) } : s)), `已填入 ${n} 段交通${ai ? "（AI 估算的部分出發前請再確認）" : ""}`);
   }
 
+  // The time slots of a day for planDay: place, kind, hours, current time, transport to it and note; fixed(s, n) marks
+  // the times that must stay.
+  const aiStops = (gs, fixed) =>
+    gs.map((g, n) => {
+      const s = g[0].s,
+        p = placeOf(s);
+      return {
+        k: String(n),
+        ...placeForAi(s),
+        name: g.map((x) => x.s.title).join(" / "),
+        type: isStation(s) ? "transport stop (station, bus stop, airport): only where they change trains or buses" : s.hotelId ? (n === 0 ? "hotel: where the day starts" : n === gs.length - 1 ? "hotel: where the day ends" : "hotel: check-in or leaving luggage on the way") : p?.v[2] || p?.cats.join("、") || "",
+        hours: String(p?.v[5] || "").slice(0, 300),
+        time: s.time || "",
+        fixed: fixed(s, n),
+        stay: s.manual || isStation(s) ? stayOf(s, n === 0 || n === gs.length - 1 ? "edge" : "mid") : 0,
+        transport: String(s.transport || "").slice(0, 300),
+        note: String(s.note || "").slice(0, 200),
+      };
+    });
+
+  // 推算時間: the AI times the day in its order with the transport already chosen (train and bus times in it are kept);
+  // times the traveller typed stay. Applied at once, with 復原.
+  async function aiTimes(day) {
+    const list = stopsFor(day),
+      gs = stopGroups(list),
+      d = days[day - 1],
+      first = startMinute(list[0]?.time);
+    if (gs.length < 2) return toast("最少要有兩個站點。");
+    const done = Kit.busy($("#planToolsInfo"), { text: "AI 正在按交通、營業時間及停留時間推算…", seconds: 25 });
+    let r;
+    try {
+      r = await window.Together.planDay({
+        mode: "times",
+        date: isoDash(d),
+        weekday: d.weekday,
+        region: meta.destination || d.region,
+        currency: meta.currency || "JPY",
+        startTime: hm(first ?? 9 * 60),
+        end: gs.at(-1)[0].s.hotelId ? null : (() => {
+          const h = dayEndHotel(day);
+          return h ? { k: "end", ...placeForAi({ title: h.name, address: h.address, lat: h.lat, lng: h.lng }) } : null;
+        })(),
+        stops: aiStops(gs, (s, n) => (!!s.manual && startMinute(s.time) != null) || (n === 0 && !!s.hotelId && first != null)),
+      });
+    } catch (e) {
+      toast(fnError(e, "AI 未能推算時間，請稍後再試。"));
+      return;
+    } finally {
+      done();
+    }
+    if (!Object.keys(r.times).length) return toast("AI 未有回覆時間，請再試一次。");
+    if (JSON.stringify(stopsFor(day)) !== JSON.stringify(list)) return toast("這天的行程剛剛改動了，請再按一次「推算時間」。");
+    const after = [...list];
+    gs.forEach((g, n) => {
+      const k = String(n);
+      for (const { s, i } of g) after[i] = { ...s, time: r.times[k] || s.time, manual: !!s.manual, warn: r.warnings[k] || "" };
+    });
+    const warned = Object.keys(r.warnings).length;
+    changeDay(day, after, `已由 AI 推算時間${warned ? `，有 ${warned} 個提示` : ""}`, `${r.advice ? r.advice + " " : ""}時間由 AI 估算，出發前請再確認。`);
+  }
+
   // ✨ AI 安排: order, times and transport for the whole day in one go, shown first and applied only when accepted.
   let aiPlan = null;
   function aiArrangeForm(day) {
@@ -87,20 +148,7 @@
         startTime,
         start: start ? { k: "start", ...placeForAi({ title: start.name, address: start.address, lat: start.lat, lng: start.lng }) } : null,
         end: end ? { k: "end", ...placeForAi({ title: end.name, address: end.address, lat: end.lat, lng: end.lng }) } : null,
-        stops: gs.map((g, n) => {
-          const s = g[0].s,
-            p = placeOf(s);
-          return {
-            k: String(n),
-            ...placeForAi(s),
-            name: g.map((x) => x.s.title).join(" / "),
-            type: isStation(s) ? "transport stop (station, bus stop, airport): only where they change trains or buses" : s.hotelId ? (n === 0 ? "hotel: where the day starts" : n === gs.length - 1 ? "hotel: where the day ends" : "hotel: check-in or leaving luggage on the way") : p?.v[2] || p?.cats.join("、") || "",
-            hours: String(p?.v[5] || "").slice(0, 300),
-            time: s.time || "",
-            fixed: (keep && startMinute(s.time) != null) || (n === 0 && !!s.hotelId),
-            stay: s.manual || isStation(s) ? stayOf(s, n === 0 || n === gs.length - 1 ? "edge" : "mid") : 0,
-          };
-        }),
+        stops: aiStops(gs, (s, n) => (keep && startMinute(s.time) != null) || (n === 0 && !!s.hotelId)),
       });
       aiPlan = { day, gs, r, before: list };
       const legOf = (k) => r.legs.find((l) => l.k === k);

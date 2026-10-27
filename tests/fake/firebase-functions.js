@@ -7,6 +7,7 @@ export const httpsCallable=(f,name)=>async data=>{
  if(name==='planDay'){window.planRequest=data;
   const leg=k=>({k,minutes:15,fare:{currency:'JPY',amount:210},confidence:'medium',steps:[{mode:'WALK',minutes:3},{mode:'TRANSIT',vehicle:'SUBWAY',line:'銀座線',from:'上野',to:'淺草',minutes:8},{mode:'WALK',minutes:4}]});
   if(data.mode==='routes')return {data:{legs:data.legs.map(l=>leg(l.k))}};
+  if(data.mode==='times')return {data:{advice:'下午有空檔。',times:Object.fromEntries(data.stops.map((st,j)=>[st.k,`${String(9+j).padStart(2,'0')}:00–${String(9+j).padStart(2,'0')}:45`])),warnings:{[data.stops[1].k]:'轉車只有 3 分鐘'}}};
   if(data.mode==='suggest')return {data:{advice:'午餐可以就近解決。',picks:data.candidates.slice(0,2).map(c=>({k:c.k,reason:'就近，步行 5 分鐘'}))}};
   const order=data.stops.map(s=>s.k).reverse();return {data:{advice:'先去遠的地方。',order,times:Object.fromEntries(order.map((k,j)=>[k,`${String(9+j*2).padStart(2,'0')}:00–${String(10+j*2).padStart(2,'0')}:00`])),legs:order.slice(1).map(leg),warnings:{[order[1]]:'星期一休息'}}}}
  if(name==='aiRoutes'){window.aiRequest=data;return {data:{advice:'銀座線最快。',options:[{title:'最快',confidence:'high',minutes:15,fare:{currency:'JPY',amount:180},note:'1 號出口',steps:[{mode:'WALK',minutes:3},{mode:'TRANSIT',vehicle:'SUBWAY',line:'銀座線',from:'上野',to:'淺草',minutes:5},{mode:'WALK',minutes:4}]},{title:'的士',confidence:'low',minutes:12,fare:{currency:'JPY',amount:1500},note:'',steps:[{mode:'TAXI',minutes:12}]}]}}}

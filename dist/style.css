@@ -423,6 +423,8 @@ details.more:not([open]) .menu{display:none}
 .plan-variants .chip small{margin-left:4px;font-size:var(--fs-xs);font-weight:600;color:var(--muted-foreground)}
 .plan-variants .chip.active small{color:inherit;opacity:.8}
 .plan-tools{display:flex;gap:8px;overflow-x:auto;margin:-4px 0 14px;padding:2px 0 4px;scrollbar-width:none}
+.plan-advice{display:flex;gap:6px;margin:-8px 0 14px;padding:8px 12px;border-radius:var(--r-md);background:var(--secondary);color:var(--foreground)}
+.plan-advice .icon{flex:none;width:16px;height:16px;margin-top:2px;color:var(--primary)}
 .plan-tools::-webkit-scrollbar{display:none}
 .plan-tools .btn{flex:none}
 

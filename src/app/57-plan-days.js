@@ -57,7 +57,7 @@
       ["推算時間", "clock", "data-plan-times"],
     ]
       .map(([label, ic, attr]) => Kit.btn(label, { size: "sm", icon: ic, attrs: { [attr]: true, ...(stops.length < 2 && attr !== "data-plan-routes" ? { disabled: true } : {}) } }))
-      .join("")}</div><p class="note" id="planToolsInfo" hidden></p>`;
+      .join("")}</div>${planAdvice?.day === selectedDay ? `<p class="note plan-advice">${icon("sparkles")} ${esc(planAdvice.text)}</p>` : ""}<p class="note" id="planToolsInfo" hidden></p>`;
   }
   document.addEventListener("click", (e) => {
     const el = e.target.closest("button");
@@ -83,12 +83,7 @@
     if (el.dataset.planOrder !== undefined) orderByDistance(day);
     if (el.dataset.planRoutes !== undefined) fillRoutes(day);
     if (el.dataset.planAi !== undefined) aiArrangeForm(day);
-    if (el.dataset.planTimes !== undefined) {
-      const after = retimed(stopsFor(day)),
-        end = after.at(-1)?.time.match(/(\d{1,2}):(\d{2})\s*$/),
-        late = end && (Number(end[1]) >= 22 || Number(end[1]) < 5);
-      changeDay(day, after, late ? `已推算；最後一站 ${end[0]}，太夜了，可以考慮刪減` : "已按交通及停留時間推算（車站只計 5 分鐘）");
-    }
+    if (el.dataset.planTimes !== undefined) aiTimes(day);
     if (el.dataset.aiPlanApply !== undefined) applyAiPlan();
     if (el.dataset.aiPlanAgain !== undefined && aiPlan) aiArrange(aiPlan.day, $("#aiPlanForm")?.elements.keep?.checked, $("#aiPlanForm")?.elements.start?.value || "");
     if (el.dataset.ppAiAgain !== undefined) {

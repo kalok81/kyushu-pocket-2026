@@ -76,8 +76,11 @@
     return out;
   }
   const hasTimes = (list) => list.some((s) => startMinute(s.time) != null);
-  function changeDay(day, after, text) {
+  // advice: the AI's word on the change, shown under the day's tools until the day changes again
+  let planAdvice = null;
+  function changeDay(day, after, text, advice = "") {
     const before = stopsFor(day);
+    planAdvice = advice ? { day, text: advice } : null;
     savePlan(day, after);
     Kit.snack(text, { action: "復原" }).then((undo) => undo && savePlan(day, before));
   }

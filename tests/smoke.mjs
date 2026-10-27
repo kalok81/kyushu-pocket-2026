@@ -454,7 +454,12 @@ try {
   assert.deepEqual(await titles(), [...four].reverse()); assert.match(await page.locator('.timeline .time').first().innerText(), /09:00–10:00/);
   await page.click('.snack-action'); await page.waitForFunction((t) => document.querySelector('.timeline h3').firstChild.textContent.trim() === t, four[0]);
   // 推算時間 and dragging the first slot to the end
-  await page.click('[data-plan-times]'); await page.waitForFunction(() => /^09:00–\d\d:\d\d/.test(document.querySelector('.timeline .time').innerText));
+  await page.click('[data-plan-times]'); await page.waitForFunction(() => /^09:00–09:45/.test(document.querySelector('.timeline .time').innerText));
+  assert.equal((await page.evaluate(() => window.planRequest)).mode, 'times', '推算時間 asks the AI');
+  assert.ok((await page.evaluate(() => window.planRequest)).stops.some((st) => st.transport), 'the chosen transport goes with the stops');
+  assert.match(await page.locator('#toast').innerText(), /AI 推算時間/);
+  await page.waitForSelector('.plan-advice'); assert.match(await page.locator('.plan-advice').innerText(), /下午有空檔/);
+  await page.waitForSelector('.timeline .stop-warn');
   // the page re-renders after each save: wait until it settles before measuring
   await page.waitForTimeout(500);
   let grip, last;
