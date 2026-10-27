@@ -115,7 +115,10 @@ try {
   // one row: 查路線 (Yahoo!乗換案内's timetables in Japan), one Google (Google Maps by names, public transport) and AI 分析
   assert.deepEqual(await page.locator('.route-actions > .btn:visible').allInnerTexts(), ['查路線', 'Google', 'AI 分析']);
   assert.equal(new Set(await page.locator('.route-actions > .btn:visible').evaluateAll((bs) => bs.map((b) => Math.round(b.getBoundingClientRect().top)))).size, 1, 'all on one line');
-  assert.match(await page.getAttribute('#routeGm', 'href'), /travelmode=transit/); assert.match(decodeURIComponent(await page.getAttribute('#routeGm', 'href')), /origin=上野酒店/);
+  // Google: its map below (names and addresses), with a button for the Google Maps app
+  await page.click('#routeGm'); await page.waitForSelector('#routeEmbed iframe');
+  const src = decodeURIComponent(await page.getAttribute('#routeEmbed iframe', 'src')); assert.match(src, /mode=transit/); assert.match(src, /origin=上野酒店/);
+  assert.match(await page.getAttribute('#routeEmbed a.transit-go', 'href'), /travelmode=transit/); await page.evaluate(() => { document.querySelector('#routeEmbed').innerHTML = ''; });
   // Japan by public transport: NAVITIME
   await page.click('#routeGo'); await page.waitForSelector('#routeResults [data-route-pick]');
   assert.match(await page.locator('#routeResults').innerText(), /NAVITIME/);
