@@ -433,7 +433,7 @@ try {
   await page.click('[data-plan-pick]');
   for (let k = 0; k < 3; k++) await page.locator('[data-pp-add]').first().click();
   await closeSheet(); await page.waitForFunction(() => document.querySelectorAll('.timeline h3').length === 3);
-  assert.equal(await page.locator('.plan-tools button').count(), 4);
+  assert.equal(await page.locator('.plan-tools button').count(), 3);
   // ✨ AI 推薦 in the picker gives reasons; the ＋ between two stops inserts there
   const before = await titles();
   await page.locator('.stop-link .link-add').nth(1).click(); await page.waitForSelector('#ppList');
