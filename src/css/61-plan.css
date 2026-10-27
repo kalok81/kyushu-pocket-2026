@@ -141,5 +141,5 @@
 .now-leave.late{color:var(--destructive,#b42318);font-weight:700}
 .now-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
 .replan-why{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0;padding:0;border:0}
-.replan-why legend{margin-bottom:6px;font-weight:600}
+.replan-why legend{margin-bottom:6px;padding:0;font-weight:600}
 .replan-dropped{color:var(--muted-foreground)}

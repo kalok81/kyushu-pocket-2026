@@ -130,7 +130,12 @@ try {
   const req = await page.evaluate(() => window.aiRequest); assert.equal(req.origin.name, '上野酒店'); assert.equal(req.destination.name, '淺草寺'); assert.equal(req.currency, 'JPY');
   await page.locator('[data-route-ai-pick]').first().click();
   await page.waitForFunction(() => /最快：.*銀座線 上野 → 淺草.*（AI 估算）/.test(document.querySelector('#routeManual textarea').value));
-  await page.selectOption('#routeMode', 'WALK'); await page.click('#routeGo'); await page.waitForSelector('[data-route-pick]');
+  // 方式 are checkboxes: several at once are asked for in turn, each under its own heading
+  await page.check('[name=routeMode][value=WALK]'); await page.click('#routeGo'); await page.waitForSelector('.route-mode-head >> nth=1');
+  assert.deepEqual(await page.locator('.route-mode-head').allInnerTexts(), ['公共交通', '步行']);
+  if (process.env.SHOTS) await page.locator('.route-form').screenshot({ path: process.env.SHOTS + '/route-modes.png' });
+  await page.uncheck('[name=routeMode][value=TRANSIT]'); assert.equal(await page.locator('#routeYahoo').isHidden(), true, 'Yahoo is for public transport');
+  await page.click('#routeGo'); await page.waitForFunction(() => !document.querySelector('.route-mode-head') && document.querySelector('[data-route-pick]'));
   await page.click('[data-route-pick]'); await page.waitForFunction(() => document.querySelector('#routeManual textarea').value.includes('步行約 12 分'));
   await page.fill('#routeManual textarea', '🚶 3 分 → 🚇 銀座線 上野 → 淺草（約 10:02–10:07） → 🚌 都バス 淺草 → 雷門一丁目（10:10–10:14）｜約 14 分'); await page.click('#routeManual button[type=submit]');
   await page.waitForSelector('.route-dot.has-route'); assert.match(await page.locator('[data-route-link]').first().innerText(), /銀座線 上野 → 淺草/);
