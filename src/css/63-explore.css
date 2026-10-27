@@ -24,7 +24,6 @@
 .place-photo figcaption{margin-top:4px;font-size:var(--fs-xs);color:var(--muted-foreground)}
 .place-photo .place-photo-del{position:absolute;top:8px;right:8px;border-radius:50%;background:var(--card)}
 .place-photo-actions{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 8px}
-.place-photo-actions label.btn{cursor:pointer}
 .photo-pick{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:0 0 12px}
 .photo-pick button{all:unset;aspect-ratio:1;overflow:hidden;border-radius:var(--r-sm);background:var(--muted-bg);cursor:pointer}
 .photo-pick button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
@@ -84,3 +83,15 @@
   .pin-map{height:41vh;min-height:240px}
   .map-confirm{width:100%}
 }
+/* 探索地圖 (36-explore-map.js) */
+.explore-map{height:52vh;max-height:520px}
+.explore-map .map-locate{width:40px;min-height:40px;padding:0;box-shadow:var(--shadow)}
+.explore-map-info{min-height:44px}
+.explore-map-list{display:grid;gap:6px;max-height:34vh;overflow:auto}
+.explore-map-row{display:flex;align-items:center;gap:10px;padding:8px 0}
+.explore-map-row>div{flex:1;min-width:0}
+.explore-map-row p{margin:2px 0;overflow-wrap:anywhere}
+.explore-map-row small{color:var(--muted-foreground)}
+.explore-map-row>.btn{flex:none}
+.explore-map-n{display:grid;flex:none;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--primary);color:var(--primary-foreground);font-size:var(--fs-sm)}
+@media(max-width:760px){.explore-map{height:44vh}}

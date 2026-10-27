@@ -18,6 +18,7 @@
     removeItem,
     setDayLabel,
     lookupPlace,
+    placesNear,
     placePhotos,
     shrink,
     suggestRoutes,

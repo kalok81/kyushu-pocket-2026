@@ -12,6 +12,11 @@
       return `<a class="${cls}" href="${esc(o.href)}"${o.external ? ' target="_blank" rel="noopener noreferrer"' : ""}${attrs(a)}>${inner}</a>`;
     return `<button type="${o.type || "button"}" class="${cls}"${attrs(a)}>${inner}</button>`;
   }
+  // A file picker that looks like btn: a label around a hidden file input (o.accept, o.capture, o.multiple, o.input attrs).
+  function fileBtn(label, o = {}) {
+    const cls = ["btn", `btn-${o.variant || "outline"}`, o.size === "sm" && "btn-sm", o.cls].filter(Boolean).join(" ");
+    return `<label class="${cls}"${attrs(o.attrs)}>${o.icon ? icon(o.icon) : ""}<span>${label}</span><input type="file" accept="${esc(o.accept || "image/*")}" class="sr-only"${attrs({ capture: o.capture, multiple: o.multiple, ...o.input })}></label>`;
+  }
   // A row of toggle chips: items are {label, active, attrs}.
   const chips = (items, o = {}) =>
     `<div class="chips${o.cls ? " " + o.cls : ""}" role="group"${o.label ? ` aria-label="${esc(o.label)}"` : ""}>${items

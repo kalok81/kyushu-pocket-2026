@@ -61,6 +61,8 @@ await Promise.all([320,390,768,1280].map(async w=>{
   ['route','#plan?day=1',async()=>{await pg.locator('[data-route-link]').nth(2).click();await pg.click('#routeGo');await pg.waitForSelector('#routeResults [data-route-pick]');await pg.click('[data-route-ai]');await pg.waitForTimeout(500)}],
   ['daymenu','#plan?day=1',async()=>{await pg.click('.day-more summary');await pg.waitForTimeout(200)}],
   ['stopmenu','#plan?day=1',async()=>{await pg.locator('[data-stop-more]').last().click();await pg.waitForTimeout(200)}],
+  ['exploremap','#explore',async()=>{await pg.click('[data-explore-map]');await pg.waitForSelector('#exploreMap .leaflet-interactive');const r=await pg.locator('#exploreMap').boundingBox();await pg.mouse.click(r.x+12,r.y+r.height-40);await pg.waitForSelector('#exploreMapInfo .explore-map-row')}],
+  ['newplace','#explore',async()=>{await pg.click('[data-place-new]')}],
   ['daymap','#plan?day=1',async()=>{await pg.click('.day-more summary');await pg.click('[data-day-map]');await pg.waitForTimeout(600)}],
   ['menu','#home',async()=>{await pg.click('#menuBtn');await pg.waitForTimeout(300)}],
   ['notesheet','#together?tab=notes',async()=>{await pg.click('[data-tg=newEntry]');await pg.click('[data-note-kind=coupon]')}],

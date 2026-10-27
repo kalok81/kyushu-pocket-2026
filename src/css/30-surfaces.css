@@ -76,6 +76,8 @@
 .page-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:4px 0 14px}
 .page-head>div:first-child{min-width:0}
 .page-head-aside{display:flex;flex:none;gap:8px}
+/* narrow phones: a page head with several actions keeps only the icons of its .btn-compact ones */
+@media(max-width:360px){.page-head-aside .btn-compact{padding:6px 10px}.page-head-aside .btn-compact span{display:none}}
 .page-head h1{margin:0;font-size:var(--fs-xl);font-weight:650;line-height:1.3}
 .page-head p{margin:2px 0 0;font-size:var(--fs-md);color:var(--muted-foreground)}
 .sectionhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 10px}

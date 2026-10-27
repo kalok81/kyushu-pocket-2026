@@ -301,4 +301,6 @@
     }
   });
   window.addEventListener("hashchange", () => navigate());
+  const shared = takeSharedLink();
   render();
+  if (shared !== null) addSharedLink(shared);

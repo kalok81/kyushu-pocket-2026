@@ -48,7 +48,7 @@
   }
   function renderAsk() {
     const pick = (label, ic, variant, capture) =>
-      `<label class="btn btn-${variant}">${icon(ic)}<span>${label}</span><input type="file" accept="image/*"${capture ? ' capture="environment"' : ""} class="sr-only" data-ask-photo></label>`;
+      Kit.fileBtn(label, { variant, icon: ic, capture: capture ? "environment" : null, input: { "data-ask-photo": true } });
     return `${header("AI 助手", "影相翻譯菜單及告示，或問旅程問題")}${Kit.sectionHead("影相翻譯", askState.translations.length ? Kit.btn("清除", { size: "sm", icon: "trash", attrs: { "data-ask-clear": "tr" } }) : "")}<div class="ask-pick">${pick("影相", "camera", "secondary", true)}${pick("選相片", "image", "outline", false)}</div><p class="note">菜單、告示、標籤、售票機都可以；電腦上可以直接貼上圖片。</p><div id="askTranslations" class="ask-list">${askTranslations()}</div>${Kit.sectionHead("問 AI", askState.chat.length ? Kit.btn("清除", { size: "sm", icon: "trash", attrs: { "data-ask-clear": "chat" } }) : "")}<div id="askChat" class="ask-chat" aria-live="polite">${askChat()}</div><form id="askForm" class="tg-form ask-form"><textarea name="q" rows="2" maxlength="500" required placeholder="例如：今晚附近有咩好食？"></textarea><label class="tg-check"><input type="checkbox" name="here" data-ask-here${askState.here ? " checked" : ""}> 附上我現在的位置</label>${Kit.btn("發問", { type: "submit", variant: "primary", icon: "sparkles", cls: "btn-block" })}</form>`;
   }
   const paintAsk = () => {

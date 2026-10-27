@@ -48,7 +48,7 @@
   }
   function renderExplore() {
     const chip = (c, label, ic) => ({ label, icon: ic, active: category === c, attrs: { "data-cat": c } });
-    return `${header("探索", "", `${Kit.btn("AI 推薦", { size: "sm", icon: "sparkles", attrs: { "data-discover": "" } })}${Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate" })}`)}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋，或貼上 Google 地圖連結" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
+    return `${header("探索", "", `${Kit.btn("AI 推薦", { size: "sm", icon: "sparkles", attrs: { "data-discover": "" } })}${Kit.btn("附近", { href: "#nearby", size: "sm", icon: "locate", cls: "btn-compact", attrs: { "aria-label": "附近" } })}${Kit.btn("地圖", { size: "sm", icon: "map", cls: "btn-compact", attrs: { "data-explore-map": "", "aria-label": "探索地圖" } })}`)}<div class="controls"><div class="searchrow"><input id="search" class="search" type="search" placeholder="搜尋，或貼上 Google 地圖連結" aria-label="搜尋地點" value="${esc(search)}"><select id="region" aria-label="選擇區域或小區">${regionOptions()}</select></div>${Kit.chips(
       [
         ...["全部", ...exploreCats].map((c) => chip(c, c)),
         chip("購物清單", "購物", "bag"),
@@ -61,12 +61,17 @@
   let buySpots = [];
   const spotCard = (s, k) =>
     `<article class="card place shop-spot"><div class="card-top place-top">${Kit.badge("購物", "shop")}</div><h3>${esc(s.name)}</h3>${s.address && s.address !== s.name ? `<div class="region">${esc(s.address)}</div>` : ""}<p class="buy-here">${icon("bag")} 要買：${s.items.map((n, i) => `<button type="button" class="buy-item" data-shop-open="${esc(s.ids[i])}">${esc(n)}</button>`).join("、")}</p><div class="actions">${Kit.btn("加入探索", { size: "sm", icon: "plus", attrs: { "data-spot-explore": k } })}${link(Number.isFinite(s.lat) ? `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}` : maps(s.address || s.name), "地圖")}</div></article>`;
-  function renderResults() {
-    let q = search.toLocaleLowerCase();
-    const ps = places.filter(
+  // The places the explore filters (category, area, 收藏, search) leave: the list and its map.
+  function shownPlaces() {
+    const q = search.toLocaleLowerCase();
+    return places.filter(
       (p) =>
         inCategory(p) && inRegion(p) && (!onlySaved || saved.has(p.id)) && (!q || `${p.v.join(" ")} ${p.zh}`.toLocaleLowerCase().includes(q)),
     );
+  }
+  function renderResults() {
+    const q = search.toLocaleLowerCase(),
+      ps = shownPlaces();
     buySpots =
       category === "購物清單" && region === "全部區域" && !onlySaved
         ? (window.Together?.shoppingPlaces?.() || []).filter(

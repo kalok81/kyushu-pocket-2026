@@ -616,6 +616,24 @@ try {
   await paste('#shopSearch', 'https://shop.example.jp/item/1'); await page.waitForTimeout(300);
   assert.equal(await page.inputValue('#shopSearch'), '', 'the link is not typed into the search box');
  });
+ await step('探索地圖: places as dots; a tap lists Google places to add', async () => {
+  await page.goto(base + '/#explore'); await page.click('[data-explore-map]');
+  await page.waitForSelector('#exploreMap .leaflet-interactive');
+  const box = await page.locator('#exploreMap').boundingBox();
+  await page.mouse.click(box.x + 12, box.y + box.height - 40);
+  await page.waitForSelector('#exploreMapInfo [data-map-add]');
+  assert.equal(await page.locator('#exploreMapInfo .explore-map-row').count(), 2);
+  assert.equal(await page.locator('#exploreMapInfo [data-map-add]').count(), 1, 'a place already in 探索 (雷門) shows 已在探索');
+  assert.ok(Number.isFinite((await page.evaluate(() => window.nearRequest)).near.lat));
+  await page.click('#exploreMapInfo [data-map-add]'); await page.waitForSelector('#placeForm');
+  assert.match(await page.inputValue('#placeForm [name=mapsUrl]'), /query_place_id=ChIJnear1/);
+  await page.waitForFunction(() => document.querySelector('#placeForm [name=f1]').value);
+  assert.equal(await page.locator('#detail.map-picker-dialog').count(), 0, 'the map is closed once the form opens');
+  // the two photo buttons look the same
+  const look = (sel) => page.locator(sel).evaluate((el) => { const c = getComputedStyle(el); return [c.display, c.fontSize, c.fontWeight, c.height].join(); });
+  assert.equal(await look('[data-place-photo-pick]'), await look('label:has([data-place-photo-file])'));
+  await closeSheet();
+ });
  await step('總覽: one-line trip bar and the 資料簿 search below', async () => {
   await page.goto(base + '/#home'); await page.waitForSelector('.trip-bar #notebookResults .notebook-card, #notebookResults .notebook-card');
   await page.click('[data-notebook-type=行程]'); await page.waitForSelector('[data-notebook-type=行程].active');
@@ -648,6 +666,14 @@ try {
   const kept = await page.evaluate(() => [JSON.parse(localStorage.getItem('pocket-ask-translations')), JSON.parse(localStorage.getItem('pocket-ask-chat'))]);
   assert.equal(kept[0][0].title, '拉麵店菜單'); assert.equal(kept[1].at(-1).places[0], place); assert.ok(!kept[1].at(-1).busy, 'kept on this phone without the busy flag');
   await page.goto(base + '/#home'); await page.goto(base + '/#ask'); await page.waitForSelector('.ask-msg.ai [data-place]');
+ });
+ await step('Android share from Google Maps (after signing in again, as a full page load) opens 新增地點', async () => {
+  await page.goto(base + '/?title=' + encodeURIComponent('雷門') + '&text=' + encodeURIComponent('雷門\nhttps://maps.app.goo.gl/shared1'));
+  await page.fill('[name=id]', 'amy'); await page.fill('[name=password]', 'pw12345678'); await page.click('[data-tg-form=login] button');
+  await page.waitForSelector('#placeForm');
+  assert.equal(await page.inputValue('#placeForm [name=mapsUrl]'), 'https://maps.app.goo.gl/shared1');
+  assert.equal(await page.evaluate(() => location.search + location.hash), '#explore');
+  await closeSheet();
  });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');

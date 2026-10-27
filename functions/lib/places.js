@@ -144,6 +144,19 @@ export const lookupPlace = onCall({ region: 'asia-northeast1', enforceAppCheck: 
   if (!place) throw new HttpsError('not-found', '找不到這個地點。');
   return { name: place.displayName?.text || '', address: place.formattedAddress || '', lat: place.location?.latitude ?? null, lng: place.location?.longitude ?? null };
  }
+ // near: a spot tapped on 探索's map; the Google places around it, nearest first, to pick one to add
+ const near = req.data?.near;
+ if (near && typeof near === 'object') {
+  const lat = Number(near.lat), lng = Number(near.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) throw new HttpsError('invalid-argument', '位置不正確。');
+  const fields = SEARCH_FIELDS.replace('places.priceRange,places.addressComponents', 'places.primaryTypeDisplayName');
+  const list = (await placesApi('places:searchNearby', fields, { languageCode: langFor(country), maxResultCount: 12, rankPreference: 'DISTANCE', locationRestriction: { circle: { center: { latitude: lat, longitude: lng }, radius: 80 } } })).places || [];
+  return {
+   nearby: list
+    .filter(p => p.id && p.displayName?.text && p.location)
+    .map(p => ({ id: p.id, name: p.displayName.text, type: p.primaryTypeDisplayName?.text || '', category: category(p.types), address: p.formattedAddress || '', lat: p.location.latitude, lng: p.location.longitude, d: Math.round(metersApart(p.location, { lat, lng })) })),
+  };
+ }
  const raw = req.data?.url;
  if (typeof raw !== 'string' || raw.length > 2000) throw new HttpsError('invalid-argument', '請貼上 Google 地圖的連結。');
  const url = await resolveMapsUrl(raw.trim().match(/https:\/\/\S+/)?.[0] || raw.trim());

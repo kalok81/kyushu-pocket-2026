@@ -34,5 +34,5 @@ window.MapPicker=(()=>{
    map.invalidateSize();
   }catch{const status=document.querySelector('#mapLoad');if(status)status.textContent='地圖未能載入，請檢查網絡；仍可按下面的 Google 地圖連結。'}
  }
- return Object.freeze({open,route});
+ return Object.freeze({open,route,load});
 })();

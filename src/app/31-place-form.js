@@ -94,7 +94,7 @@
       photo
         ? `<figure class="place-photo"><img src="data:image/jpeg;base64,${photo}" alt=""><figcaption>${esc(photoCredit(by))}</figcaption>${Kit.btn("移除相片", { icon: "x", iconOnly: true, size: "sm", cls: "place-photo-del", attrs: { "data-place-photo-del": true } })}</figure>`
         : ""
-    }<div class="place-photo-actions">${Kit.btn(photo ? "換 Google 相片" : "選 Google 相片", { size: "sm", variant: "secondary", icon: "image", attrs: { "data-place-photo-pick": true } })}<label class="btn btn-sm btn-secondary">${icon("camera")}上載相片<input type="file" accept="image/*" class="sr-only" data-place-photo-file></label></div><div id="placePhotoPick"></div>`;
+    }<div class="place-photo-actions">${Kit.btn(photo ? "換 Google 相片" : "選 Google 相片", { size: "sm", variant: "secondary", icon: "image", attrs: { "data-place-photo-pick": true } })}${Kit.fileBtn("上載相片", { size: "sm", variant: "secondary", icon: "camera", input: { "data-place-photo-file": true } })}</div><div id="placePhotoPick"></div>`;
   async function pickPlacePhoto() {
     const f = $("#placeForm"),
       box = $("#placePhotoPick"),
@@ -128,6 +128,20 @@
   document.addEventListener("change", (e) => {
     if (e.target.matches("[data-place-photo-file]")) uploadPlacePhoto(e.target.files[0]);
   });
+  // Shared to the installed app from Google Maps (manifest.webmanifest share_target opens ./?title=…&text=…&url=…): the
+  // address loses its query and turns to 探索; after the first render, the link opens 新增地點 as if pasted.
+  function takeSharedLink() {
+    const q = new URLSearchParams(location.search);
+    if (!["url", "text", "title"].some((k) => q.has(k))) return null;
+    history.replaceState(null, "", location.pathname + "#explore");
+    return ["url", "text", "title"].map((k) => q.get(k) || "").join(" ").match(/https?:\/\/\S+/)?.[0] || "";
+  }
+  function addSharedLink(link) {
+    if (!Kit.isMapsLink(link)) return toast("請在 Google 地圖按「分享」，再選口袋旅伴。");
+    placeForm(null);
+    $("#placeForm").elements.mapsUrl.value = link;
+    lookupPlaceForm();
+  }
   // Pasted anywhere on 探索 (or into its search box): a Google Maps link opens 新增地點 and runs 自動填寫; a picture opens
   // it with that photo. Duplicates are caught when saving (placeDuplicate).
   document.addEventListener("paste", (e) => {

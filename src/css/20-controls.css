@@ -74,7 +74,7 @@ legend{padding:0 6px;font-size:var(--fs-md);color:var(--muted-foreground)}
 /* ---- Forms (sheets) ---- */
 .tg-form{display:grid;gap:12px;margin:14px 0}
 .tg-form[hidden]{display:none}
-.tg-form label{display:grid;gap:5px;font-size:var(--fs-md);font-weight:500;color:var(--foreground)}
+.tg-form label:not(.btn){display:grid;gap:5px;font-size:var(--fs-md);font-weight:500;color:var(--foreground)}
 .tg-form input,.tg-form select,.tg-form textarea{width:100%;min-height:44px;padding:10px 12px;font-size:var(--fs-body)}
 .tg-form textarea{resize:vertical}
 .tg-form fieldset{display:flex;flex-wrap:wrap;gap:4px 16px;padding:8px 12px}

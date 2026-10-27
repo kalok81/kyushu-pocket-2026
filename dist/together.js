@@ -1333,6 +1333,11 @@ window.Together = (() => {
     if (!navigator.onLine) throw new Error("offline");
     return (await (await callable("lookupPlace", 70000))({ url, photos: true, country: state.meta?.country || "", ...(name ? { name } : {}) })).data.photos || [];
   }
+  // The Google places within about 80 m of a spot on 探索's map, nearest first
+  async function placesNear(lat, lng) {
+    if (!navigator.onLine) throw new Error("offline");
+    return (await (await callable("lookupPlace", 30000))({ near: { lat, lng }, country: state.meta?.country || "" })).data.nearby || [];
+  }
   // Places: trips/{t}/places documents. A new one gets its id here so a plan stop can point at it straight away.
   function savePlace({ place, fields, cats, lat, lng, points = [], mapsUrl, photo = null, photoBy = "" }) {
     const { fs, db } = fb,
@@ -2922,6 +2927,7 @@ window.Together = (() => {
     removeItem,
     setDayLabel,
     lookupPlace,
+    placesNear,
     placePhotos,
     shrink,
     suggestRoutes,
