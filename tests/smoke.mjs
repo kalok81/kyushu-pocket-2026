@@ -26,7 +26,7 @@ page.on('pageerror', e => errors.push(String(e)));
 await page.route('**/vendor/firebase/*.js', r => r.fulfill({ path: fake + r.request().url().split('/').pop().split('?')[0], contentType: 'text/javascript' }));
 await page.route('https://api.open-meteo.com/**', r => r.fulfill({ json: weather, headers: { 'Access-Control-Allow-Origin': '*' } }));
 await page.route('https://open.er-api.com/**', r => r.fulfill({ json: rates, headers: { 'Access-Control-Allow-Origin': '*' } }));
-await page.route(/^https:\/\/(tile\.openstreetmap|www\.google)/, r => r.abort());
+await page.route(/^https:\/\/(tile\.openstreetmap|tile\.googleapis|www\.google)/, r => r.abort());
 // The ✕ closes a sheet even with unsaved changes (tapping outside or Esc would ask first); Esc otherwise (menus).
 const closeSheet = async () => ((await page.evaluate(() => document.querySelector('#detail').open)) ? page.click('#detail .dialog-close') : page.keyboard.press('Escape'));
 const addShop = async (name, place) => {
@@ -702,8 +702,13 @@ try {
   // the explore places on D1 get positions (as when a pin is set), so the map has a route to draw
   await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.timeline [data-place]');
   await page.evaluate(() => [...new Set([...document.querySelectorAll('.timeline [data-place]')].map((b) => b.dataset.place))].forEach((id, k) => { window.TRIP_GEO.places[id] = [{ lat: 35.71 + k * 0.004, lng: 139.79 + k * 0.003, label: '' }]; }));
+  // the base map is Google's: a Map Tiles session with the browser key from lookupPlace
+  await page.route('https://tile.googleapis.com/v1/createSession**', r => r.fulfill({ json: { session: 'test-session', expiry: String(Math.floor(Date.now() / 1000) + 14 * 86400) }, headers: { 'Access-Control-Allow-Origin': '*' } }));
+  await page.route('https://tile.googleapis.com/v1/2dtiles/**', r => r.fulfill({ path: root + 'icon-192.png', contentType: 'image/png' }));
   await page.click('.plan-tools [data-day-map]'); await page.waitForSelector('#routeMap .leaflet-marker-icon');
   assert.ok((await page.locator('.route-list button').count()) >= 2, 'two stops on the map');
+  await page.waitForSelector('#routeMap img.leaflet-tile[src*="tile.googleapis.com/v1/2dtiles/"][src*="session=test-session"][src*="key=test-embed-key"]');
+  assert.equal(await page.locator('#routeMap img.leaflet-tile[src*="openstreetmap"]').count(), 0);
   await page.waitForFunction(() => window.pathsRequest && document.querySelectorAll('#routeMap path.leaflet-interactive').length > 0);
   const legs = await page.evaluate(() => window.pathsRequest.paths.length); assert.equal(legs, (await page.locator('.route-list button').count()) - 1);
   await page.locator('.route-list button').nth(1).click(); assert.match(await page.locator('#routeInfo').innerText(), /由「/);

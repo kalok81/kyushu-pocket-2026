@@ -45,7 +45,7 @@ await Promise.all([320,390,768,1280].map(async w=>{
  await pg.route('**/vendor/firebase/*.js',r=>{const f=r.request().url().split('/').pop().split('?')[0];f==='firebase-firestore.js'?r.fulfill({body:seeded,contentType:'text/javascript'}):f==='firebase-storage.js'?r.fulfill({body:storage,contentType:'text/javascript'}):r.fulfill({path:fake+f,contentType:'text/javascript'})});
  await pg.route('https://api.open-meteo.com/**',r=>r.fulfill({json:weather,headers:{'Access-Control-Allow-Origin':'*'}}));
  await pg.route('https://open.er-api.com/**',r=>r.fulfill({json:{result:'success',time_last_update_unix:1900000000,rates:{HKD:1,JPY:19.6}},headers:{'Access-Control-Allow-Origin':'*'}}));
- await pg.route(/tile\.openstreetmap|google\.com\/recaptcha/,r=>r.abort());
+ await pg.route(/tile\.openstreetmap|tile\.googleapis|google\.com\/recaptcha/,r=>r.abort());
  // AI 助手 with a translated menu and a short chat (kept in localStorage on the phone)
  await pg.addInitScript(()=>{const p='一蘭 上野店';localStorage.setItem('pocket-ask-translations',JSON.stringify([{kind:'menu',title:'拉麵店菜單',summary:'豚骨拉麵店，入門口用售票機買券。',items:[{original:'とんこつラーメン',zh:'豚骨拉麵',price:980,note:'豬骨湯底'},{original:'替玉（バリカタ）',zh:'加麵（極硬）',price:150,note:''},{original:'味付け半熟玉子',zh:'溏心蛋',price:null,note:'醬油醃製'}],tips:'先喺售票機買券，再交俾店員。',at:Date.now()}]));localStorage.setItem('pocket-ask-chat',JSON.stringify([{q:'今晚附近有咩好食？',a:`• ${p}：你清單上嘅地點，行路約 5 分鐘。\n• 一蘭 天神西通り店（清單外）：24 小時營業。`,places:[p],at:Date.now()}]))});
  await pg.goto(base+'/#home');await shot(pg,`${w}-login`);report[`${w} login`]=await pg.evaluate(checks);

@@ -945,8 +945,6 @@ window.startTrip = (meta = {}) => {
     runDiscover(e.target);
   });
   // ---- 探索 › 地圖: the listed places as dots; a tap on the map lists the Google places there to add one ----
-  const tileUrl = "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
-    tileCredit = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors';
   let mapAsk = 0,
     endMap = () => {};
   async function openExploreMap() {
@@ -955,7 +953,7 @@ window.startTrip = (meta = {}) => {
       pinned = shown.filter((p) => (coordinates[p.id] || []).length),
       dialog = $("#detail");
     openDialog(
-      `${Kit.sheetHead("探索地圖", `${pinned.length} 個地點`)}<p class="nearby-help">點地圖上的圓點看地點；點地圖其他位置，會列出那裏的 Google 地點，可以直接加入探索。</p><div id="mapLoad">${Kit.dots("正在載入地圖…")}</div><div id="exploreMap" class="pin-map explore-map" role="region" aria-label="探索地點地圖"></div><div id="exploreMapInfo" class="explore-map-info" aria-live="polite"><p class="note">${shown.length > pinned.length ? `另有 ${shown.length - pinned.length} 個地點未有座標，不會顯示。` : "地圖跟隨探索頁的分類、區域及搜尋。"}</p></div><p class="note">地圖由 OpenStreetMap 提供；附近地點由 Google 地圖提供。</p>`,
+      `${Kit.sheetHead("探索地圖", `${pinned.length} 個地點`)}<p class="nearby-help">點地圖上的圓點看地點；點地圖其他位置，會列出那裏的 Google 地點，可以直接加入探索。</p><div id="mapLoad">${Kit.dots("正在載入地圖…")}</div><div id="exploreMap" class="pin-map explore-map" role="region" aria-label="探索地點地圖"></div><div id="exploreMapInfo" class="explore-map-info" aria-live="polite"><p class="note">${shown.length > pinned.length ? `另有 ${shown.length - pinned.length} 個地點未有座標，不會顯示。` : "地圖跟隨探索頁的分類、區域及搜尋。"}</p></div><p class="note">地圖及附近地點由 Google 地圖提供（未能載入時改用 OpenStreetMap）。</p>`,
     );
     dialog.classList.add("map-picker-dialog");
     let map;
@@ -976,7 +974,7 @@ window.startTrip = (meta = {}) => {
         css = getComputedStyle(document.documentElement),
         color = (p) => css.getPropertyValue(`--cat-${placeCat(p)[1] || "shop"}`).trim() || "#173f3a";
       map = L.map(el, { scrollWheelZoom: false });
-      L.tileLayer(tileUrl, { maxZoom: 19, attribution: tileCredit }).addTo(map);
+      window.MapPicker.base(map);
       const pts = [];
       for (const p of pinned)
         for (const c of coordinates[p.id]) {
