@@ -42,19 +42,20 @@ export async function yahooRoutes(uid, a, b, when, limit = 3) {
  const from = yahooPlace(a), to = yahooPlace(b), w = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d)(\d)$/.exec(when || '');
  if (!from || !to || !w) return null;
  await useQuota(uid, 'navi');
- // Yahoo gives three routes a search: once with buses and once by rail only, so trains show even where a bus is faster
+ // Yahoo gives three routes a search and cannot leave trains out: one search by rail only (up to three), one with
+ // buses of which the routes that take a bus (up to three), trains first
  const search = async bus => {
   const q = new URLSearchParams({ from, to, y: w[1], m: w[2], d: w[3], hh: w[4], m1: w[5], m2: w[6], type: '1', ticket: 'ic', expkind: '1', shin: '1', ex: '1', hb: bus, al: '1', lb: bus, sr: '1', s: '0' });
   const res = await fetch(`https://transit.yahoo.co.jp/search/result?${q}`, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PocketTravel/1.0)', 'Accept-Language': 'ja' }, signal: AbortSignal.timeout(15_000) }).catch(() => null);
   if (!res?.ok) return console.error('Yahoo transit', res?.status), null;
   try { return JSON.parse((await res.text()).match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)[1]).props.pageProps.naviSearchParam?.featureInfoList || []; } catch { return console.error('Yahoo transit: page changed'), null; }
  };
- const [all, rail] = await Promise.all([search('1'), search('0')]);
+ const [rail, all] = await Promise.all([search('0'), search('1')]);
  if (!all && !rail) return null;
- const seen = new Set(), list = [...(all || []), ...(rail || [])].filter(f => { const k = f.summaryInfo?.calendarData?.description || Math.random(); return !seen.has(k) && seen.add(k); });
+ const seen = new Set(), list = [...(rail || []), ...(all || [])].filter(f => { const k = f.summaryInfo?.calendarData?.description || Math.random(); return !seen.has(k) && seen.add(k); });
  const clock = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return m ? +m[1] * 60 + +m[2] : null; };
  const span = (x, y) => (x != null && y != null ? (y - x + 1440) % 1440 : 0);
- return list.map(f => {
+ const routes = list.map(f => {
   const e = f.edgeInfoList || [], steps = [];
   for (let i = 0; i < e.length - 1; i++) {
    const here = e[i], next = e[i + 1], name = half(here.railNameExcludingDestination || here.railName || '');
@@ -66,7 +67,9 @@ export async function yahooRoutes(uid, a, b, when, limit = 3) {
   }
   const sum = f.summaryInfo || {}, t = /(?:(\d+)時間)?(\d+)分/.exec(sum.totalTime || ''), yen = Number(String(sum.totalPrice || '').replace(/[^\d]/g, ''));
   return { minutes: t ? (+t[1] || 0) * 60 + +t[2] : steps.reduce((x, s) => x + s.minutes, 0), meters: 0, fare: yen ? { currency: 'JPY', amount: yen } : null, steps: steps.filter(x => x.mode === 'TRANSIT' || x.minutes > 0) };
- }).filter(o => o.steps.some(x => x.mode === 'TRANSIT')).slice(0, limit);
+ }).filter(o => o.steps.some(x => x.mode === 'TRANSIT'));
+ const byBus = o => o.steps.some(x => x.vehicle === 'BUS'), trains = routes.filter(o => !byBus(o)).slice(0, 3), buses = routes.filter(byBus).slice(0, 3);
+ return [...trains, ...buses].slice(0, limit);
 }
 const NAVI_VEHICLE = { superexpress_train: 'HIGH_SPEED_TRAIN', bus: 'BUS', highway_bus: 'INTERCITY_BUS', ferry: 'FERRY' };
 export async function naviRoutes(uid, a, b, when, limit = 3) {
