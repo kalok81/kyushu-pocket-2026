@@ -696,6 +696,24 @@ try {
   await off.waitForSelector('.topbar .brand'); assert.equal(await off.evaluate(() => typeof window.Kit), 'object', 'scripts load offline');
   await ctx.close();
  });
+ await step('而家: next stop and when to leave; AI 調整餘下行程 saves a new 方案', async () => {
+  await page.clock.setFixedTime(new Date('2030-04-03T09:30:00'));
+  await page.goto(base + '/#home'); await page.waitForSelector('.now-card');
+  assert.match(await page.locator('.now-card').innerText(), /而家 09:30[\s\S]*下一站：\s*RINGO 上野店[\s\S]*最遲 09:40 出發 · 還有 10 分鐘/);
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/now-home.png' });
+  await page.goto(base + '/#plan?day=3'); await page.waitForSelector('.now-card'); assert.equal(await page.locator('.now-leave.soon').count(), 1);
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/now-plan.png' });
+  await page.click('[data-now-replan]'); await page.waitForSelector('#replanForm');
+  await page.locator('#replanForm label', { hasText: '落雨' }).click(); await page.locator('#replanForm .switch-row').click();
+  await page.click('#replanForm button[type=submit]'); await page.waitForSelector('[data-replan-apply]');
+  if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/replan.png', fullPage: false });
+  const req = await page.evaluate(() => window.planRequest);
+  assert.equal(req.mode, 'arrange'); assert.match(req.situation, /落雨/); assert.equal(req.startTime, '09:35'); assert.deepEqual(req.stops.map((x) => x.name), ['RINGO 上野店'], 'only what is not started; tonight\'s hotel is the end');
+  await page.click('[data-replan-apply]'); await page.waitForSelector('.plan-variants .chip.active');
+  assert.match(await page.locator('.plan-variants .chip.active').innerText(), /AI 調整 09:35/);
+  assert.deepEqual(await page.locator('.timeline .time').allInnerTexts().then((t) => t.map((x) => x.trim().split('\n')[0])), ['15:00–15:45', '21:00']);
+  await page.click('[data-plan-variant="main"]'); assert.match(await page.locator('.timeline .time').first().innerText(), /10:00–10:45/, 'the main 方案 is unchanged');
+ });
  await step('Android share from Google Maps (after signing in again, as a full page load) opens 新增地點', async () => {
   await page.goto(base + '/?title=' + encodeURIComponent('雷門') + '&text=' + encodeURIComponent('雷門\nhttps://maps.app.goo.gl/shared1'));
   await page.fill('[name=id]', 'amy'); await page.fill('[name=password]', 'pw12345678'); await page.click('[data-tg-form=login] button');

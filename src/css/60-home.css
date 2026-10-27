@@ -18,3 +18,4 @@
   .quick{padding:12px 4px 10px}
   .quick b{font-size:var(--fs-md)}
 }
+.trip-bar + .now-card{margin-top:12px}

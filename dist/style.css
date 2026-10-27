@@ -401,6 +401,7 @@ details.more:not([open]) .menu{display:none}
   .quick{padding:12px 4px 10px}
   .quick b{font-size:var(--fs-md)}
 }
+.trip-bar + .now-card{margin-top:12px}
 /* ---- 行程: day tabs, the day's heading and 方案, toolbar, timeline of stops ---- */
 /* day tabs share the page width: they grow on wide screens and shrink on phones (scrolling only below 44px each) */
 .daytabs{position:sticky;top:var(--topbar-h);z-index:15;display:flex;gap:6px;overflow-x:auto;margin:-16px calc(-1 * var(--gutter)) 0;padding:10px var(--gutter);border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--background) 94%,transparent);backdrop-filter:blur(10px);scrollbar-width:none}
@@ -531,6 +532,21 @@ details.more:not([open]) .menu{display:none}
 .stop-start .stopcontent{padding-block:12px}
 .start-title{display:flex;align-items:center;gap:8px;margin:4px 0 2px;font-weight:700}
 .start-title a{color:inherit}
+/* 而家: today's next stop and when to leave */
+.now-card{display:grid;gap:6px;margin:0 0 14px;padding:12px 14px;border:1px solid var(--border);border-left:4px solid var(--primary);border-radius:var(--r-md);background:var(--card)}
+.now-card p{margin:0}
+.now-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;font-size:var(--fs-sm);color:var(--muted-foreground)}
+.now-head b{color:var(--foreground)}
+.now-next{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
+.now-next span{color:var(--muted-foreground);font-size:var(--fs-sm)}
+.now-leave{display:flex;align-items:flex-start;gap:6px;font-size:var(--fs-sm)}
+.now-leave .icon{flex:none;margin-top:2px}
+.now-leave.soon{color:var(--warn-fg,#8a5a00)}
+.now-leave.late{color:var(--destructive,#b42318);font-weight:700}
+.now-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.replan-why{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0;padding:0;border:0}
+.replan-why legend{margin-bottom:6px;font-weight:600}
+.replan-dropped{color:var(--muted-foreground)}
 /* ---- Route suggestions sheet (查路線, AI 分析) and the day's route map ---- */
 .route-results{display:grid;gap:10px;margin:6px 0 14px}
 .route-actions{display:flex;gap:6px}

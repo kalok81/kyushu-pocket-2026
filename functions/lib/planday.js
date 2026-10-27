@@ -6,7 +6,8 @@ import { mins, naviRoutes, placeText } from './routes.js';
 
 // A whole day of the plan in one AI request (DeepSeek), for the plan page's tools:
 // - routes: the way to go for every leg (stop to stop), as aiRoutes' first option;
-// - arrange: the order of the stops, times and legs, keeping fixed times, with warnings about opening hours;
+// - arrange: the order of the stops, times and legs, keeping fixed times, with warnings about opening hours; with a
+//   situation (AI 調整餘下行程, during the day) it re-plans the rest of the day from now and may drop stops (dropped);
 // - times: times for the stops in their order, with the transport already chosen (推算時間);
 // - suggest: up to 6 places from the explore list that fit the day.
 // Times and fares are estimates; the page labels them so.
@@ -42,6 +43,7 @@ export const planDay = onCall({ region: 'asia-northeast1', enforceAppCheck: true
  const cur = typeof d.currency === 'string' && /^[A-Z]{3}$/.test(d.currency) ? d.currency : 'JPY';
  const date = /^\d{4}-\d{2}-\d{2}$/.test(d.date || '') ? d.date : '', where = text(d.region, 80), weekday = text(d.weekday, 10);
  const startTime = /^\d{2}:\d{2}$/.test(d.startTime || '') ? d.startTime : '';
+ const situation = text(d.situation, 300);
  const day = `${date} (${weekday})${where ? ` in ${where}` : ''}`;
  const placeLine = p => `${p.k}: ${placeText(p)}`;
  // Google walking times for close legs (at most 12 per request, one maps use)
@@ -79,19 +81,19 @@ ${legs.map(l => `${l.k}: from ${placeText(l.from)} to ${placeText(l.to)}${l.time
 Reply with JSON only: {"legs": [${LEG_SHAPE}]}
 ${LEG_RULES(cur)}`;
  } else if (mode === 'arrange') {
-  if (stops.length < 2) throw new HttpsError('invalid-argument', '最少要有兩個站點。');
+  if (stops.length < (situation ? 1 : 2)) throw new HttpsError('invalid-argument', '最少要有兩個站點。');
   await useQuota(req.auth.uid, 'ai');
   prompt = `You plan a day of sightseeing for Hong Kong travellers on ${day}.
 Put the stops below in a sensible order and give each a visit time, so the day flows with little back-tracking, places are visited while open (mind the weekday and closing days), meals fall at meal times (lunch about 11:30–13:30, dinner about 18:00–20:00) and there is time to get between them.
-${start ? `The day starts from ${placeText(start)} at ${startTime || '09:00'}.` : `The day starts at ${startTime || '09:00'}${stops[0]?.type.startsWith('hotel: where the day starts') ? `, leaving ${stops[0].name}` : ''}; nothing before that time.`}${end ? `\nThe night is spent at ${placeText(end)}.` : ''}
+${start ? `The day starts from ${placeText(start)} at ${startTime || '09:00'}.` : `The day starts at ${startTime || '09:00'}${stops[0]?.type.startsWith('hotel: where the day starts') ? `, leaving ${stops[0].name}` : ''}; nothing before that time.`}${end ? `\nThe night is spent at ${placeText(end)}.` : ''}${situation ? `\nThey are already out and this is the rest of the day, re-planned now. Their situation: ${situation.replace(/\s+/g, ' ')}\nFit the rest of the day to it (e.g. rain: indoor stops first and shorter walks; tired: fewer stops and a café; late: drop or shorten what no longer fits). You may leave out stops that no longer fit: list them in "dropped" with a short reason, and leave them out of order and times.` : ''}
 Stops (k: name, address, position; type; opening hours as noted by the traveller; time = fixed means it must stay at that time; stay = minutes the traveller plans there):
 ${stops.map(s => `${placeLine(s)}${s.type ? `; ${s.type}` : ''}${s.hours ? `; hours: ${s.hours.replace(/\s+/g, ' ')}` : ''}${s.time ? (s.fixed ? `; time = fixed ${s.time}` : `; planned ${s.time}`) : ''}${s.stay ? `; stay ${s.stay} min` : ''}`).join('\n')}
 Reply with JSON only:
-{"order": [k, ...], "times": {"k": "HH:MM–HH:MM"}, "legs": [${LEG_SHAPE}], "warnings": {"k": string}, "advice": string}
-- order: every stop exactly once. A stop marked fixed keeps its time; order the others around it. A hotel stop that starts the day goes first.
+{"order": [k, ...], "times": {"k": "HH:MM–HH:MM"}, "legs": [${LEG_SHAPE}], "warnings": {"k": string}, ${situation ? '"dropped": {"k": string}, ' : ''}"advice": string}
+- order: every stop exactly once${situation ? ' (except dropped ones; fixed ones are never dropped)' : ''}. A stop marked fixed keeps its time; order the others around it. A hotel stop that starts the day goes first.
 - "planned" times show the part of the day the traveller meant (breakfast, lunch, dinner, hotel check-in, evening walks, night views): keep each stop in that part of the day unless a clearly better order needs a small shift. Hotel check-in not before 15:00; evening and night spots after dark.
 - times: start–end for each stop, using the planned stay or a usual visit length (meal about 60 min, café 40, viewpoint or tower 30, shrine or park 45, museum or ropeway 60–90, shop 30–60). Stations, bus stops and airports (type "transport stop") are only where they change: 5 minutes. A hotel where the day starts or ends gets one time only ("HH:MM": leaving, or getting back), no range; a hotel in the middle of the day is a check-in or luggage stop of about 15 minutes, unless the traveller planned a meal or bath there (a planned range or the name says so). Times must not overlap, and the gap before a stop must fit its leg.
-- legs: one leg per stop after the first (k = that stop), the way from the stop before it.
+- legs: one leg per stop after the first (k = that stop), the way from the stop before it${situation && start ? '; the first stop also gets one, from where they are now' : ''}.
 - warnings: only real problems, in Traditional Chinese as used in Hong Kong, short (e.g. "星期一休息", "18:00 關門，可能趕不及", "要預約"). Leave out stops without problems.
 - advice: one or two sentences in Traditional Chinese (Hong Kong) about the plan, e.g. what to book or what could be dropped.
 ${LEG_RULES(cur)}`;
@@ -141,8 +143,10 @@ Reply with JSON only: {"picks": [{"k": string, "reason": string}], "advice": str
  }
  if (mode === 'suggest') return { picks: (Array.isArray(r?.picks) ? r.picks : []).slice(0, 6).map(p => ({ k: text(String(p?.k ?? ''), 40), reason: text(p?.reason, 60) })).filter(p => p.k), advice: text(r?.advice, 200) };
  // arrange: every stop once (unknown keys dropped, forgotten ones kept at the end in their old order)
- const order = [...new Set((Array.isArray(r?.order) ? r.order : []).map(k => String(k)).filter(k => keys.has(k)))];
- for (const s of stops) if (!order.includes(s.k)) order.push(s.k);
+ // re-planning now: stops the AI left out with a reason are dropped (never a fixed one); the rest stay
+ const dropped = situation && r?.dropped && typeof r.dropped === 'object' ? Object.fromEntries(Object.entries(r.dropped).filter(([k, v]) => keys.has(k) && !stops.find(x => x.k === k).fixed && typeof v === 'string').map(([k, v]) => [k, v.trim().slice(0, 80) || '時間不夠'])) : {};
+ const order = [...new Set((Array.isArray(r?.order) ? r.order : []).map(k => String(k)).filter(k => keys.has(k) && !dropped[k]))];
+ for (const s of stops) if (!order.includes(s.k) && !dropped[s.k]) order.push(s.k);
  const clock = /^\d{1,2}:\d{2}(\s*[–~\-－]\s*\d{1,2}:\d{2})?$/;
  const times = Object.fromEntries(Object.entries(r?.times && typeof r.times === 'object' ? r.times : {}).filter(([k, v]) => keys.has(k) && typeof v === 'string' && clock.test(v.trim())).map(([k, v]) => [k, v.trim().replace(/\s*[~\-－]\s*/, '–')]));
  // the hotel the day starts from stays first
@@ -157,8 +161,10 @@ Reply with JSON only: {"picks": [{"k": string, "reason": string}], "advice": str
  const warnings = Object.fromEntries(Object.entries(r?.warnings && typeof r.warnings === 'object' ? r.warnings : {}).filter(([k, v]) => keys.has(k) && typeof v === 'string' && v.trim()).map(([k, v]) => [k, v.trim().slice(0, 80)]));
  // close stops in the chosen order walk by Google's times
  const at = Object.fromEntries(stops.map(s => [s.k, s]));
- const near = await walks(order.slice(1).map((k, j) => [k, at[order[j]], at[k]]));
+ // re-planning from where they are: the first stop's leg is from there
+ const from = (k, j) => (j < 0 ? (situation ? start : null) : at[order[j]]);
+ const near = await walks(order.map((k, j) => [k, from(k, j - 1), at[k]]).filter(([, a]) => a));
  const endOf = k => String(times[k] || '').match(/(\d{1,2}:\d{2})\s*$/)?.[1] || '';
- if (date) Object.assign(near, await naviLegs(order.slice(1).map((k, j) => [k, at[order[j]], at[k], endOf(order[j])]).filter(([k]) => !near[k])));
- return { order, times, legs: [...legs.filter(l => !near[l.k]), ...Object.values(near)], warnings, advice: text(r?.advice, 300) };
+ if (date) Object.assign(near, await naviLegs(order.map((k, j) => [k, from(k, j - 1), at[k], j ? endOf(order[j - 1]) : startTime]).filter(([k, a]) => a && !near[k])));
+ return { order, times, legs: [...legs.filter(l => !near[l.k]), ...Object.values(near)], warnings, advice: text(r?.advice, 300), ...(situation ? { dropped } : {}) };
 });

@@ -42,7 +42,7 @@
         (viewedVariant(day) ? stops.length : edit?.stops?.length) && { label: viewedVariant(day) ? "清空這個方案" : "清空這天", icon: "trash", danger: true, attrs: { "data-plan-reset": true } },
       ],
       { label: "這天的更多操作", cls: "day-more" },
-    )}</div>${variantChips(day)}${stops.length ? planTools(stops) : ""}${first?.transport && !startHotel ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${startHotel ? startStop(startHotel) : ""}${
+    )}</div>${variantChips(day)}${stops.length ? planTools(stops) : ""}${nowFor(day)}${first?.transport && !startHotel ? `<p class="transport">${icon("train")}<span>${esc(first.transport)}</span></p>` : ""}<div class="timeline">${startHotel ? startStop(startHotel) : ""}${
       stopGroups(stops)
         .map(
           (g, n, all) =>
