@@ -777,6 +777,18 @@ try {
   assert.equal(await page.evaluate(() => location.search + location.hash), '#explore');
   await closeSheet();
  });
+ await step('JR Pass: the JR trains in each day\'s main 方案, read from 交通, follows the plan', async () => {
+  await page.goto(base + '/#home'); await page.click('.quick[href="#jrpass"]'); await page.waitForFunction(() => location.hash === '#jrpass');
+  await page.evaluate(() => window.Together.savePlanDay(2, [
+   { time: '10:10', area: '', title: '小倉駅', detail: '', transport: '🚆 JR 特急ソニック 11 號 博多 → 小倉（09:21–10:10，3番線）｜約 49 分（JR Pass）', ref: '', target: '', placeId: '' },
+   { time: '12:00', area: '', title: '天神', detail: '', transport: '🚄 JR 新幹線のぞみ16号 小倉 → 博多（1 站，11:15–11:30，13番線） → 🚌 西鉄バス 博多 → 天神（11:40–11:50）｜約 35 分', ref: '', target: '', placeId: '' },
+  ]));
+  await page.waitForSelector('.jr-table tbody tr:not(.jr-day)');
+  const rows = await page.locator('.jr-table tbody tr:not(.jr-day)').allInnerTexts();
+  assert.equal(rows.length, 2, 'the bus is not JR'); assert.match(rows[0], /JR 特急ソニック 11 號[\s\S]*3番線[\s\S]*09:21[\s\S]*博多[\s\S]*10:10[\s\S]*小倉/);
+  assert.match(rows[1], /JR Pass 不包（山陽新幹線）/); assert.match(await page.locator('.jr-day').first().innerText(), /D2/);
+  await page.click('.jr-day a'); await page.waitForFunction(() => location.hash === '#plan?day=2');
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }

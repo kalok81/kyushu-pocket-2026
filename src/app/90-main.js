@@ -7,6 +7,7 @@
     nearby: renderNearby,
     flights: renderFlights,
     events: renderEvents,
+    jrpass: renderJrPass,
     ask: renderAsk,
     notebook: renderNotebook,
     shopping: () => window.Together.renderShopping(),
@@ -27,7 +28,7 @@
     savedIds: () => [...saved],
   });
   // Pages without a tab of their own light up the tab they are reached from.
-  const navOf = { nearby: "explore", hotels: "home", flights: "home", events: "home", ask: "home" };
+  const navOf = { nearby: "explore", hotels: "home", flights: "home", events: "home", jrpass: "home", ask: "home" };
   function setActive(view) {
     current = view;
     document.querySelectorAll(".bottomnav a").forEach((a) => {

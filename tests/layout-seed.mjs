@@ -23,7 +23,7 @@ const planDays = {
   stop('14:00–18:00', '銀座', 'GINZA SIX ギンザシックス（Supercalifragilisticexpialidocious long name test store）', '手信、限定甜品', '', { placeId: 'u_p3' }),
   stop('19:00', '新宿', '思い出横丁', '晚餐', '', { placeId: 'u_p4' }),
  ], label: '淺草・上野・銀座・新宿一日遊（很長的標題測試）', mainName: '晴天方案', variants: [{ id: 'v1', name: '雨天方案：博物館及室內購物（很長的方案名）', stops: [stop('10:00', '上野', '東京國立博物館', '雨天室內')] }, { id: 'v2', name: '早一班火車', stops: [] }], by: 'u1', byName: 'Amy', at: 1 },
- 2: { stops: [stop('10:00', '澀谷', 'SHIBUYA SKY 澀谷天空', '360 度夜景', '', { placeId: 'u_p5' })], by: 'u1', byName: 'Amy', at: 1 },
+ 2: { stops: [stop('10:00', '澀谷', 'SHIBUYA SKY 澀谷天空', '360 度夜景', '', { placeId: 'u_p5' }), stop('20:28', '博多', '博多駅', '', '🚶 4 分 → 🚆 JR 鹿兒島本線區間快速 スペースワールド → 黒崎（19:31–19:36）→ 🚆 特急ソニック 52 號 黒崎 → 博多（19:50–20:28，自由席，JR Pass）｜約 57 分（已預約指定席，大件行李要預約）')], by: 'u1', byName: 'Amy', at: 1 },
 };
 const hotels = {
  h1: { name: '上野 Hotel Sunroute Ueno（サンルート上野）', address: '東京都台東区東上野3-9-3', checkIn: '2030-04-01', checkOut: '2030-04-03', mapsUrl: 'https://maps.google.com/?cid=1', lat: 35.7105, lng: 139.7797, note: '含早餐；行李可寄存至 23:00；訂單編號請看電郵', ...by },

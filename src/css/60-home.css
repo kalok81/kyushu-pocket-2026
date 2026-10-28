@@ -6,8 +6,8 @@
 .today-row time{flex:none;width:96px;font-size:var(--fs-md);font-weight:600;color:var(--muted-foreground);font-variant-numeric:tabular-nums}
 .today-row .list-main b{font-size:var(--fs-lg);font-weight:500}
 .list.today-list .note{margin:8px 14px}
-.quicklinks{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:14px}
-@media(max-width:760px){.quicklinks{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.quicklinks{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px;margin-top:14px}
+@media(max-width:760px){.quicklinks{grid-template-columns:repeat(4,minmax(0,1fr))}}
 .quick{display:grid;justify-items:center;gap:6px;min-width:0;padding:14px 6px 12px;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card);box-shadow:var(--shadow-sm);color:inherit;text-align:center;text-decoration:none}
 .quick>.icon{width:22px;height:22px;color:var(--primary)}
 .quick span{display:grid;width:100%;min-width:0}
@@ -19,3 +19,17 @@
   .quick b{font-size:var(--fs-md)}
 }
 .trip-bar + .now-card{margin-top:12px}
+/* JR Pass: the trip's JR trains, a day per group */
+.jr-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-lg);background:var(--card)}
+.jr-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:var(--fs-sm)}
+.jr-table th,.jr-table td{padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+.jr-table thead th{font-size:var(--fs-xs);font-weight:600;color:var(--muted-foreground)}
+.jr-table td small{display:block;color:var(--muted-foreground);font-size:var(--fs-xs)}
+.jr-table td time{display:block;font-weight:600;font-variant-numeric:tabular-nums}
+.jr-table thead th:first-child{width:40%}
+.jr-day th{background:var(--muted-bg);font-weight:600}
+.jr-day a{color:inherit}
+.jr-day small{margin-left:8px;font-weight:400;color:var(--muted-foreground)}
+.jr-table .jr-warn{color:var(--destructive)}
+.jr-out td{opacity:.75}
+@media(max-width:480px){.jr-table th,.jr-table td{padding:7px 6px}.jr-table thead th:first-child{width:36%}}
