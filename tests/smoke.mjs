@@ -338,7 +338,7 @@ try {
   await page.locator('[data-stop-more]').first().click(); await page.click('[data-stop-delete]:visible');
   await page.waitForFunction((k) => document.querySelectorAll('.timeline h3').length === k - 1, stops);
   await page.click('.snack-action'); await page.waitForFunction((k) => document.querySelectorAll('.timeline h3').length === k, stops);
-  await page.click('#menuBtn'); await page.click('#detail a[href="#flights"]'); await page.waitForSelector('.page-head h1');
+  await page.goto(base + '/#home'); await page.click('.quick[href="#flights"]'); await page.waitForSelector('.page-head h1');
   assert.equal(await page.locator('.page-head h1').innerText(), '機票'); assert.equal(await page.locator('#detail[open]').count(), 0);
   assert.equal(await page.locator('.bottomnav a.active').innerText(), '總覽');
  });
@@ -776,6 +776,14 @@ try {
   assert.equal(await page.inputValue('#placeForm [name=mapsUrl]'), 'https://maps.app.goo.gl/shared1');
   assert.equal(await page.evaluate(() => location.search + location.hash), '#explore');
   await closeSheet();
+ });
+ await step('附近: a pin on the map with 區域 and 距離 (米)', async () => {
+  await page.goto(base + '/#nearby'); await page.click('#pickOnMap'); await page.waitForSelector('#mapRadius');
+  assert.ok(await page.locator('#mapArea option').count() > 1, 'the explore regions to jump to');
+  await page.selectOption('#mapArea', { index: 1 }); await page.selectOption('#mapRadius', '1000');
+  assert.equal(await page.locator('#mapRadiusText').innerText(), '1000'); assert.match(await page.locator('#pinFeedback').innerText(), /1000米內/);
+  await page.click('#confirmPin'); await page.waitForSelector('#nearbyResults .resultsbar');
+  assert.match(await page.locator('#nearbyResults .resultsbar').innerText(), /^1000米內/); assert.equal(await page.locator('[data-radius].active, [data-radius][aria-pressed=true]').first().innerText(), '1公里');
  });
  await step('JR Pass: the JR trains in each day\'s main 方案, read from 交通, follows the plan', async () => {
   await page.goto(base + '/#home'); await page.click('.quick[href="#jrpass"]'); await page.waitForFunction(() => location.hash === '#jrpass');

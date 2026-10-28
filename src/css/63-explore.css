@@ -70,6 +70,8 @@
 .pin-map .leaflet-tooltip{max-width:220px;font:var(--fs-sm) system-ui;white-space:normal}
 .map-toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .map-toolbar select{max-width:100%;padding:10px}
+.map-field{display:flex;align-items:center;gap:6px;font-size:var(--fs-sm)}
+.map-field select{min-width:0}
 .map-pin{border:0;background:transparent}
 .map-pin span{display:block;width:30px;height:30px;border:3px solid var(--card);border-radius:50% 50% 50% 0;background:var(--map-pin);box-shadow:0 2px 8px rgb(0 0 0/.33);transform:rotate(-45deg)}
 .map-pin span:after{content:"";position:absolute;inset:7px;border-radius:50%;background:var(--card)}

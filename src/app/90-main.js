@@ -67,11 +67,11 @@
     window.scrollTo({ top: 0, behavior: "instant" });
   }
   $("#detail .dialog-close").onclick = () => $("#detail").close();
-  // ☰ menu: the pages without a tab, sharing, and the signed-in account.
+  // ☰ menu: trips, sharing and the signed-in account (the other pages are on 總覽).
   function openMenu() {
     const row = (href, ic, title, sub) => Kit.row({ href, lead: icon(ic), title, sub, trail: icon("chevron") });
     Kit.open(
-      `${Kit.sheetHead(esc(meta.name || "口袋旅伴"), "選單")}<nav class="list plain" aria-label="更多頁面">${row("#trips", "suitcase", "我的旅程", "切換、建立或複製旅程，邀請旅伴")}${row("#hotels", "bed", "住宿", `${lists().hotels.length} 間住宿`)}${row("#flights", "plane", "機票", `${lists().flights.length} 個航班`)}${row("#events", "ticket", "活動", `${lists().events?.length || 0} 個活動`)}${row("#ask", "sparkles", "AI 助手", "影相翻譯菜單、問旅程問題")}${row("#nearby", "locate", "附近", "100／200／500 米內的地點")}${row("#notebook", "book", "資料簿", "搜尋所有旅程資料")}${Kit.row({ lead: icon("share"), title: "分享連結", sub: "給已加入旅程的旅伴", attrs: { id: "shareBtn" } })}</nav>${window.Together?.account?.() || ""}`,
+      `${Kit.sheetHead(esc(meta.name || "口袋旅伴"), "選單")}<nav class="list plain" aria-label="更多頁面">${row("#trips", "suitcase", "我的旅程", "切換、建立或複製旅程，邀請旅伴")}${Kit.row({ lead: icon("share"), title: "分享連結", sub: "給已加入旅程的旅伴", attrs: { id: "shareBtn" } })}</nav>${window.Together?.account?.() || ""}`,
     );
   }
   $("#menuBtn").onclick = openMenu;

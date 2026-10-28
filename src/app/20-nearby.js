@@ -1,11 +1,12 @@
-  // ---- 附近 (nearby places and shops within 100/200/500 m) ----
+  // ---- 附近 (nearby places and shops within 100 m to 2 km of the phone or a pin on the map) ----
   let nearbyRequest = 0;
+  const NEAR_RADII = [100, 200, 500, 1000, 2000];
   const nearbyState = { position: null, accuracy: null, loading: false, error: "", radius: 200, category: "全部", mode: "gps" };
   function renderNearby() {
     const coordinates = window.TRIP_GEO?.places || {},
       coverage = places.filter((p) => (coordinates[p.id] || []).length).length;
     return `${header("附近", "只找已加入的地點，按直線距離由近至遠排序")}<section class="nearby-panel"><div class="links">${Kit.btn(nearbyState.loading ? "正在取得位置…" : nearbyState.position ? "重新定位" : "定位看附近", { variant: "primary", icon: "locate", attrs: { id: "locateNow", disabled: nearbyState.loading, "aria-busy": nearbyState.loading ? "true" : null } })}${Kit.btn("在地圖選位置", { icon: "pin", attrs: { id: "pickOnMap" } })}</div><p class="nearby-help">手機定位：按下後請允許瀏覽器使用位置。你的位置只在這次網頁內計算，不會儲存或傳送到網站伺服器。</p>${Kit.chips(
-      [100, 200, 500].map((r) => ({ label: `${r}米`, active: nearbyState.radius === r, attrs: { "data-radius": r } })),
+      NEAR_RADII.map((r) => ({ label: r >= 1000 ? `${r / 1000}公里` : `${r}米`, active: nearbyState.radius === r, attrs: { "data-radius": r } })),
       { label: "附近距離範圍" },
     )}${Kit.chips(
       ["全部", ...exploreCats, "購物"].map((c) => ({ label: c, icon: c === "購物" ? "bag" : "", active: nearbyState.category === c, attrs: { "data-near-category": c } })),
@@ -100,16 +101,32 @@
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 },
     );
   }
+  // 區域 in the pin page: each explore region at the middle of its places, the most places first
+  function nearbyAreas() {
+    const geo = window.TRIP_GEO?.places || {},
+      by = new Map();
+    for (const p of places) {
+      const c = (geo[p.id] || [])[0],
+        r = String(p.v[0] || "").trim();
+      if (!c || !r) continue;
+      const a = by.get(r) || { n: 0, lat: 0, lng: 0 };
+      by.set(r, { n: a.n + 1, lat: a.lat + c.lat, lng: a.lng + c.lng });
+    }
+    return [...by].sort((a, b) => b[1].n - a[1].n).map(([r, a]) => [r, a.lat / a.n, a.lng / a.n]);
+  }
   function openMapPicker() {
+    const areas = nearbyAreas();
     window.MapPicker.open({
-      areas: meta.center ? [[meta.destination, meta.center.lat, meta.center.lng]] : [],
+      areas: areas.length ? areas : meta.center ? [[meta.destination, meta.center.lat, meta.center.lng]] : [],
+      radii: NEAR_RADII,
       places,
       coordinates: window.TRIP_GEO?.places || {},
       radius: nearbyState.radius,
       category: nearbyState.category,
       initial: nearbyState.mode === "manual" ? nearbyState.position : null,
-      onConfirm: (position) => {
+      onConfirm: ({ radius, ...position }) => {
         nearbyRequest++;
+        if (NEAR_RADII.includes(radius)) nearbyState.radius = radius;
         nearbyState.position = position;
         nearbyState.accuracy = null;
         nearbyState.error = "";
