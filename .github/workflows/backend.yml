@@ -59,7 +59,7 @@ jobs:
           # All functions deploy at the same time (each one's log is printed when it ends); the step fails if any failed.
           mkdir -p /tmp/deploy
           deploy() { (gcloud functions deploy "$1" $COMMON --entry-point="$1" "${@:2}" >"/tmp/deploy/$1.log" 2>&1 && echo ok >"/tmp/deploy/$1.ok") & }
-          deploy processReceipt $FIRESTORE --trigger-event-filters-path-pattern=document='trips/{trip}/receiptJobs/{id}' --set-secrets=$DS --timeout=180s
+          deploy processReceipt $FIRESTORE --trigger-event-filters-path-pattern=document='trips/{trip}/receiptJobs/{id}' --set-secrets=$DS,$PL --timeout=180s
           deploy translateNames $FIRESTORE --trigger-event-filters-path-pattern=document='trips/{trip}/{col}/{id}' --set-secrets=$DS,$PL --timeout=180s
           deploy findBuyPlaces --trigger-http --set-secrets=$DS,$PL --timeout=90s
           deploy aiRoutes --trigger-http --set-secrets=$DS --timeout=120s

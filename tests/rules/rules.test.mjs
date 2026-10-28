@@ -63,6 +63,8 @@ test('events: valid fields, http links only, any member edits', async () => {
  await assertFails(setDoc(doc(db(amy), `${T}/events/e3`), { ...ev, url: 'javascript:alert(1)', ...owned('amy', 'Amy') }));
  await assertFails(setDoc(doc(db(amy), `${T}/events/e4`), { ...ev, title: '', ...owned('amy', 'Amy') }));
  await assertFails(setDoc(doc(db(amy), `${T}/events/e5`), { ...ev, extra: 1, ...owned('amy', 'Amy') }));
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/events/e6`), { ...ev, placeId: 'u_abc', ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/events/e7`), { ...ev, placeId: 'x'.repeat(41), ...owned('amy', 'Amy') }));
  await assertSucceeds(setDoc(doc(db(bob), `${T}/events/e1`), { ...ev, hours: '18:00–21:00', ...owned('amy', 'Amy'), byName: 'Bob' }));
  await assertFails(setDoc(doc(db(bob), `${T}/events/e1`), { ...ev, ...owned('bob', 'Bob') }));
  await assertSucceeds(deleteDoc(doc(db(bob), `${T}/events/e1`)));
@@ -128,6 +130,8 @@ test('note and coupon AI jobs', async () => {
  await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/nf1`), { ...job, mode: 'coupon', images: ['abc'] }));
  await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/nf2`), { ...job, mode: 'note', url: 'https://example.com' }));
  await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/nf3`), { ...job, mode: 'other', url: 'https://example.com' }));
+ await assertSucceeds(setDoc(doc(db(amy), `${T}/receiptJobs/ef1`), { kind: 'eventFill', file: '活動網頁', status: 'pending', url: 'https://example.com/event', ...owned('amy', 'Amy') }));
+ await assertFails(setDoc(doc(db(amy), `${T}/receiptJobs/ef2`), { kind: 'eventFill', file: '活動網頁', status: 'pending', url: 'javascript:1', ...owned('amy', 'Amy') }));
 });
 test('AI 助手 jobs: photo translation and questions', async () => {
  const job = { file: 'AI 助手', status: 'pending', ...owned('amy', 'Amy') };

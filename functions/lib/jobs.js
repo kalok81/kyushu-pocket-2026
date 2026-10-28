@@ -1,10 +1,10 @@
-// Background AI jobs (receiptJobs): receipts, product photos and links, note fills, and AI 助手 (translate, ask).
+// Background AI jobs (receiptJobs): receipts, product photos and links, note and event fills, and AI 助手 (translate, ask).
 import { cloudEvent } from '@google-cloud/functions-framework';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { answerQuestion, translatePhoto } from './assistant.js';
 import { MAX_IMAGE_BYTES, askDeepSeek, tripInfo, useQuota } from './base.js';
-import { articleItems, articlePictures, cleanNoteFill, cleanProduct, finishProduct, noteFillPrompt, pagePrompt, productPrompt, readProductLink } from './products.js';
+import { articleItems, articlePictures, cleanEventFill, cleanNoteFill, cleanProduct, eventFillPrompt, eventVenue, finishProduct, noteFillPrompt, pagePrompt, productPrompt, readProductLink } from './products.js';
 
 const receiptPrompt = t => { const { place, cur, home } = tripInfo(t); return `You read shop receipts photographed by travellers in ${place} (sometimes at home).
 Reply with JSON only, in this shape:
@@ -93,6 +93,22 @@ cloudEvent('processReceipt', async event => {
    const result = cleanNoteFill(await askDeepSeek(noteFillPrompt(tripDoc, job.mode, facts), pics));
    if (!result.title && !result.text) throw new HttpsError('not-found', 'AI 未能讀出內容，請自行填寫。');
    await jobDone(ref, result);
+   return;
+  }
+  if (job.kind === 'eventFill') {
+   // 活動 form: a web page link or a poster photo; the page fills the empty fields and links the venue to 探索.
+   await useQuota(job.by, 'ai');
+   let facts = null, pics = images.filter(validImage).slice(0, 1);
+   if (job.url) {
+    const got = await openLink(job.url, '未能開啟這個網址（網站可能不允許讀取），可以改為截圖。');
+    facts = got.facts;
+    if (got.image && !pics.length) pics = [got.image];
+   }
+   if (!pics.length && !facts) throw new HttpsError('invalid-argument', '沒有相片或網頁可以分析。');
+   const result = cleanEventFill(await askDeepSeek(eventFillPrompt(tripDoc, facts), pics));
+   if (!result.title && !result.venue) throw new HttpsError('not-found', 'AI 未能讀出活動資料，請自行填寫。');
+   const place = await eventVenue(result.venueSearch || result.venue, tripDoc).catch(() => null);
+   await jobDone(ref, { ...result, ...(place ? { place } : {}) });
    return;
   }
   if (job.kind === 'ask') {

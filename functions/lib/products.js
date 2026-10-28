@@ -285,6 +285,39 @@ export function cleanNoteFill(r) {
  };
 }
 
+// ---- 活動: fill the event form from a web page (or a photo of a poster) and find its venue on Google Maps ----
+export const eventFillPrompt = (t, f) => { const { place } = tripInfo(t); return `Travellers on a trip to ${place} add events (festivals, light-ups, markets, exhibitions) to a shared trip app. ${f ? 'They pasted a link to the web page below' : 'They added the photo'}.
+Reply with JSON only, in this shape:
+{"title": string, "area": string, "venue": string, "venueSearch": string, "start": "YYYY-MM-DD" or null, "end": "YYYY-MM-DD" or null, "hours": string, "time": "日間" | "夜間" | "全日", "fee": string, "note": string}
+- title: the event's name as written (keep Japanese/Korean names), at most 80 characters.
+- area: the district (e.g. 天神, 博多駅, 中洲) in Traditional Chinese or as written, short.
+- venue: where it is held, in Traditional Chinese (Hong Kong usage) with the local name in brackets if different, at most 100 characters.
+- venueSearch: the venue's name as written locally, good for searching on Google Maps (e.g. "冷泉公園 福岡", "櫛田神社"); for several venues, the main one.
+- start, end: the dates it runs (if the year is not shown, the next such date${t?.start ? ` around ${t.start}` : ''}); null if not shown.
+- hours: opening times, e.g. "17:30–21:00（最後入場 20:45）"; the days it differs if shown.
+- time: 夜間 if mainly in the evening, 日間 if in the daytime, 全日 if both.
+- fee: e.g. 免費, 成人 ¥1,500, in Traditional Chinese.
+- note: what it is and what is worth knowing (highlights, booking, closed days), Traditional Chinese, at most 200 characters.
+- Use only what the page or photo shows; empty string (or null) for what is not there.${f ? `
+Page: ${JSON.stringify({ site: f.site, title: f.title, description: f.description, text: f.text.slice(0, 3000) })}` : ''}`; };
+export function cleanEventFill(r) {
+ const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+ const day = v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '');
+ return { title: text(r.title, 100), area: text(r.area, 40), venue: text(r.venue, 120), venueSearch: text(r.venueSearch, 100), start: day(r.start), end: day(r.end), hours: text(r.hours, 120), time: ['日間', '夜間', '全日'].includes(r.time) ? r.time : '', fee: text(r.fee, 80), note: text(r.note, 500) };
+}
+// The venue on Google Maps near the trip (50 km): its name, address, position and link, for linking to 探索.
+export async function eventVenue(query, t) {
+ const c = t?.center, country = /^[A-Z]{2}$/.test(t?.country || '') ? t.country : '';
+ if (!query) return null;
+ const r = await placesApi('places:searchText', 'places.displayName,places.formattedAddress,places.location,places.googleMapsUri,places.websiteUri,places.primaryTypeDisplayName', {
+  textQuery: query, languageCode: langFor(country), maxResultCount: 1, ...(country ? { regionCode: country } : {}),
+  ...(Number.isFinite(c?.lat) && Number.isFinite(c?.lng) ? { locationBias: { circle: { center: { latitude: c.lat, longitude: c.lng }, radius: 50000 } } } : {}),
+ }).catch(() => null);
+ const g = r?.places?.[0];
+ if (!g?.displayName?.text || !Number.isFinite(g.location?.latitude)) return null;
+ return { name: g.displayName.text.slice(0, 100), address: String(g.formattedAddress || '').slice(0, 200), lat: g.location.latitude, lng: g.location.longitude, mapsUrl: String(g.googleMapsUri || '').slice(0, 300), website: String(g.websiteUri || '').slice(0, 300), type: String(g.primaryTypeDisplayName?.text || '').slice(0, 40) };
+}
+
 // 購物 › 購買地點: search the web (DeepSeek Search) for where an item is sold, then let the model pick the places at
 // or near the trip's destination. Returns up to 4 places as shop name + area (as on local signs) with a short reason.
 const buyPrompt = (t, item, results) => `Hong Kong travellers on a trip to ${tripInfo(t).place} want to buy this item: ${JSON.stringify(item)}.

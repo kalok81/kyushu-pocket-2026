@@ -628,6 +628,33 @@ try {
   await page.goto(base + '/#events'); await page.click('.card.event .more summary'); await page.click('[data-event-del]:visible'); await page.click('.ui-pop .btn-danger');
   await page.waitForFunction(() => !document.querySelector('.card.event'));
  });
+ await step('events: AI 填寫 from a pasted link; the venue linked to 探索 (matched, or added from Google Maps)', async () => {
+  const answer = (result) => page.evaluate(async (result) => {
+   const fs = await import('./vendor/firebase/firebase-firestore.js'), jobs = globalThis.__fakeStore.receiptJobs || {};
+   const id = Object.keys(jobs).filter((k) => jobs[k].kind === 'eventFill' && jobs[k].status === 'pending').sort((a, b) => jobs[b].at - jobs[a].at)[0];
+   await fs.updateDoc({ c: 'receiptJobs', id }, { status: 'done', result });
+   return jobs[id];
+  }, result);
+  const pasteUrl = (u) => page.evaluate((u) => { const dt = new DataTransfer(); dt.setData('text/plain', u); document.querySelector('#eventForm [name=fillUrl]').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }, u);
+  const geo = await page.evaluate(() => { const g = window.TRIP_GEO.places; const id = Object.keys(g).find((k) => g[k].length); return { id, ...g[id][0] }; });
+  await page.goto(base + '/#events'); await page.click('[data-event-new]'); await pasteUrl('https://example.com/light-up');
+  await page.waitForFunction(() => /AI 正在讀取網頁/.test(document.querySelector('#eventFillInfo').textContent));
+  const job = await answer({ title: '秋の夜間點燈', area: '淺草', venue: '淺草寺', hours: '17:30–21:00', fee: '免費', time: '夜間', start: '2030-04-01', end: '2030-04-02', note: '五重塔打燈', place: { name: 'Google 的地點', address: '東京都', lat: geo.lat + 0.0003, lng: geo.lng, mapsUrl: '', website: '', type: '寺院' } });
+  assert.equal(job.url, 'https://example.com/light-up');
+  await page.waitForFunction(() => document.querySelector('#eventForm [name=title]').value === '秋の夜間點燈');
+  const label = await page.inputValue('#eventForm [name=placeQ]'); assert.ok(label && !label.startsWith('＋'), 'matched to the explore place 33 m away');
+  assert.equal(await page.inputValue('#eventForm [name=url]'), 'https://example.com/light-up');
+  await page.click('#eventForm button[type=submit]'); await page.waitForSelector('.card.event [data-place]');
+  assert.equal(await page.getAttribute('.card.event [data-place]', 'data-place'), geo.id);
+  // a venue not in 探索: added from Google's data when the event is saved
+  await page.click('[data-event-new]'); await pasteUrl('https://example.com/market');
+  await page.waitForFunction(() => /AI 正在讀取網頁/.test(document.querySelector('#eventFillInfo').textContent));
+  await answer({ title: '週末市集', venue: '冷泉公園', place: { name: '冷泉公園', address: '福岡市博多区', lat: 1.5, lng: 1.5, mapsUrl: 'https://maps.google.com/?cid=9', website: '', type: '公園' } });
+  await page.waitForFunction(() => document.querySelector('#eventForm [name=placeQ]').value === '＋新增探索地點：冷泉公園');
+  await page.click('#eventForm button[type=submit]'); await page.waitForFunction(() => document.querySelectorAll('.card.event [data-place]').length === 2);
+  assert.ok(await page.evaluate(() => Object.values(globalThis.__fakeStore.places || {}).some((p) => p.fields?.[1] === '冷泉公園' && p.lat === 1.5)), 'the venue added to 探索');
+  for (let i = 0; i < 2; i++) { await page.click('.card.event .more summary >> nth=0'); await page.click('[data-event-del]:visible'); await page.click('.ui-pop .btn-danger'); await page.waitForTimeout(300); }
+ });
  await step('paste: a Maps link on 探索 opens 新增地點; a link on 購物清單 becomes a product job', async () => {
   const paste = (sel, text) => page.evaluate(([sel, text]) => { const dt = new DataTransfer(); dt.setData('text/plain', text); document.querySelector(sel).dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); }, [sel, text]);
   await page.goto(base + '/#explore'); await page.waitForSelector('#search');

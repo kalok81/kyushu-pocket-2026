@@ -27,10 +27,10 @@ service cloud.firestore {
     }
     // 活動: events during the trip (dates, hours, venue), shown on the 活動 page and addable to a day's plan
     function eventValid(d) {
-      return d.keys().hasOnly(['title', 'area', 'venue', 'start', 'end', 'hours', 'time', 'fee', 'note', 'url', 'by', 'byName', 'at', 'createdAt'])
+      return d.keys().hasOnly(['title', 'area', 'venue', 'placeId', 'start', 'end', 'hours', 'time', 'fee', 'note', 'url', 'by', 'byName', 'at', 'createdAt'])
         && text(d.title, 100) && d.title.size() > 0 && text(d.area, 40) && text(d.venue, 120)
         && text(d.start, 10) && text(d.end, 10) && text(d.hours, 120) && text(d.time, 10) && text(d.fee, 80) && text(d.note, 500)
-        && text(d.url, 500) && (d.url == '' || d.url.matches('^https?://.*'));
+        && text(d.url, 500) && (d.url == '' || d.url.matches('^https?://.*')) && (!('placeId' in d) || text(d.placeId, 40));
     }
     function flightValid(d) {
       return d.keys().hasOnly(['flightNo', 'airline', 'from', 'to', 'depart', 'arrive', 'note', 'docs', 'by', 'byName', 'at', 'createdAt']) && docsValid(d)
@@ -184,12 +184,12 @@ service cloud.firestore {
           && (!('mode' in request.resource.data) || request.resource.data.mode in ['note', 'coupon'])
           && (!('hashes' in request.resource.data) || (request.resource.data.hashes is list && request.resource.data.hashes.size() <= 4))
           && request.resource.data.status == 'pending' && text(request.resource.data.file, 120)
-          && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill', 'noteFill', 'translate', 'ask'])
+          && (!('kind' in request.resource.data) || request.resource.data.kind in ['receipt', 'product', 'productFill', 'noteFill', 'eventFill', 'translate', 'ask'])
           && (('images' in request.resource.data && request.resource.data.images is list
                 && request.resource.data.images.size() >= 1 && request.resource.data.images.size() <= 4)
               || text(request.resource.data.get('image', null), 900000)
               // a product page or picture link read by the function
-              || (request.resource.data.get('kind', '') in ['product', 'noteFill'] && text(request.resource.data.get('url', null), 500)
+              || (request.resource.data.get('kind', '') in ['product', 'noteFill', 'eventFill'] && text(request.resource.data.get('url', null), 500)
                   && request.resource.data.url.matches('^https?://.+'))
               // AI 助手: a question with the trip summary the page put together, and the last turns of the chat
               || (request.resource.data.get('kind', '') == 'ask' && text(request.resource.data.get('question', null), 500)
