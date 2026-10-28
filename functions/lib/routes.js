@@ -1,6 +1,6 @@
 // Routes between plan stops: Google Routes, NAVITIME and AI route advice.
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
-import { DEEPSEEK_API_KEY, MAX_IMAGE_BYTES, PLACES_API_KEY, RAPIDAPI_KEY, askDeepSeek, requireMember, useQuota } from './base.js';
+import { DEEPSEEK_API_KEY, PLACES_API_KEY, RAPIDAPI_KEY, askDeepSeek, requireMember, useQuota } from './base.js';
 import { langFor } from './places.js';
 
 // Route suggestions between two plan stops (Routes API): public transport, walking or driving, with alternatives
@@ -105,7 +105,7 @@ export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck
  const mode = ['TRANSIT', 'WALK', 'DRIVE'].includes(d.mode) ? d.mode : 'TRANSIT';
  const country = typeof d.country === 'string' && /^[A-Z]{2}$/.test(d.country) ? d.country : '';
  const zone = ZONES[country] || 'UTC';
- // Japan by public transport: Yahoo!乗換案内 (real timetables, buses), then NAVITIME (trains, estimated times), then Google (none)
+ // Japan by public transport: Yahoo!乗換案内 (real timetables, buses), then NAVITIME (trains, estimated times); Google has none
  if (mode === 'TRANSIT' && country === 'JP') {
   const ya = await yahooRoutes(req.auth.uid, { ...d.origin, ...(typeof d.originText === 'string' ? { address: d.originText.slice(0, 200) } : {}), name: String(d.originName || '').slice(0, 80) }, { ...d.destination, ...(typeof d.destinationText === 'string' ? { address: d.destinationText.slice(0, 200) } : {}), name: String(d.destinationName || '').slice(0, 80) }, String(d.time || ''), 6).catch(e => (console.error('yahoo', e?.message), null));
   if (ya?.length) return { options: ya, estimated: false, source: 'yahoo' };
@@ -114,6 +114,8 @@ export const suggestRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck
   const options = await naviRoutes(req.auth.uid, d.origin, d.destination, String(d.time || ''), 4).catch(e => (console.error('navi', e?.message), null));
   if (options?.length) return { options, estimated: false, source: 'navitime' };
  }
+ // Google's routes have no public transport in Japan: not asked
+ if (mode === 'TRANSIT' && country === 'JP') return { options: [], estimated: false, noTransit: true };
  await useQuota(req.auth.uid, 'maps');
  // Timetables only reach a few weeks ahead: for a past or far-off date, use the same weekday and time next week.
  let when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.time || '') ? zonedToUtc(d.time, zone) : null, estimated = false;
@@ -159,12 +161,9 @@ export const aiRoutes = onCall({ region: 'asia-northeast1', enforceAppCheck: tru
  await requireMember(req);
  const d = req.data || {}, from = placeText(d.origin), to = placeText(d.destination);
  if (!from || !to) throw new HttpsError('invalid-argument', '起點或終點沒有資料。');
- if (d.image !== undefined && (typeof d.image !== 'string' || d.image.length > MAX_IMAGE_BYTES * 1.4 || !/^[A-Za-z0-9+/=]+$/.test(d.image))) throw new HttpsError('invalid-argument', '截圖太大或格式不正確。');
  await useQuota(req.auth.uid, 'ai');
  const where = String(d.destination?.region || d.place || '').slice(0, 80), when = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(d.time || '') ? d.time.replace('T', ' ') : '';
  const cur = typeof d.currency === 'string' && /^[A-Z]{3}$/.test(d.currency) ? d.currency : 'JPY';
- // A screenshot of a route (Google Maps, Yahoo!乗換案内, a timetable…): the model reads it as it is
- if (d.image) return readRouteShot(d.image, from, to, typeof d.currency === 'string' && /^[A-Z]{3}$/.test(d.currency) ? d.currency : 'JPY');
  // Japan: the AI weighs Yahoo!乗換案内's real routes (times, train numbers, platforms, fares stay Yahoo's) and adds
  // its advice; it estimates the ways only where Yahoo has none.
  if (d.country === 'JP') {
@@ -216,32 +215,4 @@ Reply with JSON only: {"picks": [{"i": number, "title": string, "note": string}]
   options: order.slice(0, 4).map(p => ({ ...real[p.i], title: text(p.title, 40), note: text(p.note, 200), confidence: 'high', source: 'yahoo' })),
   advice: text(r?.advice, 300),
  };
-}
-// 截圖讀取: the routes in a screenshot the traveller took (e.g. Google Maps' directions), read as shown, nothing guessed.
-async function readRouteShot(image, from, to, cur) {
- const prompt = `This is a screenshot of public transport directions (Google Maps, Yahoo!乗換案内, a timetable or similar) that Hong Kong travellers took for going from A to B.
-A: ${from}
-B: ${to}
-Read every route shown, exactly as written. Reply with JSON only:
-{"options": [{"title": string, "minutes": number, "fare": number or null, "steps": [{"mode": "WALK" | "TRANSIT", "vehicle": "SUBWAY" | "HEAVY_RAIL" | "HIGH_SPEED_TRAIN" | "BUS" | "TRAM" | "MONORAIL" | "FERRY" | "", "line": string, "headsign": string, "from": string, "to": string, "depart": "HH:MM" or "", "arrive": "HH:MM" or "", "platform": string, "stops": number, "minutes": number}], "note": string}], "advice": string, "readable": boolean}
-- platform: where that step's train or bus leaves from (Yahoo writes it as "[発] 8番線"; "[着] 2番線" is where the step before arrives — not this step's). Empty if not shown.
-- One option per route in the picture, in the order shown. Copy line and train names (with train numbers), station and stop names, times, platforms ("3番線", "2のりば") and fares as written; leave out what is not shown (empty string or 0). Do not add anything that is not in the picture.
-- fare: per adult in ${cur} as shown, null if not shown. minutes: the total shown.
-- title (e.g. "08:52 發"), note (what the picture says to watch out for) and advice in Traditional Chinese as used in Hong Kong, short.
-- readable: false if the picture shows no route.`;
- let r;
- try { r = await askDeepSeek(prompt, [image]); } catch (e) { console.error('route shot', e?.message); throw new HttpsError('unavailable', 'AI 暫時未能讀取截圖，請稍後再試。'); }
- if (r?.readable === false) throw new HttpsError('invalid-argument', '截圖中找不到路線，請截取路線詳情的畫面。');
- const num = (v, max) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= max ? Math.round(v) : 0);
- const text = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
- const hm = v => (/^\d{1,2}:\d{2}$/.test(String(v || '').trim()) ? String(v).trim().padStart(5, '0') : '');
- const options = (Array.isArray(r?.options) ? r.options : []).slice(0, 6).map(o => ({
-  title: text(o.title, 40), minutes: num(o.minutes, 1440), note: text(o.note, 200), confidence: 'high', source: 'shot',
-  fare: typeof o.fare === 'number' && o.fare > 0 && o.fare < 1e6 ? { currency: cur, amount: Math.round(o.fare * 100) / 100 } : null,
-  steps: (Array.isArray(o.steps) ? o.steps : []).slice(0, 12).map(s => (s?.mode === 'WALK'
-   ? { mode: 'WALK', minutes: num(s.minutes, 600), meters: 0 }
-   : { mode: 'TRANSIT', vehicle: text(s?.vehicle, 30), line: text(s?.line, 60), headsign: text(s?.headsign, 40), from: text(s?.from, 60), to: text(s?.to, 60), depart: hm(s?.depart), arrive: hm(s?.arrive), stops: num(s?.stops, 200), minutes: num(s?.minutes, 1440), ...(text(s?.platform, 20) ? { platform: text(s.platform, 20) } : {}) })),
- })).filter(o => o.steps.some(x => x.mode === 'TRANSIT'));
- if (!options.length) throw new HttpsError('invalid-argument', '截圖中找不到路線，請截取路線詳情的畫面。');
- return { source: 'shot', options, advice: text(r?.advice, 300) };
 }

@@ -128,19 +128,14 @@ try {
   const req = await page.evaluate(() => window.aiRequest); assert.equal(req.origin.name, '上野酒店'); assert.equal(req.destination.name, '淺草寺'); assert.equal(req.currency, 'JPY');
   await page.locator('[data-route-ai-pick]').first().click();
   await page.waitForFunction(() => /最快：.*銀座線 上野 → 淺草.*（AI 估算）/.test(document.querySelector('#routeManual textarea').value));
-  // 截圖讀取: a screenshot (here any picture) read by the AI, its route written in as read
-  await page.setInputFiles('[data-route-shot]', root + 'icon-192.png'); await page.waitForFunction(() => /截圖中的路線/.test(document.querySelector('#routeAi')?.innerText || ''));
-  assert.ok((await page.evaluate(() => window.shotRequest.image.length)) > 100);
-  await page.locator('[data-route-ai-pick]').first().click();
-  await page.waitForFunction(() => /08:52 發：.*JR日豊本線 別府 08:52 → 大分 09:06.*JR久大本線 大分 09:22 → 由布院 10:29（8番線）.*（截圖）/.test(document.querySelector('#routeManual textarea').value));
   // 方式 are checkboxes: several at once are asked for in turn, each under its own heading
   await page.check('[name=routeMode][value=WALK]'); await page.click('#routeGo'); await page.waitForSelector('.route-mode-head >> nth=1');
   assert.deepEqual(await page.locator('.route-mode-head').allInnerTexts(), ['公共交通', '步行']);
   if (process.env.SHOTS) await page.locator('.route-form').screenshot({ path: process.env.SHOTS + '/route-modes.png' });
   // no train or bus found (Google's walk-only answer is not public transport): a note, and Google's directions open
   await page.evaluate(() => { window.noTransitNext = true; document.querySelector('#routeEmbed').innerHTML = ''; }); await page.uncheck('[name=routeMode][value=WALK]'); await page.click('#routeGo');
-  await page.waitForSelector('#routeEmbed iframe'); assert.match(await page.locator('#routeResults').innerText(), /沒有方便的火車，多數要搭巴士/);
-  assert.match(await page.getAttribute('#routeEmbed a.transit-go', 'href'), /travelmode=transit/);
+  await page.waitForFunction(() => /沒有方便的火車，多數要搭巴士/.test(document.querySelector('#routeResults').innerText));
+  assert.equal(await page.locator('#routeEmbed iframe').count(), 0, 'Google map only on its button');
   // Yahoo!乗換案内: real timetables with platforms; the names and addresses go with the request
   await page.evaluate(() => { window.yahooNext = true; }); await page.click('#routeGo'); await page.waitForFunction(() => /Yahoo!乗換案内 提供/.test(document.querySelector('#routeResults')?.innerText || ''));
   assert.match(await page.locator('#routeResults').innerText(), /08:10–08:15 · 1番線/);

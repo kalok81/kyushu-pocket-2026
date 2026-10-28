@@ -155,7 +155,7 @@
     openDialog(
       `<div class="eyebrow">交通 · D${day}</div><h2 class="detailtitle" id="routeTitle">前往 ${esc(to.title)}</h2>${dests.length > 1 ? `<div class="tg-form route-form"><label>目的地（同一時間有 ${dests.length} 個選擇）<select id="routeTo">${dests.map((k) => `<option value="${k}"${k === i ? " selected" : ""}>${esc(list[k].title)}</option>`).join("")}</select></label></div>` : ""}${
         origins.length
-          ? `<div class="tg-form route-form"><label>出發地<select id="routeFrom">${origins.map((o) => `<option value="${esc(o.key)}"${o.key === def ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</select></label><div class="tg-row"><label>出發時間<input id="routeTime" type="time" value="${esc(start || "09:00")}"></label><fieldset class="route-modes"><legend>方式（可選多個）</legend>${Object.entries(ROUTE_MODES).map(([k, [v]]) => `<label class="tg-check"><input type="checkbox" name="routeMode" value="${k}"${k === "TRANSIT" ? " checked" : ""}> ${v}</label>`).join("")}</fieldset></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { size: "sm", icon: "map", attrs: { id: "routeGm", "data-route-embed": true, title: "在下面顯示 Google 地圖的路線" } })}${Kit.btn("AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div><p class="route-shot">${Kit.fileBtn("截圖讀取", { size: "sm", variant: "ghost", icon: "camera", input: { "data-route-shot": true } })}<small>Google 地圖 App 的路線截圖，AI 讀出班次（亦可直接貼上）；Yahoo 不用截圖，「查路線」已自動讀取</small></p><div id="routeEmbed"></div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
+          ? `<div class="tg-form route-form"><label>出發地<select id="routeFrom">${origins.map((o) => `<option value="${esc(o.key)}"${o.key === def ? " selected" : ""}>${esc(o.label)}</option>`).join("")}</select></label><div class="tg-row"><label>出發時間<input id="routeTime" type="time" value="${esc(start || "09:00")}"></label><fieldset class="route-modes"><legend>方式（可選多個）</legend>${Object.entries(ROUTE_MODES).map(([k, [v]]) => `<label class="tg-check"><input type="checkbox" name="routeMode" value="${k}"${k === "TRANSIT" ? " checked" : ""}> ${v}</label>`).join("")}</fieldset></div><div class="route-actions">${Kit.btn("查路線", { variant: "primary", size: "sm", icon: "route", attrs: { id: "routeGo", title: "查詢路線建議" } })}${Kit.btn("Google", { size: "sm", icon: "map", attrs: { id: "routeGm", "data-route-embed": true, title: "在下面顯示 Google 地圖的路線" } })}${Kit.btn("AI 分析", { size: "sm", icon: "sparkles", attrs: { "data-route-ai": true } })}</div><div id="routeEmbed"></div></div><div id="routeResults" class="route-results"></div><div id="routeAi" class="route-results"></div>`
           : '<p class="note">這天前面沒有站點，亦未有住宿資料，未能查詢路線；可以自行填寫。</p>'
       }<form class="tg-form" id="routeManual"><label>交通（可自行修改）<textarea name="transport" rows="3" maxlength="500" placeholder="例如：地下鐵空港線 博多 → 天神，約 5 分">${esc(to.transport || "")}</textarea></label>${Kit.btn("儲存交通", { type: "submit", variant: "secondary" })}</form>`,
     );
@@ -214,10 +214,9 @@
       r0 = routeInputs();
     if (!c || !box || !r0) return;
     const { from, to, dest, modes, time } = r0;
-    box.innerHTML = Kit.progress({ text: "正在查詢 Google 地圖…", seconds: 6 * modes.length });
+    box.innerHTML = Kit.progress({ text: "正在查詢路線…", seconds: 6 * modes.length });
     c.options = [];
     const parts = [];
-    let noTransit = false;
     for (const mode of modes) {
       let html;
       try {
@@ -238,19 +237,16 @@
         html = r.options.length
           ? `${r.source === "yahoo" ? '<p class="note">班次、月台及車費由 Yahoo!乗換案内 提供（實際時刻表，包括巴士及渡輪）。</p>' : ""}${r.source === "navitime" ? '<p class="note">火車路線及車費由 NAVITIME 提供（車費＝車票＋自由席特急料金），時間按平均行車時間估算，沒有列車號數：實際班次可按段落下面的「查班次」。不包括巴士，搭巴士較方便時請按「Google」或「AI 分析」。</p>' : ""}${r.estimated ? '<p class="note">行程日期太遠或已過，班次按下一個相同星期的時間估算，出發前請再確認。</p>' : ""}${r.options.map((o, k) => `<div class="card route-option"><div class="route-head"><b>約 ${o.minutes} 分</b>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}${mode === "TRANSIT" && o.steps.find((s) => s.mode === "TRANSIT") ? `<span>${o.steps.find((s) => s.mode === "TRANSIT").approx ? "約 " : ""}${esc(o.steps.find((s) => s.mode === "TRANSIT").depart)} 開出</span>` : ""}</div><ol class="route-steps">${mode === "TRANSIT" ? o.steps.map((s) => (s.mode === "TRANSIT" ? `<li><b>${VEHICLE_ICON[s.vehicle] || "🚉"} ${esc(s.line)}</b>${s.headsign ? ` <small>往 ${esc(s.headsign)}</small>` : ""}<div>${esc(s.from)} → ${esc(s.to)}${s.stops ? ` · ${s.stops} 站` : ""} · ${s.approx ? "約 " : ""}${esc(s.depart)}–${esc(s.arrive)}${s.platform ? ` · ${esc(s.platform)}` : ""}</div></li>` : `<li>🚶 步行 ${s.minutes} 分</li>`)).join("") : `<li>${esc(routeText(o, mode))}</li>`}</ol>${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-pick": base + k } })}</div>`).join("")}`
           : mode === "TRANSIT"
-            ? `<p class="note">${meta.country === "JP" ? "這段沒有方便的火車，多數要搭巴士。下面是 Google 地圖的路線預覽（有巴士）；亦可以按「AI 分析」。" : "Google 地圖找不到公共交通路線，下面是 Google 地圖的交通指引。"}</p>`
+            ? `<p class="note">${meta.country === "JP" ? "這段沒有方便的火車，多數要搭巴士：可按「AI 分析」，或按「Google」在下面看地圖路線。" : "找不到公共交通路線，可按「Google」在下面看地圖的交通指引。"}</p>`
             : `<p class="note">Google 地圖找不到${ROUTE_MODES[mode][0]}路線。</p>`;
-        if (mode === "TRANSIT" && !r.options.length) noTransit = true;
       } catch (e) {
         html = `<p class="note">${esc(fnError(e, "未能查詢路線，請檢查網絡後再試。"))}</p>`;
       }
       parts.push(modes.length > 1 ? `<h3 class="route-mode-head">${ROUTE_MODES[mode][0]}</h3>${html}` : html);
       if (routeCtx !== c || !$("#routeResults")) return;
     }
+    // Google's map below only on 「Google」: its routes cannot be read, only shown
     box.innerHTML = parts.join("");
-    // public transport in Japan: Google's own map below as well (its routes cannot be read, only shown), to compare with
-    // Yahoo's list above; elsewhere only when nothing was found
-    if ((noTransit || (meta.country === "JP" && modes.includes("TRANSIT"))) && !$("#routeEmbed iframe")) transitFrame($("#routeEmbed"), { ...from.point, name: from.name, address: from.address }, { ...dest, name: to.title, address: to.target });
   }
   // AI route advice (aiRoutes function): several ways with lines and stations, times and fares are estimates.
   const AI_MODE_ICON = { WALK: "🚶", TAXI: "🚕", DRIVE: "🚗" };
@@ -264,17 +260,15 @@
   const aiRouteText = (o) =>
     o.source === "yahoo"
       ? `${o.title ? o.title + "：" : ""}${routeText(o, "TRANSIT")}（Yahoo!乗換案内）`
-      : o.source === "shot"
-      ? `${o.title ? o.title + "：" : ""}${o.steps.map(aiStep).join(" → ")}${o.minutes ? `｜約 ${o.minutes} 分` : ""}${o.fare ? ` · ${fareText(o)}` : ""}（截圖）`
       : `${o.title ? o.title + "：" : ""}${o.steps.map(aiStep).join(" → ")}｜約 ${o.minutes} 分${o.fare ? ` · ${fareText(o)}` : ""}（AI 估算）`;
-  // AI 分析, or 截圖讀取 with image: a screenshot of a route (Google Maps…) read by the AI as shown
-  async function runAiRoutes(image = null) {
+  // AI 分析
+  async function runAiRoutes() {
     const c = routeCtx,
       box = $("#routeAi");
     const r0 = routeInputs();
     if (!c || !box || !r0) return;
     const { from, to, dest, time } = r0;
-    box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} ${image ? "AI 正在讀取截圖…" : "AI 正在考慮路線…"}</b>${Kit.progress({ text: "大約需要 10–30 秒。", seconds: 25 })}</div>`;
+    box.innerHTML = `<div class="route-ai-wait"><b>${icon("sparkles")} AI 正在考慮路線…</b>${Kit.progress({ text: "大約需要 10–30 秒。", seconds: 25 })}</div>`;
     box.scrollIntoView({ block: "nearest", behavior: "smooth" });
     try {
       const r = await window.Together.aiRoutes({
@@ -292,40 +286,15 @@
         time: `${isoDash(days[c.day - 1])}T${time}`,
         currency: meta.currency || "JPY",
         country: meta.country || "",
-        ...(image ? { image } : {}),
       });
       c.aiOptions = r.options;
       box.innerHTML = r.options.length
-        ? `<div class="route-ai-head"><b>${icon("sparkles")} ${r.source === "shot" ? "截圖中的路線" : "AI 建議"}</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">${r.source === "shot" ? "以下由 AI 從截圖讀出，請對照截圖核實。" : r.source === "yahoo" ? "路線、班次、月台及車費來自 Yahoo!乗換案内（實際時刻表），AI 只負責比較及提示。" : "由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。"}</p></div>${r.options.map((o, k) => `<div class="card route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b>${o.source === "shot" ? '<span class="ai-sure high">截圖</span>' : o.source === "yahoo" ? '<span class="ai-sure high">實際班次</span>' : `<span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span>`}<span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-ai-pick": k } })}</div>`).join("")}`
+        ? `<div class="route-ai-head"><b>${icon("sparkles")} AI 建議</b>${r.advice ? `<p>${esc(r.advice)}</p>` : ""}<p class="note">${r.source === "yahoo" ? "路線、班次、月台及車費來自 Yahoo!乗換案内（實際時刻表），AI 只負責比較及提示。" : "由 AI 按一般情況估算，班次、時間及車費可能不準，出發前請用 Google 地圖或車站資料確認。"}</p></div>${r.options.map((o, k) => `<div class="card route-option ai"><div class="route-head"><b>${esc(o.title || `方案 ${k + 1}`)}</b>${o.source === "yahoo" ? '<span class="ai-sure high">實際班次</span>' : `<span class="ai-sure ${esc(o.confidence || "low")}">${{ high: "把握：高", medium: "把握：中", low: "把握：低，請核對" }[o.confidence] || "把握：低，請核對"}</span>`}<span>約 ${o.minutes} 分</span>${o.fare ? `<span>${esc(fareText(o))}</span>` : ""}</div><ol class="route-steps">${o.steps.map((s) => `<li>${esc(aiStep(s))}</li>`).join("")}</ol>${o.note ? `<p class="note">${esc(o.note)}</p>` : ""}${Kit.btn("選用這個", { variant: "secondary", size: "sm", icon: "check", attrs: { "data-route-ai-pick": k } })}</div>`).join("")}`
         : '<p class="note">AI 未能提供路線建議。</p>';
     } catch (e) {
       box.innerHTML = `<p class="note">${esc(fnError(e, "未能進行 AI 分析，請檢查網絡後再試。"))}</p>`;
     }
   }
-  // 截圖讀取: a screenshot picked, or pasted while 查交通 is open
-  async function routeShot(file) {
-    if (!file || !routeCtx) return;
-    let b64;
-    try {
-      // phone screenshots are tall: 2400px on the long side keeps the small print (platforms) readable
-      b64 = await window.Together.shrink(file, 2400, 0.8);
-    } catch {
-      return toast("未能讀取這張圖片，請改用 JPG 或 PNG。");
-    }
-    runAiRoutes(b64);
-  }
-  document.addEventListener("change", (e) => {
-    if (e.target.dataset?.routeShot === undefined || !e.target.files.length) return;
-    routeShot(e.target.files[0]);
-    e.target.value = "";
-  });
-  document.addEventListener("paste", (e) => {
-    if (!$("#routeAi") || !$("#detail").open) return;
-    const img = [...(e.clipboardData?.files || [])].find((f) => f.type.startsWith("image/"));
-    if (!img) return;
-    e.preventDefault();
-    routeShot(img);
-  });
   function saveTransport(text) {
     const c = routeCtx;
     if (!c) return;
