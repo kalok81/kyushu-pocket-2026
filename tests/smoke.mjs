@@ -84,14 +84,16 @@ try {
   const before = await page.locator('[data-tg-live=list] .tg-item').count();
   await page.evaluate(async () => {
    const fs = await import('./vendor/firebase/firebase-firestore.js'), by = 'u1';
-   for (const [i, merchant] of ['ローソン', 'ユニクロ'].entries())
-    await fs.setDoc({ c: 'receiptJobs', id: 'rj' + i }, { status: 'done', by, file: merchant + '.jpg', at: Date.now() + i, result: { merchant, total: 500 + i * 1000, currency: 'JPY', date: '', items: [] } });
+   for (const [i, merchant] of ['ローソン', ''].entries())
+    await fs.setDoc({ c: 'receiptJobs', id: 'rj' + i }, { status: 'done', by, file: 'r' + i + '.jpg', at: Date.now() + i, result: { merchant, total: 500 + i * 1000, currency: 'JPY', date: '', items: [], ...(merchant ? {} : { source: 'tags', confidence: 'medium' }) } });
   });
   await page.waitForSelector('[data-tg=draftsAddAll]');
+  // price tags instead of a receipt: named 價錢牌 and flagged for checking
+  assert.match(await page.locator('.tg-draft').last().innerText(), /由價錢牌讀出/); assert.equal(await page.inputValue('.tg-draft:last-child [data-df=title]'), '價錢牌');
   assert.equal(await page.locator('.tg-draft-pay [data-dpay=split]:checked').count(), await page.locator('.tg-draft-pay [data-dpay=split]').count(), 'split among everyone by default');
   await page.click('[data-tg=draftsAddAll]');
   await page.waitForFunction((n) => document.querySelectorAll('[data-tg-live=list] .tg-item').length === n + 2 && !document.querySelector('.tg-draft'), before);
-  assert.match(await page.locator('[data-tg-live=list]').innerText(), /ユニクロ[\s\S]*ローソン|ローソン[\s\S]*ユニクロ/);
+  assert.match(await page.locator('[data-tg-live=list]').innerText(), /價錢牌/);
  });
  await step('checklist: suggestions and ticks', async () => {
   await page.goto(base + '/#together?tab=checklist'); await page.click('.tg-list [data-tg=checkSuggest]');

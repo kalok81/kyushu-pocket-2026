@@ -38,7 +38,7 @@
       status: jobState(j),
       error: j.error,
       retry: canRetry(j),
-      title: e.title ?? (r.merchant || "收據"),
+      title: e.title ?? (r.merchant || (r.source === "tags" ? "價錢牌" : "收據")),
       amount: e.amount ?? r.total ?? "",
       currency: e.currency ?? pickCur(r.currency),
       day: Number(e.day ?? (day ? day.n : today())),
@@ -49,11 +49,13 @@
           ? `⚠️ 收據不是${tripCurrencies()
               .map((c) => CURRENCY_NAMES[c] || c)
               .join("或")}，請自行換算。`
-          : r.totalFromItems
-            ? "⚠️ 讀不到總額，已用物品合計，請對照收據。"
-            : r.confidence === "low"
-              ? "⚠️ 相片不太清楚，請仔細檢查。"
-              : "",
+          : r.source === "tags"
+            ? "⚠️ 由價錢牌讀出（沒有收據），已用各件的含稅價合計，請對照實際付款金額。"
+            : r.totalFromItems
+              ? "⚠️ 讀不到總額，已用物品合計，請對照收據。"
+              : r.confidence === "low"
+                ? "⚠️ 相片不太清楚，請仔細檢查。"
+                : "",
       // Not blocking: totals often differ from the item lines because of tax, discounts or a missed line.
       hint: (() => {
         const lines = (r.items || []).filter((i) => i.amount > 0),
@@ -193,7 +195,7 @@
       picked.size >= 2
         ? `<div class="notice tg-merge">已選 ${picked.size} 張相片。${Kit.btn("合併所選（同一張收據）", { variant: "secondary", size: "sm", attrs: { "data-tg": "mergeDrafts", "data-keys": [...picked].join(",") } })}</div>`
         : "";
-    box.innerHTML = `${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready ? Kit.btn(`全部加入（${ready}）`, { variant: "primary", size: "sm", icon: "check", attrs: { "data-tg": "draftsAddAll" } }) : ""}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading ? `${uploading} 張正在上載${navigator.onLine ? "" : "（離線中，有網絡時會繼續）"}。` : ""}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」用下面的選擇；有 ⚠️ 的不會在「全部加入」時加入。</p>${payBox(all)}${all.map((d) => draftHtml(d, all)).join("")}`;
+    box.innerHTML = `${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready ? Kit.btn(`全部加入（${ready}）`, { variant: "primary", size: "sm", icon: "check", attrs: { "data-tg": "draftsAddAll" } }) : ""}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading ? `${uploading} 張正在上載${navigator.onLine ? "" : "（離線中，有網絡時會繼續）"}。` : ""}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」用下面的選擇；「可能重複」的不會在「全部加入」時加入。</p>${payBox(all)}${all.map((d) => draftHtml(d, all)).join("")}`;
     if (card && field) {
       const el = box.querySelector(`[data-draft="${card.dataset.draft}"] [data-df="${field}"]`);
       if (el) el.focus();
