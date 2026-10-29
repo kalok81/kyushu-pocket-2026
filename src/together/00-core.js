@@ -122,8 +122,9 @@
     const d = T().days[n - 1];
     return d ? `D${d.n} ${d.date} ${d.region}` : "";
   };
-  const today = () => {
-    const now = new Date(),
+  // The trip day of a time (now by default); day 1 outside the trip.
+  const today = (at = Date.now()) => {
+    const now = new Date(at),
       iso = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}/${String(now.getDate()).padStart(2, "0")}`;
     return T().days.find((d) => d.iso === iso)?.n || 1;
   };

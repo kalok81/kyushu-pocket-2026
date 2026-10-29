@@ -41,7 +41,8 @@
       title: e.title ?? (r.merchant || (r.source === "tags" ? "價錢牌" : "收據")),
       amount: e.amount ?? r.total ?? "",
       currency: e.currency ?? pickCur(r.currency),
-      day: Number(e.day ?? (day ? day.n : today())),
+      // the date printed on the receipt, else the day the photo was uploaded (price tags have no date)
+      day: Number(e.day ?? (day ? day.n : today(j.at || Date.now()))),
       category: e.category ?? (CATS[r.category] ? r.category : ""),
       items: r.items || [],
       warn:
