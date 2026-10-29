@@ -528,9 +528,16 @@ window.Together = (() => {
   // ---- Receipts read by AI in the background (receiptJobs), drafts, merging and duplicates ----
   // Receipts are read in the background: each photo becomes a receiptJobs document. Firestore keeps unsent
   // writes on the phone and retries after a reload, and the processReceipt function reads the receipt
-  // server-side even if the page is closed. Payer and split come from the expense form when adding.
+  // server-side even if the page is closed. Payer and split are chosen in the drafts box (the expense form is a sheet
+  // that is usually closed); by default you paid and it is split among everyone.
   let jobs = [];
   const localEdits = {};
+  const draftPay = { paidBy: "", split: null };
+  const payOf = () => {
+    const ids = people().map((p) => p.id),
+      paidBy = ids.includes(draftPay.paidBy) ? draftPay.paidBy : state.user.uid;
+    return { paidBy, split: draftPay.split ? draftPay.split.filter((id) => ids.includes(id)) : ids };
+  };
   const STUCK = 3 * 60 * 1000;
   const jobState = (j) =>
     j.status === "done"
@@ -682,6 +689,11 @@ window.Together = (() => {
     const warn = draftDup(d, all) || d.warn;
     return `<article class="card tg-item tg-draft" data-draft="${d.key}">${head}<div class="tg-row"><label>項目<input data-df="title" maxlength="80" value="${esc(d.title)}"></label><label>金額<input data-df="amount" type="number" inputmode="decimal" min="0.01" step="0.01" value="${esc(d.amount)}"></label></div><div class="tg-row"><label>貨幣<select data-df="currency">${curOptions(d.currency)}</select></label><label>日子<select data-df="day">${dayOptions(d.day)}</select></label></div><label>分類<select data-df="category"><option value="">未分類</option>${catOptions(d.category)}</select></label>${d.items.length ? `<ul class="tg-lines">${d.items.map((i) => `<li><span>${esc(i.name)}</span><span>${esc(i.amount)}</span></li>`).join("")}</ul>` : ""}${warn ? `<p class="note tg-warn">${esc(warn)}</p>` : ""}${d.hint ? `<p class="note">ℹ️ ${esc(d.hint)}</p>` : ""}<div class="links">${Kit.btn("加入", { variant: "secondary", size: "sm", icon: "plus", attrs: { "data-draft-add": d.key } })}${drop}</div></article>`;
   }
+  function payBox(all) {
+    if (!all.some((d) => d.status === "done")) return "";
+    const { paidBy, split } = payOf();
+    return `<fieldset class="tg-draft-pay"><legend>這些收據</legend><label>誰付款<select data-dpay="paidBy">${people().map((p) => `<option value="${esc(p.id)}"${p.id === paidBy ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select></label><div class="tg-draft-split"><span>分給</span>${people().map((p) => `<label class="tg-check"><input type="checkbox" data-dpay="split" value="${esc(p.id)}"${split.includes(p.id) ? " checked" : ""}> ${esc(p.name)}</label>`).join("")}</div></fieldset>`;
+  }
   function renderDrafts() {
     const box = $("#tgDrafts");
     if (!box) return;
@@ -708,7 +720,7 @@ window.Together = (() => {
       picked.size >= 2
         ? `<div class="notice tg-merge">已選 ${picked.size} 張相片。${Kit.btn("合併所選（同一張收據）", { variant: "secondary", size: "sm", attrs: { "data-tg": "mergeDrafts", "data-keys": [...picked].join(",") } })}</div>`
         : "";
-    box.innerHTML = `${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready ? Kit.btn(`全部加入（${ready}）`, { variant: "primary", size: "sm", icon: "check", attrs: { "data-tg": "draftsAddAll" } }) : ""}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading ? `${uploading} 張正在上載${navigator.onLine ? "" : "（離線中，有網絡時會繼續）"}。` : ""}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」使用下面表格的設定；有 ⚠️ 的不會在「全部加入」時加入。</p>${all.map((d) => draftHtml(d, all)).join("")}`;
+    box.innerHTML = `${suggestions}${pickedBar}<div class="tg-drafts-head"><b>待確認收據 ${finished}/${all.length}</b>${ready ? Kit.btn(`全部加入（${ready}）`, { variant: "primary", size: "sm", icon: "check", attrs: { "data-tg": "draftsAddAll" } }) : ""}</div><div class="tg-progress" role="progressbar" aria-label="收據分析進度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><div style="width:${pct}%"></div></div><p class="note">${uploading ? `${uploading} 張正在上載${navigator.onLine ? "" : "（離線中，有網絡時會繼續）"}。` : ""}收據在背景分析，可以關閉網頁，稍後回來確認。付款人及「分給」用下面的選擇；有 ⚠️ 的不會在「全部加入」時加入。</p>${payBox(all)}${all.map((d) => draftHtml(d, all)).join("")}`;
     if (card && field) {
       const el = box.querySelector(`[data-draft="${card.dataset.draft}"] [data-df="${field}"]`);
       if (el) el.focus();
@@ -762,23 +774,21 @@ window.Together = (() => {
   }
   const jobRef = (id) => tdoc("receiptJobs", id);
   async function addDraft(d, ask) {
-    const f = $('[data-tg-form="expense"]'),
-      v = new FormData(f),
-      split = v.getAll("split").map(String),
+    const { paidBy, split } = payOf(),
       amount = Number(d.amount);
     if (!String(d.title).trim() || !(amount > 0) || amount > 1e7) {
       toast("請檢查項目和金額。");
       return false;
     }
     if (!split.length) {
-      toast("請在下面表格最少選一位分帳旅伴。");
+      toast("請在「分給」最少選一位旅伴。");
       return false;
     }
     const exp = {
         title: String(d.title).trim().slice(0, 80),
         amount: Math.round(amount * 100) / 100,
         currency: d.currency,
-        paidBy: String(v.get("paidBy")),
+        paidBy,
         split,
         day: Number(d.day),
         items: d.items.slice(0, 30),
@@ -2853,6 +2863,12 @@ window.Together = (() => {
     if (!k) return;
     e.target.checked ? picked.add(k) : picked.delete(k);
     renderDrafts();
+  });
+  document.addEventListener("change", (e) => {
+    const k = e.target.dataset?.dpay;
+    if (!k) return;
+    if (k === "paidBy") draftPay.paidBy = e.target.value;
+    else draftPay.split = [...document.querySelectorAll('[data-dpay="split"]:checked')].map((i) => i.value);
   });
   document.addEventListener("input", (e) => {
     const k = e.target.dataset?.df,

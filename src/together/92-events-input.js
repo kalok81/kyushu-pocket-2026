@@ -73,6 +73,12 @@
     e.target.checked ? picked.add(k) : picked.delete(k);
     renderDrafts();
   });
+  document.addEventListener("change", (e) => {
+    const k = e.target.dataset?.dpay;
+    if (!k) return;
+    if (k === "paidBy") draftPay.paidBy = e.target.value;
+    else draftPay.split = [...document.querySelectorAll('[data-dpay="split"]:checked')].map((i) => i.value);
+  });
   document.addEventListener("input", (e) => {
     const k = e.target.dataset?.df,
       card = e.target.closest?.("[data-draft]");

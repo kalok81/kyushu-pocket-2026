@@ -77,6 +77,22 @@ try {
   await page.fill('#expSearch', '拉麵'); await page.waitForFunction(() => /找不到「拉麵」/.test(document.querySelector('[data-tg-live=list]').textContent));
   await page.fill('#expSearch', ''); await page.waitForFunction(() => !document.querySelector('.exp-found') && document.querySelectorAll('[data-tg-live=list] .tg-item').length === 1);
  });
+ await step('receipts: 全部加入 adds every read receipt without opening the expense form', async () => {
+  await page.goto(base + '/#together?tab=expenses'); await page.waitForSelector('[data-tg-live=list] .tg-item');
+  // as after coming back later: the closed expense sheet is no longer in the page
+  await page.evaluate(() => { document.querySelector('#detailBody').innerHTML = ''; }); assert.equal(await page.locator('[data-tg-form=expense]').count(), 0);
+  const before = await page.locator('[data-tg-live=list] .tg-item').count();
+  await page.evaluate(async () => {
+   const fs = await import('./vendor/firebase/firebase-firestore.js'), by = 'u1';
+   for (const [i, merchant] of ['ローソン', 'ユニクロ'].entries())
+    await fs.setDoc({ c: 'receiptJobs', id: 'rj' + i }, { status: 'done', by, file: merchant + '.jpg', at: Date.now() + i, result: { merchant, total: 500 + i * 1000, currency: 'JPY', date: '', items: [] } });
+  });
+  await page.waitForSelector('[data-tg=draftsAddAll]');
+  assert.equal(await page.locator('.tg-draft-pay [data-dpay=split]:checked').count(), await page.locator('.tg-draft-pay [data-dpay=split]').count(), 'split among everyone by default');
+  await page.click('[data-tg=draftsAddAll]');
+  await page.waitForFunction((n) => document.querySelectorAll('[data-tg-live=list] .tg-item').length === n + 2 && !document.querySelector('.tg-draft'), before);
+  assert.match(await page.locator('[data-tg-live=list]').innerText(), /ユニクロ[\s\S]*ローソン|ローソン[\s\S]*ユニクロ/);
+ });
  await step('checklist: suggestions and ticks', async () => {
   await page.goto(base + '/#together?tab=checklist'); await page.click('.tg-list [data-tg=checkSuggest]');
   await page.waitForSelector('.check-row'); await page.locator('[data-check]').first().check();

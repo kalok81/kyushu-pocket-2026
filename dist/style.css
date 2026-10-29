@@ -850,6 +850,11 @@ details.more:not([open]) .menu{display:none}
 /* AI drafts: receipts and product photos being read */
 .tg-drafts{display:grid;gap:8px;margin-top:4px}
 .tg-drafts:empty{display:none}
+.tg-draft-pay{display:grid;gap:8px;margin:0 0 12px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-md)}
+.tg-draft-pay legend{padding:0 4px;font-weight:600}
+.tg-draft-pay select{width:100%}
+.tg-draft-split{display:flex;flex-wrap:wrap;align-items:center;gap:4px 14px}
+.tg-draft-split .tg-check{display:flex;align-items:center;gap:6px;min-height:44px}
 .tg-drafts-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .tg-draft .tg-row{margin-top:8px}
 .tg-draft label{display:grid;gap:4px;font-size:var(--fs-sm);color:var(--muted-foreground)}
