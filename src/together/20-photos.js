@@ -95,7 +95,7 @@
   };
   const scanError = (e) =>
     /unsupported|heic|img|encode/.test(e?.message) ? "未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。" : "未能處理這張相片。";
-  // Receipt photos are also kept in Firebase Storage (receipts/{uid}/{job}-{n}.jpg, members only): a 2400px copy
+  // Receipt photos are also kept in Firebase Storage (trips/{trip}/receipts/{uid}/{job}-{n}.jpg, that trip's companions only; older ones are under receipts/{uid}): a 2400px copy
   // uploaded in the background, or the job's own photos when the expense is added if that upload never finished.
   let storageMod;
   const storage = async () => {
@@ -107,7 +107,7 @@
     const { m, st } = await storage();
     return Promise.all(
       blobs.map(async (b, i) => {
-        const path = `receipts/${state.user.uid}/${jobId}-${i}.jpg`;
+        const path = `trips/${tripId}/receipts/${state.user.uid}/${jobId}-${i}.jpg`;
         await m.uploadBytes(m.ref(st, path), b, { contentType: "image/jpeg" });
         return path;
       }),

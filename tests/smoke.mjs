@@ -87,7 +87,10 @@ try {
    for (const [i, merchant] of ['ローソン', ''].entries())
     await fs.setDoc({ c: 'receiptJobs', id: 'rj' + i }, { status: 'done', by, file: 'r' + i + '.jpg', at: Date.now() + i, result: { merchant, total: 500 + i * 1000, currency: 'JPY', date: '', items: [], ...(merchant ? {} : { source: 'tags', confidence: 'medium' }) } });
   });
+  // Zed was removed from the trip: their profile stays, but they are no longer offered to pay or split
+  await page.evaluate(async () => { const fs = await import('./vendor/firebase/firebase-firestore.js'); await fs.setDoc({ c: 'members', id: 'zed' }, { name: 'Zed', email: 'zed@example.com', at: 1 }); });
   await page.waitForSelector('[data-tg=draftsAddAll]');
+  await page.waitForTimeout(300); assert.doesNotMatch(await page.locator('.tg-draft-pay').innerText(), /Zed/);
   // price tags instead of a receipt: named 價錢牌 and flagged for checking
   assert.match(await page.locator('.tg-draft').last().innerText(), /由價錢牌讀出/); assert.equal(await page.inputValue('.tg-draft:last-child [data-df=title]'), '價錢牌');
   assert.equal(await page.locator('.tg-draft-pay [data-dpay=split]:checked').count(), await page.locator('.tg-draft-pay [data-dpay=split]').count(), 'split among everyone by default');

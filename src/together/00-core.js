@@ -112,12 +112,17 @@
     const u = state.user;
     return { id: u.uid, name: state.members.find((m) => m.id === u.uid)?.name || u.displayName || u.email.split("@")[0] };
   };
+  // Companions to pay and split with: profiles of people still on the trip (removing someone keeps their
+  // profile, so older expenses still show their name through nameOf).
   const people = () => {
-    const list = state.members.map((m) => ({ id: m.id, name: m.name || "旅伴" }));
+    const on = state.meta?.members,
+      list = state.members
+        .filter((m) => m.id === state.user?.uid || !on || !m.email || on.includes(String(m.email).toLowerCase()))
+        .map((m) => ({ id: m.id, name: m.name || "旅伴" }));
     if (state.user && !list.some((m) => m.id === state.user.uid)) list.push(me());
     return list.sort((a, b) => a.name.localeCompare(b.name));
   };
-  const nameOf = (uid) => people().find((p) => p.id === uid)?.name || "旅伴";
+  const nameOf = (uid) => (uid === state.user?.uid ? me().name : state.members.find((m) => m.id === uid)?.name || "旅伴");
   const dayLabel = (n) => {
     const d = T().days[n - 1];
     return d ? `D${d.n} ${d.date} ${d.region}` : "";

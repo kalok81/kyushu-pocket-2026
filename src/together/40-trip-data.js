@@ -180,13 +180,17 @@
     }
     if (!added.length) return;
     const fs = fb.fs;
-    await fs
+    const saved = await fs
       .updateDoc(tdoc(kind, id), { docs: fs.arrayUnion ? fs.arrayUnion(...added) : [...(x.docs || []), ...added] })
-      .catch(() => {
-        toast("未能儲存文件，請再試。");
-        dropPhotos(added.map((d) => d.path));
-      });
-    toast(`已上載 ${added.length} 個文件`);
+      .then(
+        () => true,
+        () => {
+          toast("未能儲存文件，請再試。");
+          dropPhotos(added.map((d) => d.path));
+          return false;
+        },
+      );
+    if (saved) toast(`已上載 ${added.length} 個文件`);
   }
   async function deleteDocFile(kind, id, path) {
     const x = docItem(kind, id),

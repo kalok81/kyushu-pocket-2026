@@ -138,6 +138,7 @@
     if (current === "plan") refreshPlan();
     else if (current === "notebook" && $("#notebookResults")) notebookResults();
     else if (current === "jrpass") $("#app").innerHTML = renderJrPass();
+    else if (current === "home" && !$("#detail").open) render();
   }
   function refreshPlan() {
     const j = $(".journey-day");

@@ -146,14 +146,19 @@ test('receipt jobs are private to whoever sent them', async () => {
  await assertFails(getDoc(doc(db(bob), `${T}/receiptJobs/j1`)));
 });
 
-test('storage: booking documents for the trip only, receipts under your own id', async () => {
+test('storage: booking documents and receipts for the trip only, receipts under your own id', async () => {
  const pdf = new Uint8Array([37, 80, 68, 70]), jpg = new Uint8Array([255, 216, 255]);
  await assertSucceeds(uploadBytes(ref(st(amy), 'trips/t1/docs/hotels-h1-1.pdf'), pdf, { contentType: 'application/pdf' }));
  await assertSucceeds(getBytes(ref(st(bob), 'trips/t1/docs/hotels-h1-1.pdf')));
  await assertFails(getBytes(ref(st(eve), 'trips/t1/docs/hotels-h1-1.pdf')));
  await assertFails(uploadBytes(ref(st(amy), 'trips/t1/docs/x.html'), pdf, { contentType: 'text/html' }));
- await assertSucceeds(uploadBytes(ref(st(amy), 'receipts/amy/j1-0.jpg'), jpg, { contentType: 'image/jpeg' }));
- await assertFails(uploadBytes(ref(st(amy), 'receipts/bob/j1-0.jpg'), jpg, { contentType: 'image/jpeg' }));
+ await assertSucceeds(uploadBytes(ref(st(amy), 'trips/t1/receipts/amy/j1-0.jpg'), jpg, { contentType: 'image/jpeg' }));
+ await assertSucceeds(getBytes(ref(st(bob), 'trips/t1/receipts/amy/j1-0.jpg')));
+ // Eve is on another trip of the site: she cannot open or delete this trip's receipts even knowing the path
+ await assertFails(getBytes(ref(st(eve), 'trips/t1/receipts/amy/j1-0.jpg')));
+ await assertFails(uploadBytes(ref(st(amy), 'trips/t1/receipts/bob/j1-0.jpg'), jpg, { contentType: 'image/jpeg' }));
+ await assertFails(uploadBytes(ref(st(eve), 'trips/t1/receipts/eve/j1-0.jpg'), jpg, { contentType: 'image/jpeg' }));
+ await assertFails(uploadBytes(ref(st(amy), 'receipts/amy/j1-0.jpg'), jpg, { contentType: 'image/jpeg' }));
 });
 
 test('notes with photos and links; any companion edits them, not their kind or author; coupons marked used', async () => {

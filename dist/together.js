@@ -117,12 +117,17 @@ window.Together = (() => {
     const u = state.user;
     return { id: u.uid, name: state.members.find((m) => m.id === u.uid)?.name || u.displayName || u.email.split("@")[0] };
   };
+  // Companions to pay and split with: profiles of people still on the trip (removing someone keeps their
+  // profile, so older expenses still show their name through nameOf).
   const people = () => {
-    const list = state.members.map((m) => ({ id: m.id, name: m.name || "旅伴" }));
+    const on = state.meta?.members,
+      list = state.members
+        .filter((m) => m.id === state.user?.uid || !on || !m.email || on.includes(String(m.email).toLowerCase()))
+        .map((m) => ({ id: m.id, name: m.name || "旅伴" }));
     if (state.user && !list.some((m) => m.id === state.user.uid)) list.push(me());
     return list.sort((a, b) => a.name.localeCompare(b.name));
   };
-  const nameOf = (uid) => people().find((p) => p.id === uid)?.name || "旅伴";
+  const nameOf = (uid) => (uid === state.user?.uid ? me().name : state.members.find((m) => m.id === uid)?.name || "旅伴");
   const dayLabel = (n) => {
     const d = T().days[n - 1];
     return d ? `D${d.n} ${d.date} ${d.region}` : "";
@@ -482,7 +487,7 @@ window.Together = (() => {
   };
   const scanError = (e) =>
     /unsupported|heic|img|encode/.test(e?.message) ? "未能讀取這張相片，請改用 JPG 或 PNG，或直接影相。" : "未能處理這張相片。";
-  // Receipt photos are also kept in Firebase Storage (receipts/{uid}/{job}-{n}.jpg, members only): a 2400px copy
+  // Receipt photos are also kept in Firebase Storage (trips/{trip}/receipts/{uid}/{job}-{n}.jpg, that trip's companions only; older ones are under receipts/{uid}): a 2400px copy
   // uploaded in the background, or the job's own photos when the expense is added if that upload never finished.
   let storageMod;
   const storage = async () => {
@@ -494,7 +499,7 @@ window.Together = (() => {
     const { m, st } = await storage();
     return Promise.all(
       blobs.map(async (b, i) => {
-        const path = `receipts/${state.user.uid}/${jobId}-${i}.jpg`;
+        const path = `trips/${tripId}/receipts/${state.user.uid}/${jobId}-${i}.jpg`;
         await m.uploadBytes(m.ref(st, path), b, { contentType: "image/jpeg" });
         return path;
       }),
@@ -1499,13 +1504,17 @@ window.Together = (() => {
     }
     if (!added.length) return;
     const fs = fb.fs;
-    await fs
+    const saved = await fs
       .updateDoc(tdoc(kind, id), { docs: fs.arrayUnion ? fs.arrayUnion(...added) : [...(x.docs || []), ...added] })
-      .catch(() => {
-        toast("未能儲存文件，請再試。");
-        dropPhotos(added.map((d) => d.path));
-      });
-    toast(`已上載 ${added.length} 個文件`);
+      .then(
+        () => true,
+        () => {
+          toast("未能儲存文件，請再試。");
+          dropPhotos(added.map((d) => d.path));
+          return false;
+        },
+      );
+    if (saved) toast(`已上載 ${added.length} 個文件`);
   }
   async function deleteDocFile(kind, id, path) {
     const x = docItem(kind, id),

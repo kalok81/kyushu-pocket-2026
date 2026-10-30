@@ -1,6 +1,6 @@
 rules_version = '2';
-// Receipt photos: receipts/{uid}/{file}. Only companions on the member list (config/members in Firestore) can
-// read them; each companion uploads only under their own uid; any companion may delete (e.g. deleting an expense).
+// Receipt photos: trips/{trip}/receipts/{uid}/{file}, for that trip's companions; each uploads only under their own
+// uid and any of them may delete (e.g. deleting an expense). Older ones under receipts/{uid} are for site members.
 service firebase.storage {
   match /b/{bucket}/o {
     function isMember() {
@@ -17,10 +17,19 @@ service firebase.storage {
       allow create: if tripMember() && request.resource.size < 15 * 1024 * 1024
         && (request.resource.contentType == 'application/pdf' || request.resource.contentType == 'image/jpeg');
     }
+    // Receipt photos of one trip: only that trip's companions can read or delete them; each uploads under their own uid.
+    match /trips/{trip}/receipts/{uid}/{file} {
+      function onTrip() {
+        return request.auth != null && request.auth.token.email_verified == true
+          && request.auth.token.email.lower() in firestore.get(/databases/(default)/documents/trips/$(trip)).data.members;
+      }
+      allow read, delete: if onTrip();
+      allow create: if onTrip() && request.auth.uid == uid
+        && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType == 'image/jpeg';
+    }
+    // Older receipt photos (before they were kept per trip): read and delete only.
     match /receipts/{uid}/{file} {
       allow read, delete: if isMember();
-      allow create: if isMember() && request.auth.uid == uid
-        && request.resource.size < 10 * 1024 * 1024 && request.resource.contentType == 'image/jpeg';
     }
   }
 }

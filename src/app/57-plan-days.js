@@ -65,7 +65,7 @@
     if (!s) return;
     const moved = { ...s, transport: "", warn: "" };
     savePlan(from, legsChanged(A, A.filter((_, j) => j !== i)));
-    savePlan(to, insertByTime(B, moved));
+    savePlan(to, legsChanged(B, insertByTime(B, moved)));
     Kit.snack(`已把「${s.title}」移去 D${to}`, { action: "復原" }).then((undo) => {
       if (!undo) return;
       savePlan(from, A);
