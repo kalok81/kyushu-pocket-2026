@@ -8,15 +8,7 @@
     loading = Promise.all(["app", "auth", "firestore", "app-check"].map((n) => import(`./vendor/firebase/firebase-${n}.js`)))
       .then(([app, auth, fs, check]) => {
         const a = app.initializeApp(config);
-        // App Check (reCAPTCHA Enterprise) shows requests come from this site; the Google Maps and trip functions require it.
-        try {
-          check.initializeAppCheck(a, {
-            provider: new check.ReCaptchaEnterpriseProvider(APP_CHECK_KEY),
-            isTokenAutoRefreshEnabled: true,
-          });
-        } catch (e) {
-          console.warn("App Check", e);
-        }
+        startAppCheck(a, check);
         let db;
         try {
           db = fs.initializeFirestore(a, {
@@ -49,6 +41,36 @@
         throw e;
       });
     return loading;
+  }
+  // App Check (reCAPTCHA Enterprise) shows requests come from this site; the Google Maps and trip functions require it.
+  // It starts only once Google's reCAPTCHA script has loaded: started before, offline, sign-in waits for that script
+  // for ever and the app never opens. Sign-in and Firestore don't enforce App Check, so they work without it meanwhile.
+  function startAppCheck(a, check) {
+    const go = () => {
+      try {
+        check.initializeAppCheck(a, {
+          provider: new check.ReCaptchaEnterpriseProvider(APP_CHECK_KEY),
+          isTokenAutoRefreshEnabled: true,
+        });
+      } catch (e) {
+        console.warn("App Check", e);
+      }
+    };
+    if (window.grecaptcha?.enterprise) return go();
+    const s = document.createElement("script");
+    s.src = "https://www.google.com/recaptcha/enterprise.js?render=explicit";
+    s.onload = go;
+    s.onerror = () => {
+      s.remove();
+      const retry = () => {
+        removeEventListener("online", retry);
+        clearTimeout(timer);
+        startAppCheck(a, check);
+      };
+      const timer = setTimeout(retry, 60000);
+      addEventListener("online", retry);
+    };
+    document.head.appendChild(s);
   }
   function stop() {
     unsub.forEach((u) => u());
