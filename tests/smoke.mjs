@@ -845,6 +845,39 @@ try {
   assert.match(rows[1], /JR Pass 不包（山陽新幹線）/); assert.match(await page.locator('.jr-day').first().innerText(), /D2/);
   await page.click('.jr-day a'); await page.waitForFunction(() => location.hash === '#plan?day=2');
  });
+ await step('plan: a stop moved in from another day clears the transport of the stop after it', async () => {
+  await page.evaluate(() => { const st = (time, title, transport = '') => ({ time, area: '', title, detail: '', transport, ref: '', target: '', placeId: '' });
+   window.Together.savePlanDay(1, [st('09:00', '甲站'), st('10:00', '移動站', '🚶 步行 5 分')]);
+   window.Together.savePlanDay(2, [st('08:00', '乙站'), st('11:00', '丙站', '🚶 由乙站步行 9 分')]); });
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('[data-stop-more="1"]');
+  await page.click('[data-stop-more="1"]'); await page.click('[data-stop-to-day]:visible'); await page.click('[data-day-pick="2"]');
+  await page.waitForFunction(() => globalThis.__fakeStore.planDays['2'].stops.length === 3);
+  const d2 = await page.evaluate(() => globalThis.__fakeStore.planDays['2'].stops.map((s) => [s.title, s.transport]));
+  assert.deepEqual(d2, [['乙站', ''], ['移動站', ''], ['丙站', '']], 'neither the moved stop nor the one after it keeps a way from elsewhere');
+ });
+ await step('documents: a record that fails to save says so (no 已上載) and drops the uploaded file', async () => {
+  await page.evaluate(async () => { const fs = await import('./vendor/firebase/firebase-firestore.js'); await fs.setDoc({ c: 'hotels', id: 'hdoc' }, { name: '文件測試酒店', at: 1 }); });
+  await page.goto(base + '/#hotels'); await page.waitForSelector('[data-docs="hotels:hdoc"]');
+  const upload = async (name) => { await page.click('[data-docs="hotels:hdoc"]'); await page.waitForSelector('#docInput', { state: 'attached' });
+   await page.setInputFiles('#docInput', { name, mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4 test') }); };
+  // every toast shown (SweetAlert replaces one with the next)
+  const toasts = () => page.evaluate(() => window.__toasts);
+  await page.evaluate(() => { window.__toasts = []; new MutationObserver(() => { const t = document.querySelector('.ui-toast .swal2-title')?.textContent; if (t && t !== window.__toasts.at(-1)) window.__toasts.push(t); }).observe(document.body, { childList: true, subtree: true, characterData: true }); });
+  await page.evaluate(() => { globalThis.__failNextUpdate = true; }); await upload('fail.pdf');
+  await page.waitForFunction(() => window.__toasts.includes('未能儲存文件，請再試。'));
+  await page.waitForTimeout(500); assert.ok(!(await toasts()).some((t) => /已上載/.test(t)), 'no 已上載 after the failure');
+  assert.deepEqual(await page.evaluate(() => Object.keys(globalThis.__fakeFiles || {}).filter((k) => k.includes('/docs/'))), [], 'the uploaded file is deleted again');
+  await closeSheet(); await upload('ok.pdf');
+  await page.waitForFunction(() => window.__toasts.includes('已上載 1 個文件'));
+  assert.equal(await page.evaluate(() => globalThis.__fakeStore.hotels.hdoc.docs.length), 1); await closeSheet();
+ });
+ await step('總覽: the 今天 list follows a plan change without leaving the page (the 而家 card has its own timer)', async () => {
+  await page.clock.setFixedTime(new Date('2030-04-03T09:30:00'));
+  const today = (title) => page.evaluate((title) => window.Together.savePlanDay(3, [{ time: '10:00–10:30', area: '', title, detail: '', transport: '', ref: '', target: '', placeId: '' }]), title);
+  const shows = (title) => page.waitForFunction((t) => (document.querySelector('.today-list')?.innerText || '').includes(t), title, { timeout: 5000 });
+  await today('原本的站'); await page.goto(base + '/#home'); await shows('原本的站');
+  await today('旅伴剛改的站'); await shows('旅伴剛改的站'); // another companion's edit arrives while 總覽 is open
+ });
  assert.deepEqual(errors, [], 'page errors');
  console.log('Browser smoke test passed.');
 } finally { await browser.close(); server.close(); }
