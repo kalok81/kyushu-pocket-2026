@@ -7,18 +7,20 @@
       else gs.push([{ s, i }]);
       return gs;
     }, []);
-  function stopCard(s, i, label, last) {
-    const placeOk = s.placeId && places.some((p) => p.id === s.placeId);
+  function stopCard(s, i, label, last, day) {
+    const hoursWarn = hoursWarning(s, day),
+      placeOk = s.placeId && places.some((p) => p.id === s.placeId);
     return `<div class="card stopcontent"><div class="card-top stop-top"><span class="eyebrow">${label} / ${esc(s.area)}</span>${Kit.menu(
       [
         { label: "修改", icon: "edit", attrs: { "data-stop-edit": i } },
+        { label: "調整之後的時間", icon: "clock", attrs: { "data-stop-shift": i } },
         { label: "移去其他日子", icon: "calendar", attrs: { "data-stop-to-day": i } },
         { label: "上移", icon: "up", disabled: !i, attrs: { "data-stop-move": `${i}:-1` } },
         { label: "下移", icon: "down", disabled: i >= last, attrs: { "data-stop-move": `${i}:1` } },
         { label: "刪除", icon: "trash", danger: true, attrs: { "data-stop-delete": i } },
       ],
       { label: `編輯「${s.title}」`, attrs: { "data-stop-more": i } },
-    )}</div><h3>${esc(s.title)}${zhLine(placeOk ? places.find((p) => p.id === s.placeId).zh : "")}</h3>${s.warn ? `<p class="stop-warn">${icon("clock")}<span>${esc(s.warn)}</span></p>` : ""}${s.note ? `<p class="stop-note">${icon("note")}<span>${esc(s.note)}</span></p>` : ""}${s.detail ? `<p>${esc(s.detail)}</p>` : ""}${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}<div class="links">${placeOk ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": s.placeId } }) : ""}${s.hotelId ? Kit.btn("住宿資料", { size: "sm", href: "#hotels" }) : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(s.ref)
+    )}</div><h3>${esc(s.title)}${zhLine(placeOk ? places.find((p) => p.id === s.placeId).zh : "")}</h3>${hoursWarn ? `<p class="stop-warn stop-hours">${icon("clock")}<span>${esc(hoursWarn)}</span></p>` : ""}${s.warn ? `<p class="stop-warn">${icon("clock")}<span>${esc(s.warn)}</span></p>` : ""}${s.note ? `<p class="stop-note">${icon("note")}<span>${esc(s.note)}</span></p>` : ""}${s.detail ? `<p>${esc(s.detail)}</p>` : ""}${buyLine(buysAt({ placeId: s.placeId, title: s.hotelId ? "" : s.title }))}<div class="links">${placeOk ? Kit.btn("地點資料", { size: "sm", attrs: { "data-place": s.placeId } }) : ""}${s.hotelId ? Kit.btn("住宿資料", { size: "sm", href: "#hotels" }) : ""}${s.target ? link(route(s.target), "導航") : ""}${urlList(s.ref)
       .map((u) => link(u, "參考網站"))
       .join("")}</div></div>`;
   }
@@ -50,7 +52,7 @@
         .map(
           (g, n, all) =>
             `${n || startHotel ? stopLink(all, n, startHotel) : ""}<article class="stop${g.length > 1 ? " stop-group" : ""}" data-group="${n}"><div class="time">${esc(g[0].s.time)}${g.length > 1 ? `<small class="alt-count">${g.length} 個選擇</small>` : ""}${Kit.btn(`在 ${esc(g[0].s.time || "這個時段")} 加入另一個選擇`, { size: "sm", variant: "ghost", icon: "plus", iconOnly: true, cls: "alt-add", attrs: { "data-stop-alt": g[g.length - 1].i } })}${all.length > 1 ? `<button type="button" class="stop-grip" aria-label="拖動調整「${esc(g[0].s.title)}」的次序">${icon("grip")}</button>` : ""}</div><div class="stop-alts">${g
-              .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last))
+              .map(({ s, i }, k) => stopCard(s, i, `${String(n + 1).padStart(2, "0")}${g.length > 1 ? String.fromCharCode(97 + k) : ""}`, last, day))
               .join("")}</div></article>`,
         )
         .join("") || Kit.empty("這天還沒有行程", "按右下角「＋地點」，從探索、住宿或購物選擇，或新增地點。")

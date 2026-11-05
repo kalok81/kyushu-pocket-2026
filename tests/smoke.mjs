@@ -855,6 +855,20 @@ try {
   const d2 = await page.evaluate(() => globalThis.__fakeStore.planDays['2'].stops.map((s) => [s.title, s.transport]));
   assert.deepEqual(d2, [['乙站', ''], ['移動站', ''], ['丙站', '']], 'neither the moved stop nor the one after it keeps a way from elsewhere');
  });
+ await step('plan: closed-day and hours warnings, and 調整之後的時間 moves this stop and the later ones', async () => {
+  // 2030-04-01 (D1) is a Monday
+  await page.evaluate(() => { const st = (time, title, detail = '', transport = '') => ({ time, area: '', title, detail, transport, ref: '', target: '', placeId: '' });
+   window.Together.savePlanDay(1, [st('09:00', '早站'), st('10:00–11:00', '休息店', '拉麵\n營業時間：\n11:00–20:00（星期一休息）'),
+    st('12:00', '夜店', '營業時間：18:00–23:00'), st('13:30–14:00', '尾站', '', '🚌 巴士（13:05–13:25）｜約 20 分')]); });
+  await page.goto(base + '/#plan?day=1'); await page.waitForSelector('.stop-hours');
+  const warns = await page.locator('.stop-hours').allInnerTexts();
+  assert.deepEqual(warns, ['星期一休息', '營業 18:00–23:00，這站時間不在其中']);
+  await page.click('[data-stop-more="1"]'); await page.click('[data-stop-shift]:visible');
+  await page.click('[data-shift-by="30"]');
+  await page.waitForFunction(() => globalThis.__fakeStore.planDays['1'].stops[3].time === '14:00–14:30');
+  const d1 = await page.evaluate(() => globalThis.__fakeStore.planDays['1'].stops.map((s) => [s.time, s.transport]));
+  assert.deepEqual(d1, [['09:00', ''], ['10:30–11:30', ''], ['12:30', ''], ['14:00–14:30', '🚌 巴士（13:05–13:25）｜約 20 分']], 'the stops before stay; transport text is not changed');
+ });
  await step('documents: a record that fails to save says so (no 已上載) and drops the uploaded file', async () => {
   await page.evaluate(async () => { const fs = await import('./vendor/firebase/firebase-firestore.js'); await fs.setDoc({ c: 'hotels', id: 'hdoc' }, { name: '文件測試酒店', at: 1 }); });
   await page.goto(base + '/#hotels'); await page.waitForSelector('[data-docs="hotels:hdoc"]');

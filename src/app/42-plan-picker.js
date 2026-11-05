@@ -222,7 +222,7 @@
       stop = placeStop(p, String(v.get("time") || "").trim());
     savePlan(day, insertByTime(stopsFor(day), stop));
     $("#detail").close();
-    toast(`已加入 D${day} 行程`);
+    toast(`已加入 D${day} 行程${closedNote(resolveStop(stop), day)}`);
   }
   document.addEventListener("submit", (e) => {
     if (e.target.id === "stopForm") {
